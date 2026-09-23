@@ -804,9 +804,14 @@ export default {
     // 更新渠道指向本项目的 GitHub Release。electron-builder 会把这份配置写进安装包的
     // app-update.yml（provider/owner/repo），electron-updater 运行时直接读它构造 GitHubProvider，
     // 因此不需要自建 manifest 服务；客户端侧的分支逻辑见 packages/desktop/src/main/autoUpdater.ts。
+    //
+    // 指向本 fork（lihongyi87/ZCode）而非 Zcode-CE 上游：装了本包的机器「检查更新」
+    // 只会拉本仓库 Releases 里的产物，上游发新版不会覆盖本 fork 的定制改动。
+    // 配套发布流程：改版本号 → bundle:desktop → gh release create <tag> 把 dist/ 下的
+    // exe + latest.yml + blockmap 传上去，已装客户端即可收到更新。
     provider: "github",
-    owner: "Zcode-CE",
-    repo: "Zcode-CE",
+    owner: "lihongyi87",
+    repo: "ZCode",
     // 注意：这里不能保留 generic 专有的 useMultipleRangeRequest。GithubOptions 在
     // electron-builder 的 schema 里是 additionalProperties:false，带上该字段会直接校验失败；
     // 而 GitHub provider 的差分下载本来就固定走单 Range（electron-updater 内部因 GitHub 走 S3
