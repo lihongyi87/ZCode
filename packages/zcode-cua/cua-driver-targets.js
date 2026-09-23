@@ -40,11 +40,25 @@ export function matchesRef(app, appRef) {
   return typeof app.name === "string" && app.name.toLowerCase() === name.toLowerCase();
 }
 
+/**
+ * 窗口尺寸归一化：Windows 驱动把尺寸嵌在 `bounds:{x,y,width,height}` 里
+ * （macOS/Linux 是顶层 width/height），实测 Windows 上只读顶层字段会得到
+ * undefined → 所有窗口被 usableWindows 过滤掉 → CUA 整体不可用。
+ * 因此两处统一走本函数，两种形状都接受。
+ */
+function windowSize(w) {
+  return {
+    width: Number(w?.width ?? w?.bounds?.width) || 0,
+    height: Number(w?.height ?? w?.bounds?.height) || 0,
+  };
+}
+
 /** 驱动窗口行 → 只保留真正可定位的窗口。 */
 export function usableWindows(windows) {
-  return (Array.isArray(windows) ? windows : []).filter(
-    (w) => Number(w.width) >= MIN_WINDOW_EDGE_PX && Number(w.height) >= MIN_WINDOW_EDGE_PX,
-  );
+  return (Array.isArray(windows) ? windows : []).filter((w) => {
+    const { width, height } = windowSize(w);
+    return width >= MIN_WINDOW_EDGE_PX && height >= MIN_WINDOW_EDGE_PX;
+  });
 }
 
 /**
@@ -55,7 +69,11 @@ export function usableWindows(windows) {
  */
 export function pickWindow(windows, windowId) {
   if (windowId !== undefined) return windows.find((w) => w.window_id === windowId);
-  return windows.slice().sort((a, b) => b.width * b.height - a.width * a.height)[0];
+  return windows.slice().sort((a, b) => {
+    const sa = windowSize(a);
+    const sb = windowSize(b);
+    return sb.width * sb.height - sa.width * sa.height;
+  })[0];
 }
 
 /** 驱动元素行 → 模型可见的 AXElement，并保留 element_token 供动作解析。 */
