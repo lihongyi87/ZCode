@@ -330,3 +330,33 @@ read as a bundle id, so pass `{name: "Notes"}` for a display name.
 is `auto|a11y|event`, and `return_state` is `compact|full|none` to return the app
 state in the same call. For `target`, `text_range`, `modifiers` and the response
 shapes, see `nodeRepl.write(await agent.documentation.get("computer-use"))`.
+
+## Windows discipline (bench-verified 2026-09-23, 9/10 calibration)
+
+A 10-task calibration bench (`packages/zcode-cua/bench/cua-bench.mjs`) measured
+this driver on Windows 11. Verified precise: element-tree discovery (30-78
+elements per app), element-indexed `type`, `set_value`, unfocused `type` with
+`app_ref`, **direct Chinese text input**, and cross-window targeting. Verified
+unavailable: clipboard paste (see below).
+
+- **Route before you reach for the computer.** Web content belongs to
+  browser-use (DOM-precise). Use the computer only for native apps, and prefer
+  the accessibility path (`get_app_state` → element index) over coordinates —
+  coordinates are the last resort for canvas/game surfaces without a UI tree.
+- **`set_value` and element-indexed `type` are the precision path.** They are
+  background-safe and exact. Direct Chinese input via `type` is verified
+  working — do NOT detour through the clipboard for CJK text.
+- **`paste` is not implemented by the open-source driver, and clipboard paste
+  needs real foreground.** Every driver input is delivered in the background
+  and never takes focus (security semantics) — a background `ctrl+v` is a
+  no-op, and clicking a title bar will not foreground the window. If paste is
+  truly required, ask the host to foreground the window first (minimize/
+  restore cycle); otherwise restate the task with `type`/`set_value`.
+- **Always pass `app_ref` on action methods.** `target` is optional for
+  `type`/`key` (input lands in the focused control), but `app_ref` is required
+  either way.
+- **Win11 apps are single-instance, multi-tab.** A "new window" appears as a
+  new `window_id` row under the SAME pid — re-run `list_windows` and diff
+  window_ids; never assume a new pid. Target `{pid, window_id}` to pin a tab.
+- **Third-party launcher PIDs lie.** `Start-Process`-style launcher pids exit
+  immediately. Resolve targets only through `list_apps`/`list_windows`.
