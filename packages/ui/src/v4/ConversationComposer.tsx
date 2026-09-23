@@ -129,6 +129,7 @@ import { isAppleKeyboardPlatform } from "@/lib/keyboardShortcuts.js";
 import { usePrimaryFollowupModifier } from "@/v4/composer/usePrimaryFollowupModifier.js";
 import { consumeV4ComposerDraftWorkspaceTransferRequest } from "@/v4/composer/composerDraftWorkspaceTransfer.js";
 import { useComposerAttachments } from "@/v4/composer/useComposerAttachments.js";
+import { StreamSpeedPill } from "@/v4/composer/StreamSpeedPill.js";
 import type { ConversationDropTargetController } from "@/v4/composer/conversationDropTarget.js";
 import { CodeCommentAttachmentChip } from "@/v4/composer/CodeCommentAttachmentChip.js";
 import { removeCodeCommentPreview } from "@/v4/composer/codeCommentPreviewSync.js";
@@ -1888,6 +1889,15 @@ function ConversationComposerImpl({
   // 避免每个 token 批次都重建 Tooltip/Select 子树。
   const composerUsage = snapshot?.usage ?? null;
   const composerPhase = snapshot?.control.phase ?? null;
+  // 速度药丸的数据面：流式文本字符数（assistantText + reasoning 行），
+  // 每个 delta 批次随 snapshot 更新。放在 memo 外——它必须逐批次重渲染。
+  const streamingChars = useMemo(() => {
+    let total = 0;
+    for (const row of snapshot?.rows.window ?? []) {
+      if (row.kind === "assistantText" || row.kind === "reasoning") total += row.text.length;
+    }
+    return total;
+  }, [snapshot]);
   const handleSelectModelTrace = useCallback(
     (nextProvider: string, nextModel: string, sourceModel: ModelSelectionSource | null) =>
       runUserAction({
@@ -2149,7 +2159,17 @@ function ConversationComposerImpl({
           appSlashCommands={appSlashCommands}
           enableMentionPanel
           leadingActions={leadingActionsNode}
-          submitControl={submitControlNode}
+          submitControl={
+            <>
+              <StreamSpeedPill
+                usage={composerUsage}
+                streamingChars={streamingChars}
+                active={composerPhase === "running"}
+                title={intl.formatMessage({ id: "chat.toolbar.streamSpeed.title" })}
+              />
+              {submitControlNode}
+            </>
+          }
           className="p-0"
           onChange={handleEditorChange}
           onFocus={handleEditorFocus}

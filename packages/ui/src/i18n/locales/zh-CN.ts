@@ -684,7 +684,7 @@ const zhCN: Record<string, string> = {
   "chat.toolbar.model.loadFailedRetry": "模型加载失败，重试",
   "chat.toolbar.model.remoteWaiting": "等待远程模型",
   "chat.toolbar.model.targetMissing": "暂无模型目标",
-  "chat.toolbar.streamSpeed.title": "最近模型步的输出速度（含步间短暂耗时，非纯解码速度）",
+  "chat.toolbar.streamSpeed.title": "输出速度：仅计模型流式时间，不含工具执行与等待",
   "settings.subagents.modelLoadFailed": "模型列表加载失败。",
   "root.modelSelection.loadFailed": "模型配置加载失败。",
   "modelTrajectory.openSourceDirectory": "打开所在目录",

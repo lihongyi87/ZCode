@@ -40,7 +40,6 @@ import type {
 import { ModelConfigSelect, type ModelSelectGroup } from "@/ModelConfigSelect.js";
 import { Button } from "@/components/ui/button.js";
 import { ChatContextUsage } from "@/chat-input-toolbar/display.js";
-import { StreamSpeedPill } from "@/v4/composer/StreamSpeedPill.js";
 import {
   hasChatCodingPlanUsageRemaining,
   type ChatCodingPlanUsageRemainingConfig,
@@ -1010,10 +1009,6 @@ function V4ComposerModelControlsImpl({
         data-usage-used={usage?.contextWindow?.usedTokens ?? ""}
         data-usage-max={usage?.contextWindow?.maxTokens ?? ""}
         className="hidden"
-      />
-      <StreamSpeedPill
-        usage={usage}
-        title={intl.formatMessage({ id: "chat.toolbar.streamSpeed.title" })}
       />
       <ChatContextUsage
         codingPlanUsageRemaining={codingPlanUsageRemaining}

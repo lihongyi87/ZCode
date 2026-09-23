@@ -738,7 +738,7 @@ const enUS: Record<string, string> = {
   "chat.toolbar.model.remoteWaiting": "Waiting for remote models",
   "chat.toolbar.model.targetMissing": "No model target",
   "chat.toolbar.streamSpeed.title":
-    "Output speed of recent model steps (includes brief inter-step time, not pure decode speed)",
+    "Output speed: model streaming time only, excludes tool runs and waits",
   "settings.subagents.modelLoadFailed": "The model list failed to load.",
   "root.modelSelection.loadFailed": "Model configuration failed to load.",
   "modelTrajectory.openSourceDirectory": "Open source folder",
