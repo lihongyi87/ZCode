@@ -20,6 +20,7 @@ import {
   systemReminderAttachmentEntry,
   todoReminderRuntimeMetadata,
 } from "../../agent/message-history.js";
+import { buildMemoryRecallReminderBody } from "./memory-recall-reminder.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { runModelBackedTurnStep } from "./turn-model-step.js";
 import {
@@ -153,6 +154,23 @@ export async function runRegularTurnLoop(
         text: reminderBody,
         traceContext: state.turnTraceContext,
       });
+    }
+    // 记忆召回提醒（吸收 Hermes prefetch 模式，词法打分第一档）：按本轮用户输入
+    // 对记忆清单做相关性排序，命中才注入 top-K 摘要+路径——模型据此可精确重读，
+    // 中段死区与长索引注意力稀释同时缓解。清单扫描按 runtime 缓存 60s，
+    // 失败不影响本轮。
+    if (!outputTokenRecoveryActive && this.memoryRoot && this.fileSystemPort) {
+      const memoryRecallBody = await buildMemoryRecallReminderBody({
+        runtime: this,
+        fileSystem: this.fileSystemPort,
+        memoryRoot: this.memoryRoot,
+        entries: state.turnRequestState.entries,
+      });
+      if (memoryRecallBody) {
+        commitTurnRequestEntries(this, state.turnRequestState, [
+          systemReminderAttachmentEntry("memory_recall", memoryRecallBody),
+        ]);
+      }
     }
     const outputStyleReminderBody =
       state.modelStepCount === 0

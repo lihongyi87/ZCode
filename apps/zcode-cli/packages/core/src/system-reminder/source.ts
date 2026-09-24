@@ -40,6 +40,7 @@ export const SYSTEM_REMINDER_PERSISTED_SOURCES = [
 export const SYSTEM_REMINDER_PER_REQUEST_SOURCES = [
   "incoming_message",
   "hook_context",
+  "memory_recall",
   "runtime_mode",
   "plan_mode_exit",
   "output_style",
@@ -104,6 +105,8 @@ const SYSTEM_REMINDER_DESCRIPTORS: Record<SystemReminderSource, DescriptorShape>
   // model-only synthetic notice 固化，后续只追加、不改写；冷恢复按原文重建以保持缓存前缀。
   plugin_reference: descriptor("current_turn", "per_current_turn", true, "sr.plugin_reference"),
   todo_reminder: descriptor("current_turn", "per_current_turn", true, "sr.todo_reminder"),
+  // 记忆召回提醒：按本轮用户输入对记忆清单做相关性排序后注入 top-K 摘要。
+  memory_recall: descriptor("current_turn", "per_current_turn", true, "sr.memory_recall"),
   task_status: descriptor("mid_turn_event", "mid_turn_event", true, "sr.task_status"),
   // 只用于 Read 等 tool result 内容内联 warning，不作为 synthetic user notice 持久化。
   tool_result_warning: descriptor("tool_result", "tool_result", true, "sr.tool_result_warning"),
