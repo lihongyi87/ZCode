@@ -1,0 +1,228 @@
+{
+  "model": "glm-5.2",
+  "ranAt": "2026-09-24T05:03:09.299Z",
+  "calibration": {
+    "charsPerToken": 1.290794484004905,
+    "inputTokens": 46483
+  },
+  "curve": [
+    {
+      "depthK": 50,
+      "avgTokens": 51312,
+      "headHit": 1,
+      "midHit": 1,
+      "tailHit": 1,
+      "reasoningHit": 1
+    },
+    {
+      "depthK": 100,
+      "avgTokens": 96756,
+      "headHit": 1,
+      "midHit": 1,
+      "tailHit": 1,
+      "reasoningHit": 1
+    },
+    {
+      "depthK": 300,
+      "avgTokens": 289575,
+      "headHit": 1,
+      "midHit": 1,
+      "tailHit": 1,
+      "reasoningHit": 1
+    },
+    {
+      "depthK": 500,
+      "avgTokens": 478512,
+      "headHit": 1,
+      "midHit": 1,
+      "tailHit": 1,
+      "reasoningHit": 1
+    },
+    {
+      "depthK": 700,
+      "avgTokens": 669324,
+      "headHit": 1,
+      "midHit": 1,
+      "tailHit": 1,
+      "reasoningHit": 1
+    },
+    {
+      "depthK": 900,
+      "avgTokens": 858999,
+      "headHit": 1,
+      "midHit": 1,
+      "tailHit": 1,
+      "reasoningHit": 1
+    }
+  ],
+  "runs": [
+    {
+      "depthK": 50,
+      "run": 1,
+      "usageA": 51313,
+      "usageB": 51342,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=XNCT MID=WKUQ TAIL=S4H2",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 50,
+      "run": 2,
+      "usageA": 51311,
+      "usageB": 51342,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=P723 MID=YT2M TAIL=NXKE",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 100,
+      "run": 1,
+      "usageA": 96756,
+      "usageB": 45521,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=B8LB MID=J9F3 TAIL=NWF6",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 100,
+      "run": 2,
+      "usageA": 96755,
+      "usageB": 96785,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=W38A MID=ABG8 TAIL=MGT5",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 300,
+      "run": 1,
+      "usageA": 289576,
+      "usageB": 289605,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=J9DQ MID=NSUQ TAIL=QZF4",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 300,
+      "run": 2,
+      "usageA": 289574,
+      "usageB": 289605,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=PVLA MID=YHCZ TAIL=BHRX",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 500,
+      "run": 1,
+      "usageA": 478511,
+      "usageB": 478541,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=CW68 MID=G9V9 TAIL=VCC4",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 500,
+      "run": 2,
+      "usageA": 478513,
+      "usageB": 478541,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=K9KX MID=5KG3 TAIL=QHPM",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 700,
+      "run": 1,
+      "usageA": 669323,
+      "usageB": 669354,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=T8TR MID=KBVQ TAIL=BRAL",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 700,
+      "run": 2,
+      "usageA": 669324,
+      "usageB": 669354,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=VH5D MID=YGNY TAIL=T9YC",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 900,
+      "run": 1,
+      "usageA": 858999,
+      "usageB": 859028,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=APVQ MID=95F7 TAIL=FGYK",
+      "answerB": "禄贵交驰"
+    },
+    {
+      "depthK": 900,
+      "run": 2,
+      "usageA": 858998,
+      "usageB": 859028,
+      "retrieval": {
+        "head": true,
+        "mid": true,
+        "tail": true
+      },
+      "reasoning": true,
+      "answerA": "HEAD=Y3BJ MID=V9TJ TAIL=WELY",
+      "answerB": "禄贵交驰"
+    }
+  ]
+}

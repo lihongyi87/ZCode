@@ -1,0 +1,89 @@
+{
+  "model": "glm-5.2",
+  "ranAt": "2026-09-24T05:54:09.982Z",
+  "curve": [
+    {
+      "depthK": 100,
+      "tokens": 96846,
+      "aggPct": "100%",
+      "dPct": "100%",
+      "ePct": "100%"
+    },
+    {
+      "depthK": 500,
+      "tokens": 481535,
+      "aggPct": "100%",
+      "dPct": "100%",
+      "ePct": "100%"
+    },
+    {
+      "depthK": 900,
+      "tokens": 863254,
+      "aggPct": "100%",
+      "dPct": "100%",
+      "ePct": "100%"
+    }
+  ],
+  "rows": [
+    {
+      "depthK": 100,
+      "run": 1,
+      "usage": 96852,
+      "aggFound": 10,
+      "aggTotal": 10,
+      "distractorCorrect": true,
+      "ruleEvolutionCorrect": true,
+      "ansE": "杀印相生"
+    },
+    {
+      "depthK": 100,
+      "run": 2,
+      "usage": 96840,
+      "aggFound": 10,
+      "aggTotal": 10,
+      "distractorCorrect": true,
+      "ruleEvolutionCorrect": true,
+      "ansE": "杀印相生"
+    },
+    {
+      "depthK": 500,
+      "run": 1,
+      "usage": 481535,
+      "aggFound": 10,
+      "aggTotal": 10,
+      "distractorCorrect": true,
+      "ruleEvolutionCorrect": true,
+      "ansE": "杀印相生"
+    },
+    {
+      "depthK": 500,
+      "run": 2,
+      "usage": 481535,
+      "aggFound": 10,
+      "aggTotal": 10,
+      "distractorCorrect": true,
+      "ruleEvolutionCorrect": true,
+      "ansE": "杀印相生"
+    },
+    {
+      "depthK": 900,
+      "run": 1,
+      "usage": 863254,
+      "aggFound": 10,
+      "aggTotal": 10,
+      "distractorCorrect": true,
+      "ruleEvolutionCorrect": true,
+      "ansE": "杀印相生"
+    },
+    {
+      "depthK": 900,
+      "run": 2,
+      "usage": 863253,
+      "aggFound": 10,
+      "aggTotal": 10,
+      "distractorCorrect": true,
+      "ruleEvolutionCorrect": true,
+      "ansE": "杀印相生"
+    }
+  ]
+}
