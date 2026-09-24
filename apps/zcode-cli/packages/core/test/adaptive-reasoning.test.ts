@@ -60,6 +60,15 @@ test("首步（非工具结果收尾）：保持配置档", () => {
   );
 });
 
+test("工具结果收尾判定（role:tool 独立消息）", () => {
+  const toolResultMessage = { role: "tool", content: [{ type: "text", text: "排盘输出" }] };
+  assert.equal(requestEndsWithToolResult([toolResultMessage]), true);
+  assert.equal(
+    requestEndsWithToolResult([toolResultMessage, { role: "system", content: "x" }]),
+    true,
+  );
+});
+
 test("已是最低档/单档/未配置档位：不降", () => {
   assert.equal(
     resolveAdaptiveReasoningLevel({
@@ -139,6 +148,37 @@ test("乱序 values 防御：降档按等级表而非数组顺序（red-team 回
       endsWithToolResult: true,
     }),
     "none",
+  );
+});
+
+test("red-team 回归：真实 wire 形状——工具结果消息是独立 role:tool（不是 user+toolResult 块）", () => {
+  // v1 的判定只查 user+toolResult 块，而投影后的续跑请求里最后一条是
+  // role:"tool" 消息（见 message-history 的 tool result entry）——降档从未触发。
+  const toolResultMessage: { role?: string; content?: unknown } = {
+    role: "tool",
+    content: [{ type: "text", text: "四柱：丁卯 甲辰 辛亥 癸巳" }],
+  };
+  assert.equal(
+    resolveAdaptiveReasoningLevel({
+      enabled: true,
+      currentLevel: "high",
+      supportedLevels: LEVELS,
+      endsWithToolResult: requestEndsWithToolResult([toolResultMessage]),
+    }),
+    "medium",
+  );
+  // assistant 收尾仍然不算续跑。
+  assert.equal(
+    resolveAdaptiveReasoningLevel({
+      enabled: true,
+      currentLevel: "high",
+      supportedLevels: LEVELS,
+      endsWithToolResult: requestEndsWithToolResult([
+        toolResultMessage,
+        { role: "assistant", content: "好的" },
+      ]),
+    }),
+    undefined,
   );
 });
 

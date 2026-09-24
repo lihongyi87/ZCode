@@ -74,6 +74,10 @@ export function requestEndsWithToolResult(
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message.role === "system") continue;
+    // 工具结果在投影后的请求里是独立的 role:"tool" 消息（含 toolCallId/toolName，
+    // 见 message-history 的 tool result entry 与 transform 的 case "tool"）——
+    // red-team 修正：v1 只查 user+toolResult 块，真实请求上永不命中，降档从未触发。
+    if (message.role === "tool") return true;
     if (message.role !== "user") return false;
     const content = message.content;
     if (typeof content === "string") return false;
