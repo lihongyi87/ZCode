@@ -11,6 +11,8 @@ import { estimateMessageTokens } from "./manual.js";
 
 export const MICROCOMPACT_CLEARED_TOOL_RESULT_PREFIX = "[Old tool result content cleared]";
 export const MICROCOMPACT_CLEARED_TOOL_RESULT_MESSAGE = "[Old tool result content cleared]";
+/** v2 锚点存根前缀：带工具名+定位线索+输出首行，被清内容可精确重取（见 buildClearedToolResultContent）。 */
+export const MICROCOMPACT_CLEARED_TOOL_RESULT_ANCHORED_PREFIX = "[Old tool result cleared ·";
 export const DEFAULT_MICROCOMPACT_KEEP_RECENT_TOOL_RESULTS = 5;
 const DEFAULT_MICROCOMPACT_IDLE_THRESHOLD_MINUTES = 60;
 export const DEFAULT_MICROCOMPACT_MIN_TOKEN_SAVINGS = 256;
@@ -138,7 +140,7 @@ export function maybeLocalMicrocompactMessages<T extends LocalMicrocompactMessag
     if (!message) continue;
     messages[candidate.index] = {
       ...message,
-      content: buildClearedToolResultContent(),
+      content: buildClearedToolResultContent(messages, candidate.index, candidate.toolCallId),
     };
   }
 
@@ -238,12 +240,76 @@ function collectCompactableToolResultGroups<T extends LocalMicrocompactMessage>(
   return groups;
 }
 
-function buildClearedToolResultContent(): ModelMessageContent {
-  return MICROCOMPACT_CLEARED_TOOL_RESULT_MESSAGE;
+/**
+ * 锚点存根（v2）：不再留无信息的空壳，而是确定性生成「工具名 + 定位线索 +
+ * 输出首行」的路条——模型据此知道被清的是什么、需要时用同名工具精确重取。
+ * 纯函数零成本：所有线索都来自历史里已有的字段，不调模型。
+ *
+ * 线索来源：工具入参里的 file_path / path / url / command / query / pattern
+ * （第一个命中的字符串字段），以及被清输出自身的前 120 字符。
+ */
+function buildClearedToolResultContent(
+  messages: readonly LocalMicrocompactMessage[],
+  clearedIndex: number,
+  toolCallId: string,
+): ModelMessageContent {
+  const toolName = messages[clearedIndex]?.toolName ?? "";
+  const toolInput = findToolCallInput(messages, clearedIndex, toolCallId);
+  const hint = pickInputHint(toolInput);
+  const firstLine = firstContentLine(messages[clearedIndex]?.content);
+
+  const segments = ["[Old tool result cleared"];
+  if (toolName) segments.push(` · ${toolName}`);
+  if (hint) segments.push(` ${hint}`);
+  if (firstLine) segments.push(` · output began: "${firstLine}"`);
+  segments.push(" · re-invoke the same tool to retrieve]");
+  return segments.join("");
+}
+
+function findToolCallInput(
+  messages: readonly LocalMicrocompactMessage[],
+  clearedIndex: number,
+  toolCallId: string,
+): unknown {
+  const scanFrom = Math.max(0, clearedIndex - 10);
+  for (let index = clearedIndex; index >= scanFrom; index -= 1) {
+    const message = messages[index];
+    const calls = message?.toolCalls;
+    if (!calls) continue;
+    const hit = calls.find((call) => call.id === toolCallId);
+    if (hit) return hit.input;
+  }
+  return undefined;
+}
+
+function pickInputHint(input: unknown): string {
+  if (input === null || typeof input !== "object") return "";
+  for (const key of ["file_path", "url", "command", "query", "pattern", "path", "file"]) {
+    const value = (input as Record<string, unknown>)[key];
+    if (typeof value === "string" && value.trim()) {
+      return collapseWhitespace(value).slice(0, 96);
+    }
+  }
+  return "";
+}
+
+function firstContentLine(content: ModelMessageContent | undefined): string {
+  if (!content) return "";
+  const text = modelMessageContentToText(content).replace(/\s+/g, " ").trim();
+  return text ? text.slice(0, 120) : "";
+}
+
+function collapseWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function isMicrocompactClearedToolResultContent(content: ModelMessageContent): boolean {
-  return modelMessageContentToText(content) === MICROCOMPACT_CLEARED_TOOL_RESULT_MESSAGE;
+  const text = modelMessageContentToText(content);
+  // 旧格式（精确匹配，兼容历史持久化会话）与新锚点格式（前缀）都视为已清理。
+  return (
+    text === MICROCOMPACT_CLEARED_TOOL_RESULT_MESSAGE ||
+    text.startsWith(MICROCOMPACT_CLEARED_TOOL_RESULT_ANCHORED_PREFIX)
+  );
 }
 
 function hasMediaToolResultContent(content: ModelMessageContent): boolean {
