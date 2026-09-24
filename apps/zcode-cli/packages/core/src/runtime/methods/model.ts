@@ -162,8 +162,7 @@ export async function runModelTextRequest(
   // 自适应思考档（experimental）：会话配置（App 设置→Agent 运行时偏好）优先，
   // 环境变量 ZCODE_ADAPTIVE_REASONING 为 CLI/TUI 无设置链路的后备。工具续跑步降一档。
   const adaptiveReasoningLevel = resolveAdaptiveReasoningLevel({
-    enabled:
-      this.config.adaptiveReasoning?.enabled === true || isAdaptiveReasoningEnabled(),
+    enabled: this.config.adaptiveReasoning?.enabled === true || isAdaptiveReasoningEnabled(),
     currentLevel: model.options.reasoningLevel,
     supportedLevels: model.optionSpecs?.reasoningLevel?.values,
     endsWithToolResult: requestEndsWithToolResult(modelRequest.messages),
@@ -174,6 +173,13 @@ export async function runModelTextRequest(
         options: { ...modelRequest.options, reasoningLevel: adaptiveReasoningLevel },
       }
     : modelRequest;
+  if (adaptiveReasoningLevel) {
+    this.logger?.info("[adaptive-reasoning] 工具续跑步降档", {
+      ...traceContextToLogContext(projectedOptions.traceContext),
+      from: model.options.reasoningLevel,
+      to: adaptiveReasoningLevel,
+    });
+  }
 
   if (!this.shouldStreamModelText()) {
     const result = await runWithModelInvocationContext(modelInvocationContext, () =>

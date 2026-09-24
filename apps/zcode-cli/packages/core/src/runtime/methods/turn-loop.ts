@@ -175,6 +175,9 @@ export async function runRegularTurnLoop(
         commitTurnRequestEntries(this, state.turnRequestState, [
           systemReminderAttachmentEntry("memory_recall", memoryRecallBody),
         ]);
+        this.logger?.info("[memory-recall] 相关记忆清单已注入本轮请求", {
+          ...traceContextToLogContext(state.turnTraceContext),
+        });
       }
     }
     const outputStyleReminderBody =
@@ -201,6 +204,10 @@ export async function runRegularTurnLoop(
         commitTurnRequestEntries(this, state.turnRequestState, [
           systemReminderAttachmentEntry("task_reanchor", reanchorBody),
         ]);
+        this.logger?.info("[task-reanchor] 已在尾部重申最初任务", {
+          ...traceContextToLogContext(state.turnTraceContext),
+          modelStep: state.modelStepCount,
+        });
       }
     }
     const providerEntries = [...state.turnRequestState.entries];

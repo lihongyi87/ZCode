@@ -84,6 +84,13 @@ interface ToolResultCandidate {
 }
 
 export function buildDefaultMicrocompactThreshold(autoCompactThreshold: number): number {
+  // 测试/诊断旋钮（BASH_MAX_OUTPUT_LENGTH 同款惯例）：显式设置时直接采用，
+  // 便于在短会话上验证微压缩行为；下界 1000 防误设导致每步都清。
+  const envThreshold = Number.parseInt(
+    process.env.ZCODE_MICROCOMPACT_THRESHOLD_TOKENS?.trim() ?? "",
+    10,
+  );
+  if (Number.isFinite(envThreshold) && envThreshold >= 1000) return envThreshold;
   const ratioThreshold = Math.floor(autoCompactThreshold * DEFAULT_MICROCOMPACT_THRESHOLD_RATIO);
   const bufferThreshold = autoCompactThreshold - DEFAULT_MICROCOMPACT_THRESHOLD_BUFFER_TOKENS;
   return Math.max(0, Math.min(ratioThreshold, bufferThreshold));

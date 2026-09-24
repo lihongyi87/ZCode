@@ -40,7 +40,11 @@ export function buildTaskReanchorReminderBody(
   ].join("\n");
 }
 
-/** 是否到达注入里程碑（第 N、2N、3N…个模型步）。 */
+/** 是否到达注入里程碑（第 N、2N、3N…个模型步）。
+ * 间隔可用 ZCODE_REANCHOR_INTERVAL 覆盖（下界 2），供短会话验证使用。 */
 export function shouldReanchorAtStep(modelStepCount: number): boolean {
-  return modelStepCount > 0 && modelStepCount % TASK_REANCHOR_STEP_INTERVAL === 0;
+  const envInterval = Number.parseInt(process.env.ZCODE_REANCHOR_INTERVAL?.trim() ?? "", 10);
+  const interval =
+    Number.isFinite(envInterval) && envInterval >= 2 ? envInterval : TASK_REANCHOR_STEP_INTERVAL;
+  return modelStepCount > 0 && modelStepCount % interval === 0;
 }
