@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
  * dev 运行链的载荷回归测试（task-74）。
@@ -59,12 +59,15 @@ function seedFromAssetRoot({ assetRoot, storageRoot, workspace }) {
     [
       `import { mkdirSync, readdirSync, existsSync } from "node:fs";`,
       `import { join } from "node:path";`,
+      `import { pathToFileURL } from "node:url";`,
       `const [assetRoot, storageRoot, workspace] = process.argv.slice(2);`,
       `// 候选基目录第一顺位 = dirname(argv[1])，与 dev 的 zcodeAgentProcessManager 同口径。`,
       `process.argv[1] = join(assetRoot, "zcode.cjs");`,
       `process.chdir(workspace);`,
       `const app = join(${JSON.stringify(repoRoot)}, "apps/zcode-cli/packages/bootstrap/src/app");`,
-      `const { resolveOfficialPluginRoots } = await import(join(app, "bundled-plugins.ts"));`,
+      // Windows 上裸绝对路径（D:\...）不是合法 ESM specifier，会报
+      // ERR_UNSUPPORTED_ESM_URL_SCHEME（protocol 'd:'）；必须转 file:// URL。
+      `const { resolveOfficialPluginRoots } = await import(pathToFileURL(join(app, "bundled-plugins.ts")).href);`,
       `mkdirSync(storageRoot, { recursive: true });`,
       `resolveOfficialPluginRoots({ storageRoot, env: {} });`,
       `const cacheRoot = join(storageRoot, "cache", "zcode-plugins-official");`,
@@ -230,7 +233,8 @@ test("dev-staged payloads survive the real seed and reach the runtime cache", as
       "mcp",
       "server.js",
     );
-    const module = await import(cachedServer);
+    // Windows 裸路径同样不是合法 ESM specifier，见上方探针同款注释。
+    const module = await import(pathToFileURL(cachedServer).href);
     const runtime = module.captureComputerUseRuntimeFromEnvironment({
       ZCODE_CUA_NODE_REPL_HOST: "1",
     });
@@ -246,6 +250,13 @@ test("dev-staged payloads survive the real seed and reach the runtime cache", as
     assert.notEqual(result.isError, true, JSON.stringify(result.content));
     await runtime.dispose();
   } finally {
-    rmSync(workRoot, { recursive: true, force: true });
+    // Windows：CUA 原生驱动的 worker 句柄可能晚于 dispose 数秒释放，重试也未必
+    // 赶得上。临时目录在 os.tmpdir() 下，清不掉只影响卫生不影响正确性——降级为
+    // 尽力清理，绝不让已通过的断言因收尾 EPERM 翻红。
+    try {
+      rmSync(workRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch (error) {
+      console.warn(`[dev-chain] 临时目录清理降级（句柄未释放，可稍后手动删）: ${workRoot}`, error);
+    }
   }
 });

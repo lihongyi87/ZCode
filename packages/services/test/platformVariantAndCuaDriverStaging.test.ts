@@ -11,7 +11,7 @@ import {
 } from "../../desktop/scripts/cua-driver-package-assets.mjs";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
  * 「平台变体包缺失」判据 + Computer Use 驱动 staging 的回归测试。
@@ -78,7 +78,31 @@ test("glibc treats the bare linux tag as current, musl does not", () => {
 
 // ─────────────────────────────── CUA 驱动 staging
 
-const TARGET = { os: "linux", arch: "x64", key: "linux-x64", npmLibc: "glibc" };
+// 目标平台跟随本机：koffi/cua-driver 的平台资产按 optionalDependencies 装在
+// 各自机器上（supportedArchitectures 全平台声明），Linux CI 上行为与旧硬编码
+// linux-x64 一致；Windows 本地开发也能真实 staging/校验，而不是必挂。
+const TARGET = {
+  os: process.platform,
+  arch: process.arch,
+  key: `${process.platform}-${process.arch}`,
+  // npmLibc 只有 os === "linux" 时被消费（cua-driver-package-assets 的变体解析）。
+  npmLibc: process.platform === "linux" ? "glibc" : undefined,
+};
+
+// 目标平台三元组与原生库文件名：随 TARGET 推导，Linux CI 行为与旧硬编码
+// linux-x64-gnu 完全一致，Windows 本地开发推导出 win32-x64-msvc / .dll。
+const TRIPLE =
+  TARGET.os === "linux"
+    ? `linux-${TARGET.arch}-${TARGET.npmLibc === "glibc" ? "gnu" : "musl"}`
+    : TARGET.os === "win32"
+      ? `win32-${TARGET.arch}-msvc`
+      : `darwin-${TARGET.arch}`;
+const NATIVE_LIB =
+  TARGET.os === "linux"
+    ? "libcua_driver_sdk.so"
+    : TARGET.os === "win32"
+      ? "cua_driver_sdk.dll"
+      : "libcua_driver_sdk.dylib";
 
 const require = (await import("node:module")).createRequire(import.meta.url);
 
@@ -119,17 +143,19 @@ test("staging places the driver closure and its platform native library", async 
     glmDir,
     targetPlatform: TARGET,
   });
-  assert.equal(result.triple, "linux-x64-gnu");
+  assert.equal(result.triple, TRIPLE);
   const names = result.staged.map((item) => item.packageName).sort();
   assert.deepEqual(names, [
     "@trycua/cua-driver",
-    "@trycua/cua-driver-linux-x64-gnu",
+    `@trycua/cua-driver-${TRIPLE}`,
     "@ubjs/core",
     "@ubjs/node",
-    "@ubjs/node-linux-x64-gnu",
+    `@ubjs/node-${TRIPLE}`,
   ]);
   // 只 stage 目标平台：全拷会把六个平台的二进制一起打进安装包。
-  assert.ok(!names.some((name) => name.includes("darwin") || name.includes("win32")));
+  // 判据是「不含异平台 tag」，目标平台自身的 tag 必须豁免（win32 目标含 win32）。
+  const foreignTags = ["darwin-", "win32-", "linux-"].filter((tag) => !TRIPLE.startsWith(tag));
+  assert.ok(!names.some((name) => foreignTags.some((tag) => name.includes(tag))), names.join(","));
   // 原生依赖落在 node-repl-host 的 node_modules 下：electron-builder 会硬编码丢弃
   // **源根直属**的 node_modules（util/filter.js 的 `if (relative === "node_modules") return false`），
   // 所以不能放 glm/node_modules —— 那条路写什么 filter 都打不进包（见 staging 模块头注释）。
@@ -139,7 +165,9 @@ test("staging places the driver closure and its platform native library", async 
     existsSync(
       resolve(
         glmDir,
-        "packages/node-repl-host/node_modules/@trycua/cua-driver-linux-x64-gnu/libcua_driver_sdk.so",
+        "packages/node-repl-host/node_modules",
+        `@trycua/cua-driver-${TRIPLE}`,
+        NATIVE_LIB,
       ),
     ),
   );
@@ -164,7 +192,7 @@ test("verification catches every way the staged runtime can be incomplete", asyn
   const nodeModulesDir = resolve(glmDir, "packages/node-repl-host/node_modules");
 
   // ① 原生库缺失
-  rmSync(resolve(nodeModulesDir, "@trycua/cua-driver-linux-x64-gnu/libcua_driver_sdk.so"), {
+  rmSync(resolve(nodeModulesDir, `@trycua/cua-driver-${TRIPLE}`, NATIVE_LIB), {
     force: true,
   });
   assert.match(
@@ -173,13 +201,13 @@ test("verification catches every way the staged runtime can be incomplete", asyn
   );
 
   // ② 平台依赖包整目录缺失
-  rmSync(resolve(nodeModulesDir, "@ubjs/node-linux-x64-gnu"), {
+  rmSync(resolve(nodeModulesDir, `@ubjs/node-${TRIPLE}`), {
     recursive: true,
     force: true,
   });
   assert.match(
     verifyStagedCuaDriver({ resourcesDir: root, targetPlatform: TARGET }).join("\n"),
-    /missing staged driver package @ubjs\/node-linux-x64-gnu/u,
+    new RegExp(`missing staged driver package @ubjs\/node-${TRIPLE.replace("/", "\/")}`, "u"),
   );
 
   // ③ node_repl host bundle 缺失（staging 顺序被改坏的信号）
@@ -215,7 +243,11 @@ test("the staged tree really resolves the driver from the host bundle", async (t
     glmDir,
     targetPlatform: TARGET,
   });
-  const module = await import(resolve(glmDir, "packages/node-repl-host/dist/mcp/server.js"));
+  // Windows 裸绝对路径不是合法 ESM specifier（ERR_UNSUPPORTED_ESM_URL_SCHEME，
+  // protocol 'd:'），必须转 file:// URL。
+  const module = await import(
+    pathToFileURL(resolve(glmDir, "packages/node-repl-host/dist/mcp/server.js")).href
+  );
   const runtime = module.captureComputerUseRuntimeFromEnvironment({
     ZCODE_CUA_NODE_REPL_HOST: "1",
   });
@@ -251,7 +283,11 @@ test("the koffi native addon stages next to the host bundle", async (t) => {
   });
   assert.ok(existsSync(nativePath), nativePath);
   // 必须落在子目录下的 node_modules：源根直属的 node_modules 会被 electron-builder 丢弃。
-  assert.ok(nativePath.includes("packages/node-repl-host/node_modules/koffi"), nativePath);
+  // 分隔符无关：Windows 上 path 分隔符是反斜杠，正斜杠字面量断言必挂。
+  assert.ok(
+    nativePath.replaceAll("\\", "/").includes("packages/node-repl-host/node_modules/koffi"),
+    nativePath,
+  );
 });
 
 test("the host reports Computer Use as unavailable when the driver payload is missing", async (t) => {
@@ -283,7 +319,8 @@ test("the host reports Computer Use as unavailable when the driver payload is mi
   );
 
   // 刻意**不** stage 驱动：这棵树上 node_modules 不存在，正是 seed 丢掉载荷后的 cache 形态。
-  const module = await import(resolve(hostDir, "server.js"));
+  // Windows 裸绝对路径不是合法 ESM specifier，转 file:// URL（同 e2e 用例）。
+  const module = await import(pathToFileURL(resolve(hostDir, "server.js")).href);
   assert.equal(
     module.captureComputerUseRuntimeFromEnvironment({ ZCODE_CUA_NODE_REPL_HOST: "1" }),
     undefined,

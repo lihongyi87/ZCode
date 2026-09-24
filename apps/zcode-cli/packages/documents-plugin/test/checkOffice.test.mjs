@@ -45,7 +45,10 @@ const OFFICE_PLUGINS = [
 
 function pythonAvailable() {
   try {
-    execFileSync("python3", ["--version"], { stdio: "ignore" });
+    // 探针 probe.py 依赖 Unix 专属的 resource 模块（RSS 度量），Windows 的
+    // Python 标准库没有它——可用性探测必须按探针的真实依赖判，否则 Windows
+    // 本地存在 python3 时测试不跳过、一跑就是 ModuleNotFoundError。
+    execFileSync("python3", ["-c", "import resource"], { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -279,7 +282,15 @@ test("三份 check_office.py / check_office.mjs（含 lib/ 模块）逐字节一
  * （RLIMIT_AS 下 V8 起不来，见文件头）。
  */
 const IMPLEMENTATIONS = [
-  { label: "check_office.mjs", runner: "node", pathFor: jsScriptFor, limitMiB: 512 },
+  {
+    label: "check_office.mjs",
+    runner: "node",
+    pathFor: jsScriptFor,
+    limitMiB: 512,
+    // 度量探针本身是 python3 + Unix resource 模块（RLIMIT/子进程 RSS 采样），
+    // Node 实现组同样被它门控：Windows 本地没有 resource 模块时整组跳过。
+    skip: hasPython ? false : "探针需要 python3（Unix resource 模块）",
+  },
   {
     label: "check_office.py",
     runner: "python3",
