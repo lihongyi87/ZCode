@@ -46,7 +46,10 @@ export function buildIdentitySection(outputStyle?: OutputStylePromptConfig): Con
     name: "Agent Identity",
     source: "identity",
     injectionTarget: "system",
-    cacheHint: "stable",
+    // dynamic：identity 内容随 agent（主代理/explore/输出风格）变化。归 dynamic
+    // 桶并由 builder 排在 system 各共享段**之后**——若归 stable 且居首，主代理与
+    // 子代理的 stable body 从第一个字符分叉，跨 agent provider KV 缓存共享归零。
+    cacheHint: "dynamic",
     chars: content.length,
     tokens: estimateTokens(content),
     content,

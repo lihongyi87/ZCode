@@ -105,6 +105,10 @@ export class ContextBuilder {
     }
 
     // 2. Stable agent behavior or custom prompt body
+    // 默认 identity 段不在此处（stable 桶头部）推送——它每个 agent 不同（主代理 /
+    // explore / 输出风格变体），放 stable 头部会让主代理与子代理从 stable body
+    // 第一个字符就分叉，跨 agent 的 provider KV 缓存前缀共享归零。已移至
+    // dynamic 桶尾部（gitSystemContext 之后），共享段先行、identity 垫底。
     if (hasCustomSystemPrompt) {
       sections.push(
         createSection({
@@ -116,9 +120,9 @@ export class ContextBuilder {
         }),
       );
     } else if (workflowActor !== undefined) {
+      // 工作流 actor 身份留在 stable 原位：actor 会话单人单身份，无跨 agent
+      // 共享前缀诉求，且它替换的是整套默认体系。
       sections.push(buildWorkflowActorIdentitySection(workflowActor));
-    } else {
-      sections.push(buildIdentitySection(activeOutputStyle));
     }
 
     // 3. Dynamic system context
@@ -169,6 +173,12 @@ export class ContextBuilder {
       const gitSystemContextSection = buildGitSystemContextSection(this.config.envInfo);
       if (gitSystemContextSection) {
         sections.push(gitSystemContextSection);
+      }
+
+      // identity 垫底（cacheHint 已改 dynamic）：见步骤 2 的迁移注释。放共享段
+      // 之后，主代理与子代理的 system 前缀得以共享到 identity 之前。
+      if (!hasCustomSystemPrompt && workflowActor === undefined) {
+        sections.push(buildIdentitySection(activeOutputStyle));
       }
     }
 
