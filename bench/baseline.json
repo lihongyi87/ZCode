@@ -1,0 +1,27 @@
+{
+  "_说明": "bench 基线：改 core（提示词/断点/压缩/路由）后重跑对应 bench，node bench/baseline-check.mjs <结果文件> 对比。得分下降=回归，先归因再提交。",
+  "updatedAt": "2026-09-24T15:47:33",
+  "entries": {
+    "attention-depth": {
+      "model": "glm-5.2",
+      "score": 100,
+      "detail": "六档深度平均命中率 100%（50-900K）",
+      "date": "2026-09-24",
+      "source": "bench/attention-depth-probe.mjs"
+    },
+    "attention-fidelity": {
+      "model": "glm-5.2",
+      "score": 100,
+      "detail": "三细粒度（聚合/干扰/规则演变）×三深度 全 100%",
+      "date": "2026-09-24",
+      "source": "bench/attention-fidelity-probe.mjs"
+    },
+    "cua": {
+      "model": "glm via zcode-cua",
+      "score": 90,
+      "detail": "10 任务校准 9/10（T8 剪贴板为驱动安全语义已知限制）",
+      "date": "2026-09-24",
+      "source": "packages/zcode-cua/bench/cua-bench.mjs"
+    }
+  }
+}
