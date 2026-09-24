@@ -46,5 +46,6 @@ function buildMemoryContent(memoryRoot: string): string {
     "After writing the file, add a one-line pointer in `MEMORY.md` (`- [Title](file.md) — hook`). `MEMORY.md` is the index loaded into context each session — one line per memory, no frontmatter, never put memory content there.",
     "",
     "Before saving, check for an existing file that already covers it — update that file rather than creating a duplicate; delete memories that turn out to be wrong. Don't save what the repo already records (code structure, past fixes, git history, AGENTS.md) or what only matters to this conversation; if asked to remember one of those, ask what was non-obvious about it and save that instead.",
+    "Durability gate before saving: ask 把这条内容放三个月，它还成立吗？ 一次性的排盘结果、本对话的过程记录、事后就会过时的状态（任务进度、中间结论）一律不存；只存用户的稳定偏好、纠正、长期事实与跨会话有用的规则。",
   ].join("\n");
 }

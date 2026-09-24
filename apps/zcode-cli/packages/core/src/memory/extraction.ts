@@ -62,6 +62,7 @@ export function buildMemoryExtractionPrompt(input: {
     "If the user explicitly asks you to remember something, save it immediately as whichever type fits best. If they ask you to forget something, find and remove the relevant entry.",
     "",
     "Apply the memory types, what-not-to-save criteria, and frontmatter format from the Memory section of your system prompt \u2014 it is already in your context above.",
+    "Durability gate — before writing each memory, ask: 把这条内容放三个月，它还成立吗？一次性的排盘结果、本对话的过程记录、事后就会过时的状态（任务进度、中间结论）一律不存；只存用户的稳定偏好、纠正、长期事实与跨会话有用的规则。",
   ].join("\n");
 }
 
