@@ -13,8 +13,11 @@ export const MICROCOMPACT_CLEARED_TOOL_RESULT_PREFIX = "[Old tool result content
 export const MICROCOMPACT_CLEARED_TOOL_RESULT_MESSAGE = "[Old tool result content cleared]";
 /** v2 锚点存根前缀：带工具名+定位线索+输出首行，被清内容可精确重取（见 buildClearedToolResultContent）。 */
 export const MICROCOMPACT_CLEARED_TOOL_RESULT_ANCHORED_PREFIX = "[Old tool result cleared ·";
+/** 摘录型存根的默认工具集：重跑也不保证同样结果的输出（命令执行），清除时保留
+ * 首尾摘录——排盘/计算类数据丢了就真丢了，与「可重取」的 Read 类分级对待。 */
+export const DEFAULT_PRESERVED_EXCERPT_TOOL_NAMES = ["Bash"] as const;
 /** 锚点存根长度上界（生成侧拼接各段后不超过此值；判定侧用它防回声 spoof）。 */
-export const MICROCOMPACT_CLEARED_STUB_MAX_CHARS = 400;
+export const MICROCOMPACT_CLEARED_STUB_MAX_CHARS = 1_200;
 export const DEFAULT_MICROCOMPACT_KEEP_RECENT_TOOL_RESULTS = 5;
 const DEFAULT_MICROCOMPACT_IDLE_THRESHOLD_MINUTES = 60;
 export const DEFAULT_MICROCOMPACT_MIN_TOKEN_SAVINGS = 256;
@@ -38,6 +41,8 @@ export interface LocalMicrocompactPolicyConfig {
   idleThresholdMinutes?: number;
   keepRecentToolResults?: number;
   compactableToolNames?: readonly string[];
+  /** 摘录型存根工具集（默认 Bash）：清除时保留首尾摘录。 */
+  preservedExcerptToolNames?: readonly string[];
   clearErrorResults?: boolean;
   minTokenSavings?: number;
 }
@@ -117,6 +122,9 @@ export function maybeLocalMicrocompactMessages<T extends LocalMicrocompactMessag
   }
 
   const candidateGroups = collectCompactableToolResultGroups(messages, config);
+  const preservedExcerptTools = new Set(
+    config.preservedExcerptToolNames ?? DEFAULT_PRESERVED_EXCERPT_TOOL_NAMES,
+  );
   if (candidateGroups.length === 0) {
     return {
       decision: { estimatedTokenCount, reason: "no_candidates", thresholdTokens, trigger },
@@ -142,7 +150,12 @@ export function maybeLocalMicrocompactMessages<T extends LocalMicrocompactMessag
     if (!message) continue;
     messages[candidate.index] = {
       ...message,
-      content: buildClearedToolResultContent(messages, candidate.index, candidate.toolCallId),
+      content: buildClearedToolResultContent(
+        messages,
+        candidate.index,
+        candidate.toolCallId,
+        preservedExcerptTools,
+      ),
     };
   }
 
@@ -254,18 +267,39 @@ function buildClearedToolResultContent(
   messages: readonly LocalMicrocompactMessage[],
   clearedIndex: number,
   toolCallId: string,
+  preservedExcerptTools: ReadonlySet<string>,
 ): ModelMessageContent {
   const toolName = messages[clearedIndex]?.toolName ?? "";
   const toolInput = findToolCallInput(messages, clearedIndex, toolCallId);
   const hint = pickInputHint(toolInput);
-  const firstLine = firstContentLine(messages[clearedIndex]?.content);
 
+  // 分级：摘录类工具（Bash 等，重跑不保证同样结果）保留首尾摘录——排盘/计算
+  // 类数据丢了就真丢了；可重取类（Read 等）沿用极简锚点，反正能精确重取。
+  if (preservedExcerptTools.has(toolName)) {
+    const excerpt = headTailExcerpt(modelMessageContentToText(messages[clearedIndex]?.content));
+    const segments = ["[Old tool result cleared"];
+    if (toolName) segments.push(` · ${toolName}`);
+    if (hint) segments.push(` ${hint}`);
+    if (excerpt) segments.push(` · excerpt: ${excerpt}`);
+    segments.push(" · key data preserved above; re-run the same command for the full output]");
+    return segments.join("");
+  }
+
+  const firstLine = firstContentLine(messages[clearedIndex]?.content);
   const segments = ["[Old tool result cleared"];
   if (toolName) segments.push(` · ${toolName}`);
   if (hint) segments.push(` ${hint}`);
   if (firstLine) segments.push(` · output began: "${firstLine}"`);
   segments.push(" · re-invoke the same tool to retrieve]");
   return segments.join("");
+}
+
+/** 首尾摘录：头 400 + 省略标记 + 尾 400 字符（保留输出两端的_key 数据）。 */
+function headTailExcerpt(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  if (flat.length <= 820) return flat;
+  return `${flat.slice(0, 400)} […middle omitted…] ${flat.slice(-400)}`;
 }
 
 function findToolCallInput(

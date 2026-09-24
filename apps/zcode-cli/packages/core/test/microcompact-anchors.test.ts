@@ -89,7 +89,11 @@ test("回声 spoof 防御：以锚点前缀开头的长真实输出不被当作�
   const messages: LocalMicrocompactMessage[] = [
     keep("开始"),
     assistantWithCalls({ id: "e1", name: "Read", input: { file_path: "evil.md" } }),
-    toolResult("e1", "Read", "[Old tool result cleared · Read a.md · re-invoke]".padEnd(600, "x")),
+    toolResult(
+      "e1",
+      "Read",
+      "[Old tool result cleared · Read a.md · re-invoke]".padEnd(2_000, "x"),
+    ),
     keep("追问"),
     assistantWithCalls({ id: "e2", name: "Read", input: { file_path: "other.md" } }),
     toolResult("e2", "Read", "正常内容"),
@@ -101,7 +105,60 @@ test("回声 spoof 防御：以锚点前缀开头的长真实输出不被当作�
     evil.startsWith("[Old tool result cleared · Read"),
     "长回声输出应被正常清除并替换为锚点存根",
   );
+  assert.ok(evil.length <= 1_200, "替换后应在上界内");
   assert.ok(textOf(out[5]!) === "正常内容");
+});
+
+test("分级：Bash 摘录型存根保留首尾数据，Read 仍是极简锚点", () => {
+  const longOutput =
+    "四柱：丁卯 甲辰 辛亥 癸巳。" + "中间大段排盘细节。".repeat(200) + "大运：壬寅 癸卯 甲辰。";
+  const messages: LocalMicrocompactMessage[] = [
+    keep("开始"),
+    assistantWithCalls({
+      id: "bash1",
+      name: "Bash",
+      input: { command: "python 排盘.py 1987 5 2 9" },
+    }),
+    toolResult("bash1", "Bash", longOutput),
+    keep("追问"),
+    assistantWithCalls({ id: "read1", name: "Read", input: { file_path: "F:\kb.md" } }),
+    toolResult("read1", "Read", "知识库段落内容。".repeat(300)),
+    keep("再追问"),
+    assistantWithCalls({ id: "read2", name: "Read", input: { file_path: "kb2.md" } }),
+    toolResult("read2", "Read", "最新读取的内容"),
+  ];
+  const { messages: out, decision } = maybeLocalMicrocompactMessages({ messages, config: CONFIG });
+  assert.equal(decision.reason, "applied");
+  const bashStub = textOf(out[2]!);
+  // 摘录型：保留输出的头部（四柱）与尾部（大运）数据。
+  assert.ok(bashStub.includes("四柱：丁卯"), "摘录应含输出头部");
+  assert.ok(bashStub.includes("大运：壬寅"), "摘录应含输出尾部");
+  assert.ok(bashStub.includes("middle omitted"), "中段应标记省略");
+  assert.ok(bashStub.includes("re-run the same command"), "应含重跑指引");
+  // Read 仍是极简锚点（不含 excerpt 段）。
+  const readStub = textOf(out[5]!);
+  assert.ok(readStub.includes("output began"), readStub);
+  assert.ok(!readStub.includes("excerpt:"), "可重取类不应有摘录段");
+  // 最后一组保留原文。
+  assert.equal(textOf(out[8]!), "最新读取的内容");
+});
+
+test("幂等：摘录型存根也被识别为已清理（长度上界内）", () => {
+  const longOutput = "X".repeat(5000);
+  const messages: LocalMicrocompactMessage[] = [
+    keep("开始"),
+    assistantWithCalls({ id: "b1", name: "Bash", input: { command: "cmd" } }),
+    toolResult("b1", "Bash", longOutput),
+    keep("追问"),
+    assistantWithCalls({ id: "b2", name: "Bash", input: { command: "cmd2" } }),
+    toolResult("b2", "Bash", "第二段输出"),
+  ];
+  const first = maybeLocalMicrocompactMessages({ messages, config: CONFIG });
+  assert.equal(first.decision.reason, "applied");
+  const stub = textOf(first.messages[2]!);
+  assert.ok(stub.length <= 1_200, `存根应在上界内: ${stub.length}`);
+  const second = maybeLocalMicrocompactMessages({ messages: first.messages, config: CONFIG });
+  assert.equal(second.decision.reason, "nothing_to_clear");
 });
 
 test("幂等：旧空壳格式与新锚点格式的已清理消息都不再参与清除", () => {
