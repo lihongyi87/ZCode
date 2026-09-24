@@ -159,9 +159,11 @@ export async function runModelTextRequest(
     });
   }
 
-  // 自适应思考档（experimental，ZCODE_ADAPTIVE_REASONING 默认关）：工具续跑步降一档。
+  // 自适应思考档（experimental）：会话配置（App 设置→Agent 运行时偏好）优先，
+  // 环境变量 ZCODE_ADAPTIVE_REASONING 为 CLI/TUI 无设置链路的后备。工具续跑步降一档。
   const adaptiveReasoningLevel = resolveAdaptiveReasoningLevel({
-    enabled: isAdaptiveReasoningEnabled(),
+    enabled:
+      this.config.adaptiveReasoning?.enabled === true || isAdaptiveReasoningEnabled(),
     currentLevel: model.options.reasoningLevel,
     supportedLevels: model.optionSpecs?.reasoningLevel?.values,
     endsWithToolResult: requestEndsWithToolResult(modelRequest.messages),

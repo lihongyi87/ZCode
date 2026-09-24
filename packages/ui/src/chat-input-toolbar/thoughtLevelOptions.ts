@@ -15,7 +15,13 @@ const NO_THOUGHT_LEVEL_VALUES = new Set([
   "off",
 ]);
 
+/** 「自动」档：UI 预设而非 provider 档位——选中即开启自适应思考档
+ * （App 设置 adaptiveReasoningEnabled），档位字段落到模型支持的顶档。
+ * core 侧路由按步型调档：首步顶档、工具续跑降一档。 */
+export const AUTO_THOUGHT_LEVEL_VALUE = "auto";
+
 const THOUGHT_LEVEL_LABEL_IDS: Record<string, string> = {
+  auto: "chat.toolbar.thoughtLevel.value.auto",
   disabled: "chat.toolbar.thoughtLevel.value.off",
   false: "chat.toolbar.thoughtLevel.value.off",
   no: "chat.toolbar.thoughtLevel.value.off",
@@ -69,6 +75,24 @@ export function getNextThoughtLevelValue(
   const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % entries.length;
 
   return entries[nextIndex]?.value ?? null;
+}
+
+/**
+ * 在档位列表头部插入「自动」预设（仅当模型 ≥2 个真实档位时有意义）。
+ * 循环快捷键与下拉共用该列表；auto 参与循环是有意的——它是用户可选档。
+ */
+export function withAutoThoughtLevelOption(
+  option: Pick<ZCodeConfigOption, "type" | "options"> & { options?: ThoughtLevelEntry[] },
+): ThoughtLevelEntry[] {
+  const entries = option.options ?? [];
+  if (entries.length < 2) return entries;
+  if (
+    entries.some((entry) => normalizeThoughtLevelText(entry.value) === AUTO_THOUGHT_LEVEL_VALUE)
+  ) {
+    return entries;
+  }
+  // name 必填（ZCodeConfigSelectValue）；展示走 THOUGHT_LEVEL_LABEL_IDS 的本地化。
+  return [{ value: AUTO_THOUGHT_LEVEL_VALUE, name: AUTO_THOUGHT_LEVEL_VALUE }, ...entries];
 }
 
 export function getThoughtLevelLabel(

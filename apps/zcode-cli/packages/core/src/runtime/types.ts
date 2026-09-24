@@ -131,6 +131,8 @@ export interface AgentRuntimeConfig {
   maxTurns?: number;
   permissionTimeoutMs?: number;
   compact?: AutoCompactPolicyConfig;
+  /** 自适应思考档（experimental）：工具续跑步自动降一档。缺省=关。 */
+  adaptiveReasoning?: { enabled?: boolean };
   targetCompletionVerification?: { enabled?: boolean };
   midConversationSystem?: {
     mode?: "auto" | "force";

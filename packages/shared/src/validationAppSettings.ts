@@ -515,6 +515,8 @@ const appSettingsObjectSchema = z.object({
   providerFamilyDomainUpdatedAt: z.number().int().nonnegative().optional(),
   providerFamilyDomainMigrated: z.boolean().default(false),
   nativeSearchEnhancementsEnabled: z.boolean().default(true),
+  // 自适应思考档（experimental，默认关）：工具续跑步降一档。
+  adaptiveReasoningEnabled: z.boolean().optional(),
   // 缺省即严格：dangerousCommandPolicy 缺席时 resolveDangerousCommandPolicy 按
   // allowPersistentAuthorization=false + 默认项全开解释，所以这里**不设 default**，
   // 免得给每个老配置都写进一份看起来像"用户选过"的显式值。
@@ -588,6 +590,7 @@ export const appSettingsPatchSchema = z.object({
   providerFamilyDomainUpdatedAt: z.number().int().nonnegative().optional(),
   providerFamilyDomainMigrated: z.boolean().optional(),
   nativeSearchEnhancementsEnabled: z.boolean().optional(),
+  adaptiveReasoningEnabled: z.boolean().optional(),
   dangerousCommandPolicy: dangerousCommandPolicySchema.optional(),
   onboardingOccupation: z
     .enum([

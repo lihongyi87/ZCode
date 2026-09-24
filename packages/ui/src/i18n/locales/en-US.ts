@@ -737,6 +737,7 @@ const enUS: Record<string, string> = {
   "chat.toolbar.model.loadFailedRetry": "Models failed to load. Retry",
   "chat.toolbar.model.remoteWaiting": "Waiting for remote models",
   "chat.toolbar.model.targetMissing": "No model target",
+  "chat.toolbar.thoughtLevel.value.auto": "Auto",
   "chat.toolbar.streamSpeed.title":
     "Output speed counts model streaming time only (excludes tool runs and waits); cache hit is the session cumulative stat",
   "chat.toolbar.streamSpeed.cache": "cache hit",

@@ -2286,6 +2286,7 @@ export function createLocalServices(options: {
               askUserQuestionAutoResolutionEnabled:
                 settings.askUserQuestionAutoResolutionEnabled !== false,
               nativeSearchEnhancementsEnabled: settings.nativeSearchEnhancementsEnabled !== false,
+              adaptiveReasoningEnabled: settings.adaptiveReasoningEnabled === true,
               memoryEnabled: settings.memoryEnabled === true,
               modelContextBudgetStrategy,
               // 工具与权限页的危险命令策略。缺席即严格（CLI 侧解释），所以这里原样透传

@@ -49,7 +49,11 @@ import {
   type ChatStartPlanBalanceConfig,
 } from "@/chat-input-toolbar/StartPlanContextBalance.js";
 import { ThoughtLevelCycleControl } from "@/chat-input-toolbar/ThoughtLevelCycleControl.js";
-import { getNextThoughtLevelValue } from "@/chat-input-toolbar/thoughtLevelOptions.js";
+import {
+  AUTO_THOUGHT_LEVEL_VALUE,
+  getNextThoughtLevelValue,
+  withAutoThoughtLevelOption,
+} from "@/chat-input-toolbar/thoughtLevelOptions.js";
 import type { V4ComposerConfigPicker } from "@/v4/composer/configPickerState.js";
 import { useToolbarShortcutBindings } from "@/v4/composer/toolbarShortcuts.js";
 import {
@@ -395,7 +399,7 @@ function V4ComposerModelControlsImpl({
     providerSettingsRead.state.status === "ready" ? providerSettingsRead.state.view : null;
   const providerSourcesLoading = providerSettingsRead.state.status !== "ready";
   // 配置面存活服务读（过渡归宿 = 配置面 v4 化）：连接方式选中键喂 BigModel Team Plan 门控豁免。
-  const { settings: sharedSettings } = useSettings();
+  const { settings: sharedSettings, update: updateSharedSettings } = useSettings();
   const {
     entitlements,
     enabledStartPlanProviderIds,
@@ -900,21 +904,44 @@ function V4ComposerModelControlsImpl({
   );
 
   // 候选档位只来自目标 Host 的 ModelSelectionView，已选档位只来自 Composer。
+  const adaptiveReasoningOn = sharedSettings?.adaptiveReasoningEnabled === true;
   const thoughtOption = useMemo<ZCodeConfigOption | null>(() => {
     if (!effectiveConfig) return null;
     if (!draftModelThoughtOption) return null;
+    const resolved = resolveDraftThoughtCurrentValue({
+      thought: effectiveConfig.thought,
+      thoughtLevels: draftModelThoughtOption.options?.map((option) => option.value) ?? [],
+    });
     return {
       ...draftModelThoughtOption,
-      currentValue: resolveDraftThoughtCurrentValue({
-        thought: effectiveConfig.thought,
-        thoughtLevels: draftModelThoughtOption.options?.map((option) => option.value) ?? [],
-      }),
+      // 「自动」预设：选中时档位字段仍是顶档（具体值，下游校验安全），显示值
+      // 改为 auto——自适应开关登记在 App 设置里，随勾选联动（新会话生效）。
+      options: withAutoThoughtLevelOption(draftModelThoughtOption),
+      currentValue: adaptiveReasoningOn ? AUTO_THOUGHT_LEVEL_VALUE : resolved,
     };
-  }, [draftModelThoughtOption, effectiveConfig]);
+  }, [draftModelThoughtOption, effectiveConfig, adaptiveReasoningOn]);
 
   const handleThoughtValueChange = useCallback(
     (value: string) => {
       if (!effectiveConfig) return;
+      if (value === AUTO_THOUGHT_LEVEL_VALUE) {
+        // 自动 = 档位顶格 + 开启自适应（工具续跑步由 core 降一档）。
+        const concrete = thoughtOption?.options?.filter(
+          (entry) => entry.value !== AUTO_THOUGHT_LEVEL_VALUE,
+        );
+        const topValue = concrete?.at(-1)?.value ?? thoughtOption?.options?.at(-1)?.value;
+        void updateSharedSettings({ adaptiveReasoningEnabled: true });
+        if (topValue) {
+          onSelectThought(topValue, {
+            provider: effectiveConfig.provider,
+            model: effectiveConfig.model,
+          });
+        }
+        return;
+      }
+      if (sharedSettings?.adaptiveReasoningEnabled === true) {
+        void updateSharedSettings({ adaptiveReasoningEnabled: false });
+      }
       if (!value.trim()) {
         // 跨模型受控 Select 重建时可能抛出一次空 value；它不是用户选择，
         // 若继续上抛会把模型 intent 标成 superseded，导致 accepted 模型无法写入全局元组。

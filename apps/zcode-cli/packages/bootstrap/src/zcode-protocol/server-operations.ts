@@ -142,6 +142,7 @@ type ZCodeSessionRecordParams = (
 
 interface SessionStartupPreferences {
   memoryEnabled: boolean;
+  adaptiveReasoningEnabled: boolean;
   modelContextBudgetStrategy: ZCodeModelContextBudgetStrategy;
   nativeSearchEnhancementsEnabled: boolean;
   /** 工具与权限页的危险命令策略。缺席即严格（core 侧解释）。 */
@@ -3218,6 +3219,7 @@ async function requestSessionRuntimePreferences(
       return {
         askUserQuestionAutoResolutionEnabled: true,
         memoryEnabled: false,
+        adaptiveReasoningEnabled: false,
         modelContextBudgetStrategy: DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
         nativeSearchEnhancementsEnabled: true,
       };
@@ -3236,6 +3238,7 @@ async function resolveSessionStartupPreferences(
     const inheritedShellSelection = source.parent.app.runtime.getSessionShellSelection();
     return {
       memoryEnabled: source.parent.memoryEnabled,
+      adaptiveReasoningEnabled: source.parent.adaptiveReasoningEnabled,
       modelContextBudgetStrategy: DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
       nativeSearchEnhancementsEnabled: source.parent.nativeSearchEnhancementsEnabled,
       // 子会话继承父会话冻结的策略，而不是重新去问 Host：
@@ -3260,6 +3263,7 @@ async function resolveSessionStartupPreferences(
   );
   return {
     memoryEnabled: runtimePreferences.memoryEnabled,
+    adaptiveReasoningEnabled: runtimePreferences.adaptiveReasoningEnabled === true,
     modelContextBudgetStrategy: DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
     nativeSearchEnhancementsEnabled: runtimePreferences.nativeSearchEnhancementsEnabled,
     dangerousCommandPolicy: runtimePreferences.dangerousCommandPolicy,
@@ -3360,6 +3364,8 @@ async function createRecord(
       // Memory Settings 是现有 CLI features.memory/use 之外的总开关。只在关闭时
       // 写入 override，避免开启值反向覆盖用户已有的 CLI 禁用配置。
       ...(startupPreferences.memoryEnabled ? {} : { memory: { enabled: false } }),
+      // 自适应思考档（experimental）：只在开启时写入，默认保持关闭。
+      ...(startupPreferences.adaptiveReasoningEnabled ? { adaptiveReasoning: { enabled: true } } : {}),
       // desktop-continuous session/create 由 UI 先解析 ~/.zcode/.agents 的 enabled MCP，
       // 但 protocol app-server 自己不会读取 UI/main 侧的 MCP store；之前 createRecord 没把
       // params.mcpServers 注入 runtimeConfig，导致日志里 runtimeHasMcpConfig=false，工具永远不启动。
@@ -3416,6 +3422,7 @@ async function createRecord(
     createdAt: now,
     eventStore,
     memoryEnabled: startupPreferences.memoryEnabled,
+    adaptiveReasoningEnabled: startupPreferences.adaptiveReasoningEnabled,
     modelContextBudgetStrategy: startupPreferences.modelContextBudgetStrategy,
     nativeSearchEnhancementsEnabled: startupPreferences.nativeSearchEnhancementsEnabled,
     // 记在 record 上供子会话 inherit（见 resolveSessionStartupPreferences 的 inherit 分支）。

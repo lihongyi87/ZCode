@@ -1717,6 +1717,8 @@ export const zcodeSessionRuntimePreferencesResultSchema = z
     // 与 nativeSearchEnhancementsEnabled 同一条链路：只在 session 创建/恢复时读取，
     // 已运行的会话不重新读（设置页据此如实标注"新建会话后生效"）。
     dangerousCommandPolicy: dangerousCommandPolicySchema.optional(),
+    // 自适应思考档（experimental）：工具续跑步自动降一档。缺省=关（兼容旧 Host）。
+    adaptiveReasoningEnabled: z.boolean().optional(),
   })
   .strict();
 export type ZCodeSessionRuntimePreferencesResult = z.infer<
