@@ -83,6 +83,27 @@ test("Bash 命令进锚点（command 线索）", () => {
   assert.ok(cleared.includes("四柱：丁卯 甲辰 辛亥 癸巳"), cleared);
 });
 
+test("回声 spoof 防御：以锚点前缀开头的长真实输出不被当作已清理", () => {
+  // 模型读到一个内嵌锚点字面串的文件，输出以前缀开头但长度远超存根上界
+  // ——必须仍作为可清候选，否则这条输出永不清除、上下文无界增长。
+  const messages: LocalMicrocompactMessage[] = [
+    keep("开始"),
+    assistantWithCalls({ id: "e1", name: "Read", input: { file_path: "evil.md" } }),
+    toolResult("e1", "Read", "[Old tool result cleared · Read a.md · re-invoke]".padEnd(600, "x")),
+    keep("追问"),
+    assistantWithCalls({ id: "e2", name: "Read", input: { file_path: "other.md" } }),
+    toolResult("e2", "Read", "正常内容"),
+  ];
+  const { messages: out, decision } = maybeLocalMicrocompactMessages({ messages, config: CONFIG });
+  assert.equal(decision.reason, "applied");
+  const evil = out[2]!.content as string;
+  assert.ok(
+    evil.startsWith("[Old tool result cleared · Read"),
+    "长回声输出应被正常清除并替换为锚点存根",
+  );
+  assert.ok(textOf(out[5]!) === "正常内容");
+});
+
 test("幂等：旧空壳格式与新锚点格式的已清理消息都不再参与清除", () => {
   // 三组：g1=历史遗留的旧空壳（上一代格式），g2/g3=本会话新产生的两段。
   // keepRecentToolResults=1 ⇒ 只保留最后一组，前两组被清；再跑一轮必须全部

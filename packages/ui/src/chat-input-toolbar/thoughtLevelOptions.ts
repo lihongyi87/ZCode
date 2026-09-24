@@ -92,7 +92,14 @@ export function withAutoThoughtLevelOption(
     return entries;
   }
   // name 必填（ZCodeConfigSelectValue）；展示走 THOUGHT_LEVEL_LABEL_IDS 的本地化。
-  return [{ value: AUTO_THOUGHT_LEVEL_VALUE, name: AUTO_THOUGHT_LEVEL_VALUE }, ...entries];
+  return [
+    {
+      value: AUTO_THOUGHT_LEVEL_VALUE,
+      name: AUTO_THOUGHT_LEVEL_VALUE,
+      description: "档位顶格；工具续跑自动降一档。设置对新建会话生效。",
+    },
+    ...entries,
+  ];
 }
 
 export function getThoughtLevelLabel(

@@ -13,6 +13,8 @@ export const MICROCOMPACT_CLEARED_TOOL_RESULT_PREFIX = "[Old tool result content
 export const MICROCOMPACT_CLEARED_TOOL_RESULT_MESSAGE = "[Old tool result content cleared]";
 /** v2 锚点存根前缀：带工具名+定位线索+输出首行，被清内容可精确重取（见 buildClearedToolResultContent）。 */
 export const MICROCOMPACT_CLEARED_TOOL_RESULT_ANCHORED_PREFIX = "[Old tool result cleared ·";
+/** 锚点存根长度上界（生成侧拼接各段后不超过此值；判定侧用它防回声 spoof）。 */
+export const MICROCOMPACT_CLEARED_STUB_MAX_CHARS = 400;
 export const DEFAULT_MICROCOMPACT_KEEP_RECENT_TOOL_RESULTS = 5;
 const DEFAULT_MICROCOMPACT_IDLE_THRESHOLD_MINUTES = 60;
 export const DEFAULT_MICROCOMPACT_MIN_TOKEN_SAVINGS = 256;
@@ -305,10 +307,13 @@ function collapseWhitespace(value: string): string {
 
 function isMicrocompactClearedToolResultContent(content: ModelMessageContent): boolean {
   const text = modelMessageContentToText(content);
-  // 旧格式（精确匹配，兼容历史持久化会话）与新锚点格式（前缀）都视为已清理。
+  if (text === MICROCOMPACT_CLEARED_TOOL_RESULT_MESSAGE) return true;
+  // 锚点格式须同时满足前缀 + 长度上界：裸前缀匹配可被「输出恰好以锚点开头」
+  // 的内容 spoof（比如模型读到一个内嵌该字面串的文件），后果是这条输出永不清除、
+  // 上下文无界增长。真存根由本模块生成，长度有界（~280 字符）。
   return (
-    text === MICROCOMPACT_CLEARED_TOOL_RESULT_MESSAGE ||
-    text.startsWith(MICROCOMPACT_CLEARED_TOOL_RESULT_ANCHORED_PREFIX)
+    text.startsWith(MICROCOMPACT_CLEARED_TOOL_RESULT_ANCHORED_PREFIX) &&
+    text.length <= MICROCOMPACT_CLEARED_STUB_MAX_CHARS
   );
 }
 
