@@ -24,13 +24,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── PowerShell 工具（输出强制 UTF-8，避免中文读回乱码） ────────────
 function ps(script) {
-  const r = spawnSync("powershell.exe", [
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    "$OutputEncoding=[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " + script,
-  ], { encoding: "utf8", timeout: 15_000 });
+  const r = spawnSync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      "$OutputEncoding=[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " + script,
+    ],
+    { encoding: "utf8", timeout: 15_000 },
+  );
   return (r.stdout ?? "").replace(/\r?\n$/, "");
 }
 
@@ -47,9 +51,9 @@ function notepadText() {
 function focusWindow(pid) {
   ps(
     `$sig = '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);';` +
-    `Add-Type -MemberDefinition $sig -Name W -Namespace N;` +
-    `$p = Get-Process -Id ${pid} -ErrorAction SilentlyContinue;` +
-    `if ($p -and $p.MainWindowHandle -ne 0) { [N.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null }`,
+      `Add-Type -MemberDefinition $sig -Name W -Namespace N;` +
+      `$p = Get-Process -Id ${pid} -ErrorAction SilentlyContinue;` +
+      `if ($p -and $p.MainWindowHandle -ne 0) { [N.W]::SetForegroundWindow($p.MainWindowHandle) | Out-Null }`,
   );
 }
 
@@ -88,35 +92,55 @@ async function task(id, name, fn) {
   const startedAt = Date.now();
   try {
     const detail = await fn();
-    state.results.push({ id, name, pass: detail.pass, ms: Date.now() - startedAt, detail: detail.detail });
+    state.results.push({
+      id,
+      name,
+      pass: detail.pass,
+      ms: Date.now() - startedAt,
+      detail: detail.detail,
+    });
   } catch (error) {
-    state.results.push({ id, name, pass: false, ms: Date.now() - startedAt, detail: `异常: ${error.message}` });
+    state.results.push({
+      id,
+      name,
+      pass: false,
+      ms: Date.now() - startedAt,
+      detail: `异常: ${error.message}`,
+    });
   }
 }
 
 const tasks = [
   {
-    id: "T1", name: "应用枚举 list_apps（牺牲记事本可见）",
+    id: "T1",
+    name: "应用枚举 list_apps（牺牲记事本可见）",
     run: async () => {
       const { text } = await exec("list_apps");
       const hit = text.includes(String(state.benchPid)) || /notepad|记事本/i.test(text);
-      return { pass: hit, detail: hit ? `列表 ${text.length} 字符，命中记事本` : `未见记事本: ${text.slice(0, 200)}` };
+      return {
+        pass: hit,
+        detail: hit ? `列表 ${text.length} 字符，命中记事本` : `未见记事本: ${text.slice(0, 200)}`,
+      };
     },
   },
   {
-    id: "T2", name: "窗口枚举 list_windows（带 bounds 可用窗口）",
+    id: "T2",
+    name: "窗口枚举 list_windows（带 bounds 可用窗口）",
     run: async () => {
       const { structured } = await exec("list_windows", {});
       const wins = structured?.windows ?? [];
       const mine = wins.find((w) => w.pid === state.benchPid);
       return {
         pass: Boolean(mine),
-        detail: mine ? `共 ${wins.length} 窗口，目标窗口 bounds=${JSON.stringify(mine.bounds)}` : "未找到目标窗口行",
+        detail: mine
+          ? `共 ${wins.length} 窗口，目标窗口 bounds=${JSON.stringify(mine.bounds)}`
+          : "未找到目标窗口行",
       };
     },
   },
   {
-    id: "T3", name: "元素树覆盖 get_app_state（Document 可发现）",
+    id: "T3",
+    name: "元素树覆盖 get_app_state（Document 可发现）",
     run: async () => {
       const { structured } = await exec("get_app_state", { app_ref: benchRef() });
       const elements = Array.isArray(structured?.elements) ? structured.elements : [];
@@ -130,7 +154,8 @@ const tasks = [
     },
   },
   {
-    id: "T4", name: "元素目标英文输入（type → element index）",
+    id: "T4",
+    name: "元素目标英文输入（type → element index）",
     run: async () => {
       if (state.docIndex === null) return { pass: false, detail: "T3 未拿到 Document index，跳过" };
       await exec("type", {
@@ -145,7 +170,8 @@ const tasks = [
     },
   },
   {
-    id: "T5", name: "语义设值 set_value（非击键路径）",
+    id: "T5",
+    name: "语义设值 set_value（非击键路径）",
     run: async () => {
       if (state.docIndex === null) return { pass: false, detail: "无 Document index，跳过" };
       await exec("set_value", {
@@ -160,7 +186,8 @@ const tasks = [
     },
   },
   {
-    id: "T6", name: "焦点态英文输入（type 无 target）",
+    id: "T6",
+    name: "焦点态英文输入（type 无 target）",
     run: async () => {
       focusWindow(state.benchPid);
       await sleep(400);
@@ -172,7 +199,8 @@ const tasks = [
     },
   },
   {
-    id: "T7", name: "中文合成输入（type 中文·重点）",
+    id: "T7",
+    name: "中文合成输入（type 中文·重点）",
     run: async () => {
       focusWindow(state.benchPid);
       await sleep(400);
@@ -184,7 +212,8 @@ const tasks = [
     },
   },
   {
-    id: "T8", name: "前台化+剪贴板中文粘贴（最小化/恢复法）",
+    id: "T8",
+    name: "前台化+剪贴板中文粘贴（最小化/恢复法）",
     run: async () => {
       // 实测：驱动全部输入走后台投递（安全语义，不抢前台），后台窗口上
       // ctrl+v 粘贴天然无效，坐标点击标题栏也带不来前台。唯一可靠前台化：
@@ -215,7 +244,8 @@ if ($p -and $p.MainWindowHandle -ne 0) {
     },
   },
   {
-    id: "T9", name: "跨窗口定位（双记事本，动作落点正确）",
+    id: "T9",
+    name: "跨窗口定位（双记事本，动作落点正确）",
     run: async () => {
       const beforeA = notepadText();
       const st = await exec("get_app_state", {
@@ -241,12 +271,15 @@ if ($p -and $p.MainWindowHandle -ne 0) {
       const pass = occurrences >= 1 && preserved;
       return {
         pass,
-        detail: pass ? "落点正确且未污染第一窗口" : `出现次数=${occurrences}(应≥1); A内容保留=${preserved}`,
+        detail: pass
+          ? "落点正确且未污染第一窗口"
+          : `出现次数=${occurrences}(应≥1); A内容保留=${preserved}`,
       };
     },
   },
   {
-    id: "T10", name: "权限面/会话面（request_access + stop 语义）",
+    id: "T10",
+    name: "权限面/会话面（request_access + stop 语义）",
     run: async () => {
       const ra = await exec("request_access", {});
       const stop = await exec("stop_computer_control", { reason: "bench 结束" });
@@ -296,11 +329,15 @@ async function main() {
   state.secondPid = win2?.pid ?? 0;
   state.secondWindowId = win2?.window_id;
   if (!state.benchPid || !state.secondPid) {
-    console.error(`记事本启动失败（win1=${JSON.stringify(win1)} win2=${JSON.stringify(win2)}），中止`);
+    console.error(
+      `记事本启动失败（win1=${JSON.stringify(win1)} win2=${JSON.stringify(win2)}），中止`,
+    );
     process.exitCode = 1;
     return;
   }
-  console.log(`[setup] 目标窗口: A=pid${state.benchPid}/wid${state.benchWindowId} B=pid${state.secondPid}/wid${state.secondWindowId}\n`);
+  console.log(
+    `[setup] 目标窗口: A=pid${state.benchPid}/wid${state.benchWindowId} B=pid${state.secondPid}/wid${state.secondWindowId}\n`,
+  );
 
   for (const t of tasks) {
     process.stdout.write(`[${t.id}] ${t.name} … `);
