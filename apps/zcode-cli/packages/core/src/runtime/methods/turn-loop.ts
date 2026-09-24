@@ -45,6 +45,9 @@ export async function runRegularTurnLoop(
   this: AgentRuntimeInternal,
   state: RegularTurnLoopState,
 ): Promise<void> {
+  // 记忆召回每 turn 只做一次：turn 内的后续模型步（工具循环）不重复注入。
+  let memoryRecallAttempted = false;
+
   while (true) {
     throwIfTurnAborted(state.turnAbortSignal);
     const outputTokenRecoveryActive = state.turnRequestState.outputTokenContinuationCount > 0;
@@ -159,13 +162,14 @@ export async function runRegularTurnLoop(
     // 对记忆清单做相关性排序，命中才注入 top-K 摘要+路径——模型据此可精确重读，
     // 中段死区与长索引注意力稀释同时缓解。清单扫描按 runtime 缓存 60s，
     // 失败不影响本轮。
-    if (!outputTokenRecoveryActive && this.memoryRoot && this.fileSystemPort) {
+    if (!memoryRecallAttempted && this.memoryRoot && this.fileSystemPort) {
       const memoryRecallBody = await buildMemoryRecallReminderBody({
         runtime: this,
         fileSystem: this.fileSystemPort,
         memoryRoot: this.memoryRoot,
         entries: state.turnRequestState.entries,
       });
+      memoryRecallAttempted = true;
       if (memoryRecallBody) {
         commitTurnRequestEntries(this, state.turnRequestState, [
           systemReminderAttachmentEntry("memory_recall", memoryRecallBody),
