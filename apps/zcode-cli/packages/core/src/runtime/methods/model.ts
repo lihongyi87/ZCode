@@ -154,7 +154,6 @@ export async function runModelTextRequest(
         systemChanged: stabilityReport.systemChanged,
         toolsChanged: stabilityReport.toolsChanged,
         firstMutatedMessageIndex: stabilityReport.firstMutatedMessageIndex,
-        previousMessageCount: stabilityReport.firstMutatedMessageIndex,
         summary: stabilityReport.summary,
       },
     });

@@ -100,6 +100,32 @@ test("cacheControl 标记移动不参与哈希", () => {
   );
 });
 
+test("块级 providerOptions/cacheControl 不参与哈希（red-team 回归）", () => {
+  const withBlockOptions = {
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "hi",
+            providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+          },
+        ],
+      },
+    ],
+    tools: [],
+  };
+  const without = {
+    messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+    tools: [],
+  };
+  assert.deepEqual(
+    sectionizeProviderRequest(withBlockOptions as never),
+    sectionizeProviderRequest(without as never),
+  );
+});
+
 test("运行时跟踪：首次无报告，第二次返回 diff，第三次跨对象互不干扰", () => {
   const runtimeA = {};
   const runtimeB = {};

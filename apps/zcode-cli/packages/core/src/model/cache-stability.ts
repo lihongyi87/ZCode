@@ -54,12 +54,18 @@ export interface CacheStabilityReport {
   summary: string;
 }
 
-/** 稳定序列化：对象键排序后序列，避免键序噪声触发假变异。 */
+/**
+ * 稳定序列化：对象键排序后序列，避免键序噪声触发假变异。
+ * 剔除 cacheControl 与块级 providerOptions——断点标记每轮移动/可能落在内容块上，
+ * 它们是缓存机制的自身机械，不是内容变异。
+ */
+const NON_CONTENT_KEYS = new Set(["cacheControl", "providerOptions"]);
+
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
   const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== undefined)
+    .filter(([k, v]) => v !== undefined && !NON_CONTENT_KEYS.has(k))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(",")}}`;
 }

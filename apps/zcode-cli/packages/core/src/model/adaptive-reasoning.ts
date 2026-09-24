@@ -28,15 +28,43 @@ export interface AdaptiveReasoningInput {
   endsWithToolResult: boolean;
 }
 
+/** 已知思考档等级表。供应商 values 实测全部升序（zcode-builtin 15 种排序均如此），
+ * 但这是配置惯例不是契约——第三方自建 provider 可能乱序。降档按等级表裁决，
+ * 全是未知名或无法比较时放弃（宁可不省，不可反向升档）。 */
+const REASONING_LEVEL_RANK: Readonly<Record<string, number>> = Object.freeze({
+  none: 0,
+  disabled: 0,
+  minimal: 1,
+  low: 2,
+  medium: 3,
+  high: 4,
+  xhigh: 5,
+  max: 6,
+});
+
+function rankOf(level: string): number | undefined {
+  return REASONING_LEVEL_RANK[level];
+}
+
 /** 降档后的档位；返回 undefined 表示本步不覆盖（保持会话配置）。 */
 export function resolveAdaptiveReasoningLevel(input: AdaptiveReasoningInput): string | undefined {
   if (!input.enabled || !input.endsWithToolResult) return undefined;
   const levels = input.supportedLevels;
   if (!Array.isArray(levels) || levels.length < 2) return undefined;
-  const currentIndex = input.currentLevel !== undefined ? levels.indexOf(input.currentLevel) : -1;
-  // 未配置档位（供应商默认）或已是最低档：不降。
-  if (currentIndex <= 0) return undefined;
-  return levels[currentIndex - 1];
+  const currentRank = input.currentLevel !== undefined ? rankOf(input.currentLevel) : undefined;
+  if (currentRank === undefined || currentRank === 0) return undefined;
+  // 从当前档向低找：取等级严格更低的最近一档（不依赖 values 数组顺序）。
+  let fallback: string | undefined;
+  let fallbackRank = -Infinity;
+  for (const level of levels) {
+    const rank = rankOf(level);
+    if (rank === undefined || rank >= currentRank) continue;
+    if (rank > fallbackRank) {
+      fallbackRank = rank;
+      fallback = level;
+    }
+  }
+  return fallback;
 }
 
 /** 判断请求消息是否以工具结果收尾（工具结果在投影里是 user 角色的 toolResult 块）。 */

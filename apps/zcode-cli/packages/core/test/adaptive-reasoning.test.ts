@@ -109,6 +109,39 @@ test("工具结果收尾判定", () => {
   );
 });
 
+test("乱序 values 防御：降档按等级表而非数组顺序（red-team 回归）", () => {
+  // 第三方自建 provider 若乱序声明，绝不可把降档变成升档。
+  assert.equal(
+    resolveAdaptiveReasoningLevel({
+      enabled: true,
+      currentLevel: "high",
+      supportedLevels: ["max", "high", "low", "medium"],
+      endsWithToolResult: true,
+    }),
+    "medium",
+  );
+  // 全是未知名：放弃降档。
+  assert.equal(
+    resolveAdaptiveReasoningLevel({
+      enabled: true,
+      currentLevel: "turbo",
+      supportedLevels: ["turbo", "eco"],
+      endsWithToolResult: true,
+    }),
+    undefined,
+  );
+  // none/disabled 档为 0 级：不降。
+  assert.equal(
+    resolveAdaptiveReasoningLevel({
+      enabled: true,
+      currentLevel: "low",
+      supportedLevels: ["none", "low", "high"],
+      endsWithToolResult: true,
+    }),
+    "none",
+  );
+});
+
 test("环境开关", () => {
   assert.equal(isAdaptiveReasoningEnabled({}), false);
   assert.equal(isAdaptiveReasoningEnabled({ ZCODE_ADAPTIVE_REASONING: "0" }), false);
