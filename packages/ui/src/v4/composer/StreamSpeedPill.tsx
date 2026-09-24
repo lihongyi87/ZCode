@@ -155,16 +155,26 @@ export interface StreamSpeedPillProps {
   streamingChars: number;
   active: boolean;
   title: string;
+  /** 缓存命中率段的本地化文案（如「缓存命中」）。 */
+  cacheLabel: string;
 }
 
-/** 常驻显示：无样本时显示 "--"，流式中显示实时估算（尾随 ·），空闲显示最近窗口精确均值。 */
+/** 常驻显示：无样本时速度显示 "--"，流式中显示实时估算（尾随 ·），空闲显示最近窗口精确均值。
+ * 缓存命中段复用运行时自己的 hitRate（usage.contextWindow.cache），有数据才显示——
+ * 不设 78% 展示阈值：本药丸的定位是通道效率监控，低命中恰恰是要看见的信号。 */
 export const StreamSpeedPill = memo(function StreamSpeedPill({
   usage,
   streamingChars,
   active,
   title,
+  cacheLabel,
 }: StreamSpeedPillProps) {
   const { speed, live } = useStreamSpeed(usage, streamingChars, active);
+  const hitRate = usage?.contextWindow?.cache?.hitRate ?? null;
+  const cacheText =
+    hitRate !== null && Number.isFinite(hitRate)
+      ? `${cacheLabel} ${Math.round(Math.max(0, hitRate) * 100)}%`
+      : null;
   return (
     <span
       title={title}
@@ -177,6 +187,14 @@ export const StreamSpeedPill = memo(function StreamSpeedPill({
         <span aria-hidden className="text-foreground-subtlest">
           ·
         </span>
+      )}
+      {cacheText !== null && (
+        <>
+          <span aria-hidden className="text-foreground-subtlest">
+            ·
+          </span>
+          <span data-testid="v4-stream-cache">{cacheText}</span>
+        </>
       )}
     </span>
   );
