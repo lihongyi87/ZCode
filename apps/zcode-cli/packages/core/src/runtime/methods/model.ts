@@ -24,6 +24,7 @@ import { getOrCreateReasoningBlock } from "./reasoning-stream.js";
 import { createRefreshRuntimeHeadersBeforeModelAttempt } from "./model-runtime-headers.js";
 import { resolveModelRequestSessionTypeFromTaskType } from "./model-request-session-type.js";
 import { isOutputTokenLimitFinishReason } from "./turn-output-token-continuation.js";
+import { trackProviderRequestStabilityForRuntime } from "../../model/cache-stability.js";
 
 const TOOL_INPUT_STREAM_DELTA_FALLBACK_FLUSH_CHARS = 4096;
 
@@ -137,6 +138,22 @@ export async function runModelTextRequest(
   const contextUsageSnapshot = this.buildContextUsageSnapshot(projectedOptions);
   const contextUsageBreakdown = this.buildContextUsageBreakdownFromSnapshot(contextUsageSnapshot);
   this.logContextUsageSnapshot(projectedOptions, contextUsageSnapshot);
+
+  // 缓存稳定性检测：正常增长=尾部追加；任何旧前缀内的变异都会作废上一次缓存写。
+  // 只在检测到变异时落 info 日志（罕见事件，生产可见），稳定时零输出。
+  const stabilityReport = trackProviderRequestStabilityForRuntime(this, modelRequest);
+  if (stabilityReport?.mutatedBeforeTail) {
+    this.logger?.info("Provider request cache stability: prefix mutated", {
+      ...traceContextToLogContext(projectedOptions.traceContext),
+      cacheStability: {
+        systemChanged: stabilityReport.systemChanged,
+        toolsChanged: stabilityReport.toolsChanged,
+        firstMutatedMessageIndex: stabilityReport.firstMutatedMessageIndex,
+        previousMessageCount: stabilityReport.firstMutatedMessageIndex,
+        summary: stabilityReport.summary,
+      },
+    });
+  }
 
   if (!this.shouldStreamModelText()) {
     const result = await runWithModelInvocationContext(modelInvocationContext, () =>
