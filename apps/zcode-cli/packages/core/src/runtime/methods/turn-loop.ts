@@ -21,6 +21,7 @@ import {
   todoReminderRuntimeMetadata,
 } from "../../agent/message-history.js";
 import { buildMemoryRecallReminderBody } from "./memory-recall-reminder.js";
+import { buildTaskReanchorReminderBody, shouldReanchorAtStep } from "./task-reanchor-reminder.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { runModelBackedTurnStep } from "./turn-model-step.js";
 import {
@@ -186,6 +187,21 @@ export async function runRegularTurnLoop(
       commitTurnRequestEntries(this, state.turnRequestState, [
         systemReminderAttachmentEntry("output_style", outputStyleReminderBody),
       ]);
+    }
+    // 任务再锚定：每 15 个模型步在尾部重申最初任务（防长会话漂移）。
+    if (
+      !outputTokenRecoveryActive &&
+      shouldReanchorAtStep(state.modelStepCount) &&
+      state.turnRequestState.entries.some(
+        (entry) => entry.kind === "message" && entry.metadata?.source === "real_user",
+      )
+    ) {
+      const reanchorBody = buildTaskReanchorReminderBody(state.turnRequestState.entries);
+      if (reanchorBody) {
+        commitTurnRequestEntries(this, state.turnRequestState, [
+          systemReminderAttachmentEntry("task_reanchor", reanchorBody),
+        ]);
+      }
     }
     const providerEntries = [...state.turnRequestState.entries];
     const requestEntries = providerEntries;

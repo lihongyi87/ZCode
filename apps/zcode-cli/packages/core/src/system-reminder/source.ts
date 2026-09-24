@@ -41,6 +41,7 @@ export const SYSTEM_REMINDER_PER_REQUEST_SOURCES = [
   "incoming_message",
   "hook_context",
   "memory_recall",
+  "task_reanchor",
   "runtime_mode",
   "plan_mode_exit",
   "output_style",
@@ -107,6 +108,8 @@ const SYSTEM_REMINDER_DESCRIPTORS: Record<SystemReminderSource, DescriptorShape>
   todo_reminder: descriptor("current_turn", "per_current_turn", true, "sr.todo_reminder"),
   // 记忆召回提醒：按本轮用户输入对记忆清单做相关性排序后注入 top-K 摘要。
   memory_recall: descriptor("current_turn", "per_current_turn", true, "sr.memory_recall"),
+  // 任务再锚定：长会话每 N 个模型步在尾部重申最初任务（防漂移）。
+  task_reanchor: descriptor("current_turn", "runtime_local", true, "sr.task_reanchor"),
   task_status: descriptor("mid_turn_event", "mid_turn_event", true, "sr.task_status"),
   // 只用于 Read 等 tool result 内容内联 warning，不作为 synthetic user notice 持久化。
   tool_result_warning: descriptor("tool_result", "tool_result", true, "sr.tool_result_warning"),
