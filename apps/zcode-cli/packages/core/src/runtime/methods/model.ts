@@ -25,6 +25,11 @@ import { createRefreshRuntimeHeadersBeforeModelAttempt } from "./model-runtime-h
 import { resolveModelRequestSessionTypeFromTaskType } from "./model-request-session-type.js";
 import { isOutputTokenLimitFinishReason } from "./turn-output-token-continuation.js";
 import { trackProviderRequestStabilityForRuntime } from "../../model/cache-stability.js";
+import {
+  isAdaptiveReasoningEnabled,
+  requestEndsWithToolResult,
+  resolveAdaptiveReasoningLevel,
+} from "../../model/adaptive-reasoning.js";
 
 const TOOL_INPUT_STREAM_DELTA_FALLBACK_FLUSH_CHARS = 4096;
 
@@ -155,9 +160,23 @@ export async function runModelTextRequest(
     });
   }
 
+  // 自适应思考档（experimental，ZCODE_ADAPTIVE_REASONING 默认关）：工具续跑步降一档。
+  const adaptiveReasoningLevel = resolveAdaptiveReasoningLevel({
+    enabled: isAdaptiveReasoningEnabled(),
+    currentLevel: model.options.reasoningLevel,
+    supportedLevels: model.optionSpecs?.reasoningLevel?.values,
+    endsWithToolResult: requestEndsWithToolResult(modelRequest.messages),
+  });
+  const requestWithOptions = adaptiveReasoningLevel
+    ? {
+        ...modelRequest,
+        options: { ...modelRequest.options, reasoningLevel: adaptiveReasoningLevel },
+      }
+    : modelRequest;
+
   if (!this.shouldStreamModelText()) {
     const result = await runWithModelInvocationContext(modelInvocationContext, () =>
-      model.generateText(modelRequest),
+      model.generateText(requestWithOptions),
     );
     const normalizedToolCalls = normalizeModelToolCallsForRuntime(result.toolCalls, {
       logger: this.logger,
@@ -243,7 +262,7 @@ export async function runModelTextRequest(
   };
 
   const modelStream = runWithModelInvocationContext(modelInvocationContext, () =>
-    model.streamText(modelRequest),
+    model.streamText(requestWithOptions),
   );
   finishAssembly();
   try {
