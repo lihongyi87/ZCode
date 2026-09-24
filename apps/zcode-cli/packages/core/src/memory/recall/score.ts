@@ -18,7 +18,7 @@ export interface ScoredMemoryEntry {
 export interface ScoreMemoryOptions {
   /** 返回条数上限（默认 5）。 */
   topK?: number;
-  /** 最低分阈值：低于此值的条目不注入（默认 0.15）。 */
+  /** 最低分阈值：低于此值的条目不注入（默认 0.1）。 */
   minScore?: number;
 }
 
@@ -48,7 +48,7 @@ export function scoreMemoryEntries(
   options: ScoreMemoryOptions = {},
 ): ScoredMemoryEntry[] {
   const topK = options.topK ?? 5;
-  const minScore = options.minScore ?? 0.15;
+  const minScore = options.minScore ?? 0.1;
   const queryTokens = tokenizeForRecall(query);
   if (queryTokens.size === 0 || entries.length === 0) return [];
 
@@ -56,12 +56,15 @@ export function scoreMemoryEntries(
   for (const entry of entries) {
     const entryTokens = tokenizeForRecall(entryText(entry));
     if (entryTokens.size === 0) continue;
-    let hits = 0;
-    for (const token of queryTokens) {
-      if (entryTokens.has(token)) hits += 1;
+    // 打分口径 = 条目覆盖率（查询命中的条目词元 / 条目词元总数），分母与查询
+    // 长度无关——长提问（命理咨询常带大段背景）不会稀释得分；条目越被查询
+    // 「覆盖」越相关。查询侧只要求至少命中一个条目词元。
+    let matched = 0;
+    for (const token of entryTokens) {
+      if (queryTokens.has(token)) matched += 1;
     }
-    const score = hits / queryTokens.size;
-    if (score >= minScore) scored.push({ entry, score });
+    const score = matched / entryTokens.size;
+    if (matched > 0 && score >= minScore) scored.push({ entry, score });
   }
   scored.sort(
     (left, right) => right.score - left.score || right.entry.mtimeMs - left.entry.mtimeMs,
