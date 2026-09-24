@@ -249,7 +249,10 @@ export class ContextBuilder {
       messages.push({
         role: "system",
         content: cliPrefixContent,
-        cacheControl: EPHEMERAL_CACHE_CONTROL,
+        // 不打 cache 断点：断点配额有限（Anthropic 4 个），cli-prefix 的缓存写
+        // 恒被紧随其后的 stable body 断点覆盖（断点语义=覆盖 0..X 前缀），单独
+        // 标记它纯属浪费配额。省下的配额给了 meta-user 边界断点（AGENTS.md/
+        // context_prefix 尾部），见 provider-request-messages 的 finalize。
       });
     }
 

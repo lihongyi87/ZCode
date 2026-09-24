@@ -33,6 +33,8 @@ export interface ProviderRequestMessageProjectionResult {
     latestRealUserMessageIndex?: number;
     strippedRuntimeMetaCount: number;
     cacheControlIndex?: number;
+    /** 头部稳定块（system+meta-user）末尾的第四断点落点；无 shared_context 时缺省。 */
+    metaUserBoundaryIndex?: number;
   };
 }
 
@@ -76,10 +78,50 @@ export function buildProviderRequestMessages(input: {
   }
   const finalLatestRealUserMessageIndex =
     latestRealUserMessageIndex >= 0 ? (mergeResult.indexMap[latestRealUserMessageIndex] ?? -1) : -1;
+  // meta-user 边界：最后一个 context_prefix 附件（AGENTS.md / 用户指令块）的
+  // 落点。它是 system 之后、对话历史之前的稳定块——在这里打第四个断点，使
+  // 「tools + system + 项目上下文」整个头部在会话内跨轮复用，只有对话尾部的
+  // 滚动断点在动。（配额来源：cli-prefix 的断点已让位，见 builder 的注释。）
+  let metaUserBoundaryIndex: number | undefined;
+  if (input.applyCacheControl) {
+    // 定位不能走 sourceEntries（attachment 派生消息在该表的 representative 为
+    // undefined）；直接从 projectedEntries 经 indexMap 映射。边界语义：首个真实
+    // 用户消息之前的最后一个 context_prefix 附件 = AGENTS.md 头部稳定块末尾。
+    let firstRealUserMergedIndex = -1;
+    for (let projectedIndex = 0; projectedIndex < projectedEntries.length; projectedIndex += 1) {
+      const entry = projectedEntries[projectedIndex];
+      if (entry && origins.hasRealUser(entry)) {
+        firstRealUserMergedIndex = mergeResult.indexMap[projectedIndex] ?? -1;
+        break;
+      }
+    }
+    const scanEnd =
+      firstRealUserMergedIndex === -1 ? messages.length - 1 : firstRealUserMergedIndex - 1;
+    for (
+      let projectedIndex = projectedEntries.length - 1;
+      projectedIndex >= 0;
+      projectedIndex -= 1
+    ) {
+      const entry = projectedEntries[projectedIndex];
+      if (
+        isRuntimeAttachmentEntry(entry) &&
+        entry.metadata.source === "context_prefix" &&
+        (mergeResult.indexMap[projectedIndex] ?? -1) <= scanEnd &&
+        (mergeResult.indexMap[projectedIndex] ?? -1) >= 0
+      ) {
+        const mergedIndex = mergeResult.indexMap[projectedIndex]!;
+        if (messages[mergedIndex]?.role === "user") {
+          metaUserBoundaryIndex = mergedIndex;
+          break;
+        }
+      }
+    }
+  }
   const cacheControlIndex =
     input.applyCacheControl === true
       ? finalizeLatestNonSystemMessageCacheControl(messages, {
           skipCacheWrite: input.skipCacheWrite === true,
+          ...(metaUserBoundaryIndex !== undefined ? { metaUserBoundaryIndex } : {}),
         })
       : undefined;
 
@@ -88,12 +130,13 @@ export function buildProviderRequestMessages(input: {
     sourceEntries,
     diagnostics: {
       bubbledAttachmentEntryCount: reorderResult.bubbledAttachmentEntryCount,
-      // 新标记能证明“没有真实用户”；省略索引会让媒体预算按 user role 重新猜来源。
+      // 新标记能证明"没有真实用户"；省略索引会让媒体预算按 user role 重新猜来源。
       ...(finalLatestRealUserMessageIndex >= 0 || input.entries.some(isPresentedInput)
         ? { latestRealUserMessageIndex: finalLatestRealUserMessageIndex }
         : {}),
       strippedRuntimeMetaCount: input.entries.filter((entry) => entry.metadata).length,
       ...(cacheControlIndex !== undefined ? { cacheControlIndex } : {}),
+      ...(metaUserBoundaryIndex !== undefined ? { metaUserBoundaryIndex } : {}),
     },
   };
 }
@@ -291,7 +334,7 @@ function findLatestRealUserEntryIndex(
 
 function finalizeLatestNonSystemMessageCacheControl(
   messages: ModelInputMessage[],
-  options: { skipCacheWrite?: boolean } = {},
+  options: { skipCacheWrite?: boolean; metaUserBoundaryIndex?: number } = {},
 ): number | undefined {
   clearNonSystemMessageCacheControl(messages);
 
@@ -310,6 +353,20 @@ function finalizeLatestNonSystemMessageCacheControl(
     ...message,
     cacheControl: { type: "ephemeral" },
   };
+  // meta-user 边界断点（第四断点）：头部稳定块尾。仅在正常写缓存的请求上落
+  // （skipCacheWrite 的 compact 请求不新增任何写断点），且不与尾断点重叠。
+  const boundary = options.metaUserBoundaryIndex;
+  if (
+    options.skipCacheWrite !== true &&
+    boundary !== undefined &&
+    boundary !== cacheControlIndex &&
+    messages[boundary]?.role === "user"
+  ) {
+    messages[boundary] = {
+      ...messages[boundary]!,
+      cacheControl: { type: "ephemeral" },
+    };
+  }
   return cacheControlIndex;
 }
 
