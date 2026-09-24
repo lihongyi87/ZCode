@@ -956,7 +956,7 @@ function V4ComposerModelControlsImpl({
         model: effectiveConfig.model,
       });
     },
-    [effectiveConfig, onSelectThought],
+    [effectiveConfig, onSelectThought, sharedSettings, updateSharedSettings],
   );
 
   // Ctrl+T 热键：按目录顺序循环下一次 Submission 的思考深度。
