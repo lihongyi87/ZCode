@@ -133,6 +133,9 @@ export interface AgentRuntimeConfig {
   compact?: AutoCompactPolicyConfig;
   /** 自适应思考档（experimental）：工具续跑步自动降一档。缺省=关。 */
   adaptiveReasoning?: { enabled?: boolean };
+  /** 缓存保活器（experimental）：会话空闲超阈值时发同前缀迷你请求刷新
+   * provider 侧 prompt cache，消除长空档后下一请求的预填充跳升。默认关。 */
+  cacheKeepAlive?: { enabled?: boolean; idleThresholdMs?: number };
   targetCompletionVerification?: { enabled?: boolean };
   midConversationSystem?: {
     mode?: "auto" | "force";

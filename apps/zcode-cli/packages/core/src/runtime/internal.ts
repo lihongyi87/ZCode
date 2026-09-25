@@ -110,6 +110,8 @@ export interface AgentRuntimeInternal
   fileSystemPort?: FileSystemPort;
   /** 最近一次模型请求的上下文压力（0-1，input/窗口）；供工具执行层收缩预算。 */
   lastContextPressure?: number;
+  cacheKeepAliveTimer?: ReturnType<typeof setTimeout>;
+  sendCacheKeepAliveRequest(): Promise<void>;
   imageProcessorPort?: ImageProcessorPort;
   pdfDocumentPort?: PdfDocumentPort;
   skillLoadOutcome?: SkillLoadOutcome;

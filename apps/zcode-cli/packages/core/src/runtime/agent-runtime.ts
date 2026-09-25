@@ -165,6 +165,8 @@ export class AgentRuntime {
   private memoryRoot?: string;
   /** 最近一次模型请求的上下文压力（0-1）；见 internal.ts。 */
   lastContextPressure?: number;
+  /** 缓存保活定时器句柄；由 cache-keep-alive 模块管理。 */
+  cacheKeepAliveTimer?: ReturnType<typeof setTimeout>;
   private memoryIndexContent?: string;
   private memoryExtractionScheduler?: ProjectMemoryExtractionScheduler;
   private contextSourcePort?: ContextSourcePort;

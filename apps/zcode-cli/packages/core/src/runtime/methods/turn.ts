@@ -39,6 +39,7 @@ import {
   summarizeTurnAttachmentsForEvent,
   runtimeMetadataForSyntheticUserMessageSource,
 } from "../helpers/index.js";
+import { cancelCacheKeepAlive, scheduleCacheKeepAlive } from "./cache-keep-alive.js";
 import type { ActiveTurnSteeringState, ExecuteTurnOptions, TurnResult } from "../types.js";
 import type { ActiveTurnStartReservation } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
@@ -101,6 +102,7 @@ export async function executeTurnCommand(
   // 初始化期间发生的切模会越过 admission 边界，错误影响已经开始的 Turn。
   // 这里在任何 await 之前冻结本轮事实；后续配置变化只作用于下一轮。
   const admittedModelSelection = options?.intent?.modelSelection ?? this.getSessionModelSelection();
+  cancelCacheKeepAlive(this);
   const admittedOutputStyle = this.config.outputStyle;
   const compactInstructions = parseCompactCommand(input);
   const rewindCommand = parseRewindCommand(input);
@@ -827,6 +829,7 @@ export async function executeTurnCommand(
     this.releaseTurnStart(turnId);
     clearBrowserTurnState(this.sessionId, turnId);
     this.finishActiveTurn(activeTurn);
+    scheduleCacheKeepAlive(this);
     turnAbortScope.dispose();
     try {
       await this.browserControlPort?.turnEnded?.({
