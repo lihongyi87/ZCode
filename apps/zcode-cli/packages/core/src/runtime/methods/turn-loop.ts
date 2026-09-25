@@ -196,7 +196,7 @@ export async function runRegularTurnLoop(
       !outputTokenRecoveryActive &&
       shouldReanchorAtStep(state.modelStepCount) &&
       state.turnRequestState.entries.some(
-        (entry) => entry.kind === "message" && entry.metadata?.source === "real_user",
+        (entry) => "message" in entry && entry.metadata?.source === "real_user",
       )
     ) {
       const reanchorBody = buildTaskReanchorReminderBody(state.turnRequestState.entries);

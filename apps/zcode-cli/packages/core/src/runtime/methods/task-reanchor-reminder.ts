@@ -17,7 +17,9 @@ export const TASK_REANCHOR_MAX_CHARS = 500;
 
 export function firstRealUserText(entries: readonly RuntimeMessageEntry[]): string | null {
   for (const entry of entries) {
-    if (entry?.kind === "message" && entry.metadata?.source === "real_user") {
+    // red-team 修正：message entry 的 kind 是可选字段（真实用户消息 entry 不带
+    // kind:"message"），按「非 attachment 且有 message + real_user source」判定。
+    if (entry && "message" in entry && entry.metadata?.source === "real_user") {
       const text = modelMessageContentToText(entry.message.content).trim();
       if (text) return text;
     }

@@ -33,7 +33,8 @@ const manifestCache = new WeakMap<object, CacheSlot>();
 export function latestRealUserText(entries: readonly RuntimeMessageEntry[]): string | null {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
-    if (entry?.kind === "message" && entry.metadata?.source === "real_user") {
+    // 同 task-reanchor：message entry 不带 kind 字段，按非 attachment 判定。
+    if (entry && "message" in entry && entry.metadata?.source === "real_user") {
       const text = modelMessageContentToText(entry.message.content).trim();
       if (text) return text;
     }
