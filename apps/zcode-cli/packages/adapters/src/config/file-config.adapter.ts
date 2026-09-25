@@ -1,12 +1,6 @@
 // File Config Adapter - Load and patch JSON configuration files
 
-import {
-  existsSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -66,7 +60,12 @@ const DEFAULT_BASE_DIR = "~/.zcode/cli";
  */
 export function resolvePath(path: string): string {
   if (path.startsWith("~/")) {
-    return join(homedir(), path.slice(2));
+    // 「~」语义 = 数据根：ZCODE_DATA_BASE_DIR 显式设置时替换 homedir 前缀，
+    // 与 services paths.ts 的优先级一致——否则隔离环境（ZCODE_DATA_BASE_DIR）
+    // 下会话库/日志/legacy config 仍落在真实主目录，选型互相渗透。
+    const dataBaseDir = process.env.ZCODE_DATA_BASE_DIR?.trim();
+    const homeBase = dataBaseDir || homedir();
+    return join(homeBase, path.slice(2));
   }
   return resolve(path);
 }
@@ -162,10 +161,7 @@ function migratePluginConfigInFile(value: unknown): Record<string, unknown> | un
   return changed ? { ...value, plugins: nextPlugins } : undefined;
 }
 
-function persistPluginConfigMigration(
-  filePath: string,
-  value: Record<string, unknown>,
-): void {
+function persistPluginConfigMigration(filePath: string, value: Record<string, unknown>): void {
   const tempPath = `${filePath}.migrate.${process.pid}.${Date.now()}.tmp`;
   try {
     writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`, {
