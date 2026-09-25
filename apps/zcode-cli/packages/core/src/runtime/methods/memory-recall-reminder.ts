@@ -3,6 +3,12 @@ import type { RuntimeMessageEntry } from "../../agent/message-history.js";
 import { modelMessageContentToText } from "../deps.js";
 import { scanMemoryManifest } from "../../memory/recall/index.js";
 import { scoreMemoryEntries } from "../../memory/recall/score.js";
+import {
+  cosineSimilarity,
+  fetchEmbeddings,
+  mergeRecallScores,
+  readEmbeddingEndpointConfig,
+} from "../../memory/recall/embedding.js";
 import type { MemoryManifestEntry } from "../../memory/recall/types.js";
 
 /**
@@ -74,8 +80,33 @@ export async function buildMemoryRecallReminderBody(
   }
   if (slot.entries.length === 0) return null;
 
-  const ranked = scoreMemoryEntries(query, slot.entries, { topK: 5 });
-  if (ranked.length === 0) return null;
+  const lexical = scoreMemoryEntries(query, slot.entries, { topK: 12 });
+  if (lexical.length === 0) return null;
+
+  // v2：embedding 端点已配置时，词法 + 余弦加权融合排序；任何失败静默退回词法档。
+  let ranked: Array<{ entry: (typeof slot.entries)[number]; score: number }> = lexical.slice(0, 5);
+  const endpoint = readEmbeddingEndpointConfig();
+  if (endpoint) {
+    try {
+      const texts = [
+        query,
+        ...lexical.map((item) => `${item.entry.description ?? ""} ${item.entry.filename}`),
+      ];
+      const vectors = await fetchEmbeddings(endpoint, texts);
+      const queryVector = vectors[0]!;
+      const cosineByFilename = new Map<string, number>();
+      for (let i = 0; i < lexical.length; i += 1) {
+        cosineByFilename.set(
+          lexical[i]!.entry.filename,
+          cosineSimilarity(queryVector, vectors[i + 1]!),
+        );
+      }
+      ranked = mergeRecallScores(lexical, cosineByFilename).slice(0, 5);
+    } catch {
+      // embedding 失败：保持词法排序（ranked 已是词法 top-5）。
+    }
+  }
+  ranked = ranked;
 
   const lines = [
     "以下为与本轮输入可能相关的既有记忆（按相关度排序）。需要细节时用 Read 读取对应文件；未列出的记忆与本轮大概率无关。",
