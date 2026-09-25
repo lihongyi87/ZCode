@@ -108,7 +108,9 @@ function resolveLocalMicrocompactConfig(
   const fullCompactThreshold = getAutoCompactThreshold(config);
   return {
     ...config.microcompact,
-    enabled: config.microcompact?.enabled === true,
+    // 默认开启：微压缩带完整护栏（保留最近组/最小节省/媒体/报错保护），
+    // 且锚点存根使被清内容可寻址。显式 false 可关闭。
+    enabled: config.microcompact?.enabled !== false,
     thresholdTokens:
       config.microcompact?.thresholdTokens ??
       buildDefaultMicrocompactThreshold(fullCompactThreshold),
