@@ -245,7 +245,9 @@ export class AiSdkModelExecution {
       headers: providerConfig.headers,
       providerId: snapshot.providerId,
       modelId: snapshot.modelId,
-      model: factory(snapshot.modelId.toString()),
+      model: factory(
+        stripContextMarkerSuffix(snapshot.modelId.toString(), providerConfig.access?.type),
+      ),
       providerKind: providerConfig.kind,
       providerOptions: providerConfig.providerOptions,
       rawRequestBodyCapture,
@@ -345,6 +347,18 @@ interface AiSdkModelSnapshot {
   readonly providerConfig: AiSdkProviderConfig;
   readonly providerId: ModelProviderId;
   readonly modelId: ModelId;
+}
+
+/**
+ * [1m] 等窗口标记后缀是注册表的上下文声明约定；仅智谱系网关（coding-plan /
+ * account 接入）理解该后缀。第三方标准 API（api-key 接入）会拒收未知模型名
+ * （实测 api.deepseek.com 拒收 deepseek-v4-pro[1m]）——发送前剥离。
+ */
+export function stripContextMarkerSuffix(modelId: string, accessType: string | undefined): string {
+  if (accessType === "zhipu-coding-plan-api-key" || accessType === "zhipu-account") {
+    return modelId;
+  }
+  return modelId.replace(/\[1m\]$/i, "");
 }
 
 function toAiSdkProviderConfig(
