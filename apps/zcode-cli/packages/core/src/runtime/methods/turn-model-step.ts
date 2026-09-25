@@ -7,6 +7,7 @@ import {
   createCoreError,
   createMessageId,
   createPartId,
+  getModelUsageContextTokens,
   getModelUsageTotalTokens,
   traceContextToLogContext,
   TurnMachineImpl,
@@ -444,6 +445,14 @@ async function runModelBackedTurnStepImpl(
   state.modelResponse = result.text;
   state.modelStepCount += 1;
   state.tokenCount += getModelUsageTotalTokens(result.usage);
+
+  // 上下文压力信号（0-1，占模型窗口比例）：供工具执行层收缩输出预算（②）。
+  // getModelUsageContextTokens 归一化了各家 provider 的 input/cacheRead 语义。
+  const contextTokens = getModelUsageContextTokens(result.usage);
+  const contextWindow = model?.properties?.contextWindow;
+  if (contextTokens !== undefined && contextWindow && contextWindow > 0) {
+    this.lastContextPressure = Math.min(1, contextTokens / contextWindow);
+  }
 
   if (result.usage.cacheReadTokens && result.usage.cacheReadTokens > 0) {
     this.messageHistory.setCacheHit(result.usage.cacheReadTokens);

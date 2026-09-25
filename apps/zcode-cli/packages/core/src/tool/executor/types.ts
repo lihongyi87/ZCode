@@ -88,6 +88,8 @@ export interface ToolExecutorOptions {
   permissionTimeoutMs?: number;
   logger?: Logger;
   backgroundTaskControlPort?: BackgroundTaskControlPort;
+  /** 最近模型请求的上下文压力 getter；由 runtime 提供供预算收缩。 */
+  getContextPressure?: () => number | undefined;
   executionPort?: ExecutionPort;
   browserControlPort?: BrowserControlPort;
   browserDocumentationRoot?: string;
@@ -193,6 +195,8 @@ export interface ToolExecutorDeps {
   defaultTimeoutMs: number;
   permissionTimeoutMs?: number;
   logger?: Logger;
+  /** 最近模型请求的上下文压力 getter；由 runtime 提供供预算收缩。 */
+  getContextPressure?: () => number | undefined;
   backgroundTaskControlPort?: BackgroundTaskControlPort;
   executionPort?: ExecutionPort;
   browserControlPort?: BrowserControlPort;

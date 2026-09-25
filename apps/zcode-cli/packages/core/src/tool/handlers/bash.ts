@@ -68,6 +68,16 @@ export {
 } from "./bash-metadata.js";
 
 const MAX_INLINE_OUTPUT_BYTES = 30_000;
+
+/** 上下文压力 → inline 输出预算（字节）。压力未报告时用全量；
+ * >0.6 减半、>0.8 再减半——中段增长速度随上下文水位自动降档。 */
+export function resolveBashInlineBudgetBytes(pressure?: number): number {
+  if (pressure === undefined || !Number.isFinite(pressure)) return MAX_INLINE_OUTPUT_BYTES;
+  const clamped = Math.max(0, Math.min(1, pressure));
+  if (clamped > 0.8) return Math.round(MAX_INLINE_OUTPUT_BYTES * 0.25);
+  if (clamped > 0.6) return Math.round(MAX_INLINE_OUTPUT_BYTES * 0.5);
+  return MAX_INLINE_OUTPUT_BYTES;
+}
 const MAX_RUNTIME_PERSISTED_OUTPUT_BYTES = 5 * 1024 * 1024 * 1024;
 const BASH_PROVIDER_DESCRIPTION = createBashProviderDescription({
   defaultTimeoutMs: DEFAULT_BASH_TIMEOUT_POLICY.defaultTimeoutMs,
@@ -420,7 +430,9 @@ function createExecutionRequest(
     captureCwdAfterSuccess: input.run_in_background ? undefined : true,
     timeoutMs: resolveBashTimeoutMs(input.timeout, timeoutPolicy),
     outputLimit: {
-      maxInlineBytes: MAX_INLINE_OUTPUT_BYTES,
+      // 上下文压力感知（②）：上下文占窗口比例越高，inline 预算越小——
+      // 中段增长速度自动降档；溢出部分仍落盘（persistOutput）不丢失。
+      maxInlineBytes: resolveBashInlineBudgetBytes(context.contextPressure),
       maxBufferBytes: MAX_INLINE_OUTPUT_BYTES,
       maxPersistedBytes: MAX_RUNTIME_PERSISTED_OUTPUT_BYTES,
       persistOutput: input.run_in_background ? "always" : "on_truncate",

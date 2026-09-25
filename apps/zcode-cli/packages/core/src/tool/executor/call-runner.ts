@@ -374,6 +374,7 @@ async function executeToolCallImpl(
       toolCallId: canonicalToolCall.id,
       telemetry,
       automationTurn: options?.automationTurn,
+      contextPressure: deps.getContextPressure?.(),
       offPeakTurn: options?.offPeakTurn,
       traceContext,
       traceId,

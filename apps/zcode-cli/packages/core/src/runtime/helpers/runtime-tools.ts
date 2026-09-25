@@ -166,6 +166,7 @@ function createRuntimeToolExecutor(
     shouldEnqueueBackgroundTaskNotification: (input) =>
       shouldEnqueueRuntimeBackgroundTaskNotification(runtime, input),
     logger: runtime.logger,
+    getContextPressure: () => runtime.lastContextPressure,
     backgroundTaskControlPort: {
       stopBackgroundTask: runtime.stopBackgroundTask.bind(runtime),
     },

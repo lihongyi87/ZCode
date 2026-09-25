@@ -163,6 +163,8 @@ export class AgentRuntime {
   private contextSourceSnapshot?: ContextSourceSnapshot;
   private latestContextBuildResult?: ContextBuildResult;
   private memoryRoot?: string;
+  /** 最近一次模型请求的上下文压力（0-1）；见 internal.ts。 */
+  lastContextPressure?: number;
   private memoryIndexContent?: string;
   private memoryExtractionScheduler?: ProjectMemoryExtractionScheduler;
   private contextSourcePort?: ContextSourcePort;

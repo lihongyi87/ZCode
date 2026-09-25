@@ -64,6 +64,7 @@ export {
   createToolCallId,
   createTurnId,
   createUnsupportedModelInputMediaText,
+  getModelUsageContextTokens,
   getModelUsageTotalTokens,
   getCurrentTraceContext,
   getCurrentModelInvocationContext,
