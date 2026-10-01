@@ -44,7 +44,7 @@ import {
 } from "@/store/composerAttachmentUploadStore.js";
 import { uploadComposerAttachment, type AttachmentPutFn } from "@/v4/composer/attachmentUpload.js";
 
-const COMPOSER_ATTACHMENT_UPLOAD_CONCURRENCY = 2;
+const COMPOSER_ATTACHMENT_UPLOAD_CONCURRENCY = 6;
 const COMPOSER_ATTACHMENT_AUTO_RETRY_DELAY_MS = 500;
 const COMPOSER_ATTACHMENT_COMPLETE_VISIBLE_MS = 300;
 /**

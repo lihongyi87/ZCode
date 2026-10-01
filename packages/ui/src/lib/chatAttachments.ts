@@ -32,7 +32,9 @@ export {
   shouldPreferSpreadsheetClipboardText,
 } from "@/lib/chatAttachmentMetadata.js";
 
-export const MAX_CHAT_ATTACHMENTS = 8;
+/** 附件个数上限：多模态模型（GLM-5V 系）单图约 1-1.5K token，
+ * 32 个附件 ≈ 40K token，在 1M 窗口下可承受；与官方 8 个相比放宽 4 倍。 */
+export const MAX_CHAT_ATTACHMENTS = 32;
 const LONG_PASTE_TEXT_ATTACHMENT_CHAR_THRESHOLD = 15 * 1024;
 const INLINE_IMAGE_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
 const INLINE_VIDEO_ATTACHMENT_MAX_BYTES = Math.min(
