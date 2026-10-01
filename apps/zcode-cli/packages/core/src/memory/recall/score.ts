@@ -4,10 +4,13 @@ import type { MemoryManifestEntry } from "./types.js";
  * 记忆清单相关性打分（纯函数，无外部依赖）。
  *
  * 现状：记忆清单按 mtime 全量注入，模型注意力要自己在一长串文件名里挑相关项。
- * 本模块按「本轮用户输入 ↔ 记忆摘要」的词法重叠度对清单排序——查询分词为
- * CJK 二元组 + 拉丁/数字词，命中比例即得分。刻意不用 embedding：
- * 单用户几百条记忆，词法打分已是零成本、零依赖、确定性可测的第一档；
- * 向量召回作为 v2 增强（接口已按可插拔预留：换掉 scoreOne 即可）。
+ * 本模块按「本轮用户输入 ↔ 记忆摘要」的词法重叠度对清单排序。
+ * 刻意不用 embedding：单用户几百条记忆，词法打分已是零成本、零依赖、确定性
+ * 可测的第一档；向量召回已作为 v2 增强（embedding.ts，与词法加权融合）落地。
+ *
+ * v3 分词升级（吸收 feiyu relevant.ts）：Intl.Segmenter 词典级分词对中文显著
+ * 优于相邻二元组（「头疼」不再产生 疼原/原因 等噪声词元），二元组保留为
+ * Segmenter 不可用时的后备。
  */
 
 export interface ScoredMemoryEntry {
@@ -26,13 +29,22 @@ export interface ScoreMemoryOptions {
 const CJK_CHAR = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 const WORD = /[a-z0-9_][a-z0-9_\-]*/i;
 
-/** 查询/条目文本 → 词元集：CJK 相邻二元组 + 拉丁小写词（≥2 字符）。 */
+/** 查询/条目文本 → 词元集：Segmenter 词典词（中文）+ CJK 二元组后备 + 拉丁小写词。 */
 export function tokenizeForRecall(text: string): Set<string> {
   const tokens = new Set<string>();
   const normalized = (text ?? "").toLowerCase();
   const latin = normalized.match(/[a-z0-9_][a-z0-9_\-]+/gi) ?? [];
   for (const word of latin) tokens.add(word);
   const cjk = Array.from(normalized).filter((ch) => CJK_CHAR.test(ch));
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+    for (const segment of segmenter.segment(normalized)) {
+      if (segment.isWordLike && segment.segment.length >= 2) tokens.add(segment.segment);
+    }
+    // Segmenter 词粒度可能拆出单字；补 CJK 二元组保住部分命中的召回。
+    for (let i = 0; i + 1 < cjk.length; i += 1) tokens.add(cjk[i] + cjk[i + 1]);
+    return tokens;
+  }
   for (let i = 0; i + 1 < cjk.length; i += 1) tokens.add(cjk[i] + cjk[i + 1]);
   return tokens;
 }
