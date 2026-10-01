@@ -11,7 +11,7 @@ import { buildProviderRequestMessages } from "../helpers/provider-request-messag
  * 相比下次真实请求的全量重预填充（1× 输入 + 漫长等待），量级可忽略。
  *
  * 安全边界：
- * - 默认关闭（config.cacheKeepAlive.enabled），按会话显式开启；
+ * - 默认开启（显式 false 可关）；
  * - turn 运行中绝不触发（先查活动 turn）；
  * - 触发失败静默降级——保活是优化，不是功能依赖；
  * - 刷新用的消息是投影副本 + 一条最小 ping user 消息，不写历史、不落会话。
@@ -43,7 +43,9 @@ export function buildKeepAlivePingMessage(): ModelInputMessage {
 export function scheduleCacheKeepAlive(runtime: AgentRuntimeInternal): void {
   cancelCacheKeepAlive(runtime);
   const config = runtime.config.cacheKeepAlive;
-  if (config?.enabled !== true) return;
+  // 默认开启（生产数据：10-20 分钟空档后对话段缓存过期，只剩头部前缀命中，
+  // 重算数万 token + TTFT 跳 5-7 秒；保活请求走全前缀 cache-read 价，成本可忽略）。
+  if (config?.enabled === false) return;
   const threshold = resolveKeepAliveIdleThresholdMs(config);
   const timer = setTimeout(() => {
     void runtime.sendCacheKeepAliveRequest();
