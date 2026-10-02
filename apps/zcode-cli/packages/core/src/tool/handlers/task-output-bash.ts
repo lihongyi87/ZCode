@@ -1,3 +1,4 @@
+import { sanitizeLoneSurrogates } from "../../model/sanitize-surrogates.js";
 import { open } from "node:fs/promises";
 import type { BackgroundExecutionSnapshot, TaskOutputTask } from "@zcode/contracts";
 import type { RuntimeTaskSnapshot } from "../../runtime-task/registry.js";
