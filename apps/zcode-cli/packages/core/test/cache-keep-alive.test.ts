@@ -16,12 +16,12 @@ import {
  * 运行：cd apps/zcode-cli/packages/core && node --import tsx --test test/cache-keep-alive.test.ts
  */
 
-test("空闲阈值：默认 25 分钟，显式配置生效，非法值回退", () => {
-  assert.equal(resolveKeepAliveIdleThresholdMs(undefined), 25 * 60_000);
-  assert.equal(resolveKeepAliveIdleThresholdMs({}), 25 * 60_000);
+test("空闲阈值：默认 12 分钟（TTL 实测 15min 全存活取保守值），显式配置生效，非法值回退", () => {
+  assert.equal(resolveKeepAliveIdleThresholdMs(undefined), 12 * 60_000);
+  assert.equal(resolveKeepAliveIdleThresholdMs({}), 12 * 60_000);
   assert.equal(resolveKeepAliveIdleThresholdMs({ idleThresholdMs: 10 * 60_000 }), 10 * 60_000);
-  assert.equal(resolveKeepAliveIdleThresholdMs({ idleThresholdMs: -1 }), 25 * 60_000);
-  assert.equal(resolveKeepAliveIdleThresholdMs({ idleThresholdMs: Number.NaN }), 25 * 60_000);
+  assert.equal(resolveKeepAliveIdleThresholdMs({ idleThresholdMs: -1 }), 12 * 60_000);
+  assert.equal(resolveKeepAliveIdleThresholdMs({ idleThresholdMs: Number.NaN }), 12 * 60_000);
 });
 
 test("ping 消息：user 角色 + 固定文本", () => {
