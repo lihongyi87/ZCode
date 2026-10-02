@@ -28,6 +28,12 @@
       "detail": "缓存存活下限 15min（表内未过期）",
       "updatedAt": "2026-10-02T04:38:21.645Z",
       "source": "bench/cache-ttl-result.json"
+    },
+    "memory-recall": {
+      "score": 44,
+      "detail": "词法 overall hit@5 44%；fused-full hit@5 100%",
+      "updatedAt": "2026-10-02T09:54:53.623Z",
+      "source": "bench/memory-recall-result.json"
     }
   }
 }

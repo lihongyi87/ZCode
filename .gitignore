@@ -69,3 +69,6 @@ packages/desktop/.e2e-artifacts/
 packages/desktop/.e2e-cache/
 packages/desktop/.e2e-network-capture/
 .zcode-runtime/
+# 记忆召回 live 金标/结果含真实记忆文件名（客户生辰等 PII），不入公开库
+bench/.memory-recall-live-queries.json
+bench/.memory-recall-live-result.json

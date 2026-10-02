@@ -60,6 +60,21 @@ function scoreResult(file, data) {
       detail: `${data.curve.length} 档深度平均命中`,
     };
   }
+  if (data.summary?.lexical?.overall && data.perQuery) {
+    // memory-recall（bench/memory-recall-probe.mjs）：基线口径 = 词法档 overall
+    // hit@5（离线确定性，护 Segmenter 词法打分不回归）；融合档数字记入 detail。
+    const pct = (s) => Number(String(s).replace("%", ""));
+    const lexicalHit5 = pct(data.summary.lexical.overall.hitAt5);
+    const fused = data.summary["fused-full"]?.overall
+      ? `；fused-full hit@5 ${data.summary["fused-full"].overall.hitAt5}`
+      : "";
+    return {
+      kind: "memory-recall",
+      key: `memory-recall:${data.corpus ?? "fixture"}`,
+      score: lexicalHit5,
+      detail: `词法 overall hit@5 ${data.summary.lexical.overall.hitAt5}${fused}`,
+    };
+  }
   if (data.rows && data.lastHitMin !== undefined) {
     // cache-ttl（openai 门隐式缓存存活表）：得分 = 存活下限/15min 封顶。
     // 保活阈值建立在「实测 ≥15min 存活」上，未来存活下探即回归。
