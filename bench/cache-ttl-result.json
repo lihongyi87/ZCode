@@ -1,0 +1,77 @@
+{
+  "model": "glm-5.2",
+  "ranAt": "2026-10-02T04:36:29.678Z",
+  "depthTokens": 100000,
+  "door": "openai",
+  "ttftColdVsHot": {
+    "coldMs": 4573,
+    "hotMs": 1036,
+    "savingPct": 77
+  },
+  "rows": [
+    {
+      "tag": "hot-0s",
+      "wallMs": 1036,
+      "promptTokens": 95213,
+      "cachedTokens": 95168
+    },
+    {
+      "tag": "t=1min",
+      "wallMs": 1605,
+      "promptTokens": 95213,
+      "cachedTokens": 95168,
+      "probeMin": 1
+    },
+    {
+      "tag": "t=3min",
+      "wallMs": 1816,
+      "promptTokens": 95213,
+      "cachedTokens": 95168,
+      "probeMin": 3
+    },
+    {
+      "tag": "t=5min",
+      "wallMs": 1640,
+      "promptTokens": 95213,
+      "cachedTokens": 95168,
+      "probeMin": 5
+    },
+    {
+      "tag": "t=7min",
+      "wallMs": 10606,
+      "promptTokens": 95213,
+      "cachedTokens": 95168,
+      "probeMin": 7
+    },
+    {
+      "tag": "t=9min",
+      "wallMs": 1622,
+      "promptTokens": 95213,
+      "cachedTokens": 95168,
+      "probeMin": 9
+    },
+    {
+      "tag": "t=11min",
+      "wallMs": 2720,
+      "promptTokens": 95213,
+      "cachedTokens": 95168,
+      "probeMin": 11
+    },
+    {
+      "tag": "t=13min",
+      "wallMs": 3034,
+      "promptTokens": 95213,
+      "cachedTokens": 95168,
+      "probeMin": 13
+    },
+    {
+      "tag": "t=15min",
+      "wallMs": 1828,
+      "promptTokens": 95213,
+      "cachedTokens": 95168,
+      "probeMin": 15
+    }
+  ],
+  "expiryWindow": null,
+  "lastHitMin": 15
+}

@@ -22,6 +22,12 @@
       "detail": "10 任务校准 9/10（T8 剪贴板为驱动安全语义已知限制）",
       "date": "2026-09-24",
       "source": "packages/zcode-cua/bench/cua-bench.mjs"
+    },
+    "cache-ttl": {
+      "score": 100,
+      "detail": "缓存存活下限 15min（表内未过期）",
+      "updatedAt": "2026-10-02T04:38:21.645Z",
+      "source": "bench/cache-ttl-result.json"
     }
   }
 }

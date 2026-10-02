@@ -60,6 +60,16 @@ function scoreResult(file, data) {
       detail: `${data.curve.length} 档深度平均命中`,
     };
   }
+  if (data.rows && data.lastHitMin !== undefined) {
+    // cache-ttl（openai 门隐式缓存存活表）：得分 = 存活下限/15min 封顶。
+    // 保活阈值建立在「实测 ≥15min 存活」上，未来存活下探即回归。
+    return {
+      kind: "cache-ttl",
+      key: `cache-ttl:${data.model ?? "model"}`,
+      score: Math.min(100, Math.round((data.lastHitMin / 15) * 100)),
+      detail: `缓存存活下限 ${data.lastHitMin}min${data.expiryWindow ? `（过期窗 ${data.expiryWindow.after}-${data.expiryWindow.before}min）` : "（表内未过期）"}`,
+    };
+  }
   return null;
 }
 
