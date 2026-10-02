@@ -1,5 +1,6 @@
 import { beginLocalTurnPreparation } from "@zcode/contracts";
 import { runWithModelInvocationContext, traceContextToLogContext } from "../deps.js";
+import { sanitizeLoneSurrogates } from "../../model/sanitize-surrogates.js";
 import type { ModelReasoningContentBlock, ModelToolCall, ModelUsage, ToolCallId } from "../deps.js";
 import {
   buildSuspiciousEmptyDiagnostics,
@@ -554,7 +555,7 @@ export async function runModelTextRequest(
     finishReason,
     providerMetadata,
     reasoning: reasoning.length > 0 ? reasoning : undefined,
-    text,
+    text: sanitizeLoneSurrogates(text),
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     usage,
   };

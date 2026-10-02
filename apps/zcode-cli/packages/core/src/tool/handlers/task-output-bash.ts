@@ -144,7 +144,7 @@ async function readRunningBashOutputFile(
 
       return {
         available: true,
-        content: buffer.subarray(0, bytesRead).toString("utf8"),
+        content: sanitizeLoneSurrogates(buffer.subarray(0, bytesRead).toString("utf8")),
         truncated: stat.size > bytesRead,
       };
     } finally {
