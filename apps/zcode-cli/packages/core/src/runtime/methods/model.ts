@@ -297,7 +297,8 @@ export async function runModelTextRequest(
         }
 
         case "text_delta": {
-          text += event.text;
+          text += sanitizeLoneSurrogates(event.text);
+          options.onStreamTextDelta?.(event.text);
           options.onStreamTextDelta?.(event.text);
           publishStreamSnapshot();
           await enqueueStreamingEvent({
@@ -345,7 +346,7 @@ export async function runModelTextRequest(
             reasoning,
             reasoningById,
           });
-          block.text += event.text;
+          block.text += sanitizeLoneSurrogates(event.text);
           options.onStreamReasoningDelta?.(event.text);
           if (event.providerMetadata) block.providerOptions = event.providerMetadata;
           publishStreamSnapshot();
