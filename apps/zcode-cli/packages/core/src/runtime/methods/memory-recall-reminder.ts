@@ -6,7 +6,7 @@ import { scoreMemoryEntries } from "../../memory/recall/score.js";
 import {
   cosineSimilarity,
   fetchEmbeddings,
-  mergeRecallScores,
+  fuseRecallScoresFull,
   readEmbeddingEndpointConfig,
 } from "../../memory/recall/embedding.js";
 import type { MemoryManifestEntry } from "../../memory/recall/types.js";
@@ -14,9 +14,16 @@ import type { MemoryManifestEntry } from "../../memory/recall/types.js";
 /**
  * 记忆召回提醒的构建（turn 级，吸收 Hermes 的 prefetch 模式）。
  *
- * 每轮用户输入落定后：对记忆清单按「本轮输入 ↔ 条目摘要」做词法相关性排序，
+ * 每轮用户输入落定后：对记忆清单按「本轮输入 ↔ 条目摘要」做相关性排序，
  * top-K 以 system-reminder 注入本轮请求——模型看到的是「可能与本轮相关的少量
  * 记忆 + 精确路径」，而不是全量索引；需要细节时用 Read 精确重取。
+ *
+ * v3 全量融合（2026-10-02 命理语料 bench 实证，bench/memory-recall-probe.mjs）：
+ * embedding 端点已配置时对**全部**条目做 余弦×0.6+归一化词法×0.4——口语化提问
+ * 与记忆术语零词元重叠时（「我老婆的事」vs「用户已婚……夫妻宫口径」，B 档
+ * hit@5 词法 0%），短名单重排永远救不回；72 条真实语料实测全量融合 A/B 双档
+ * hit@5 100%。词法档（无 embedding 配置）行为不变。向量按条目缓存
+ * （filename+mtime+description 变更才重算），逐轮增量补缺。
  *
  * 与缓存的关系（刻意为之）：提醒是 per-request 附件，只出现在本轮尾部，
  * 不改写历史前缀——已写入的 prompt cache 不受影响；缓存稳定性检测器也不会
@@ -28,6 +35,12 @@ import type { MemoryManifestEntry } from "../../memory/recall/types.js";
 
 const SCAN_TTL_MS = 60_000;
 const TOP_K = 5;
+/**
+ * 语义档注入底线（仅词法零命中时生效）：余弦低于此值视为不相关，不注入。
+ * 校准依据（72 条真实命理语料）：相关 gold 余弦 0.41-0.51，无关闲聊 top1
+ * 0.22-0.37，0.40 落在两类之间。词法有命中时沿用词法 minScore 门槛，不加此底。
+ */
+const SEMANTIC_FLOOR = 0.4;
 
 interface CacheSlot {
   at: number;
@@ -35,6 +48,38 @@ interface CacheSlot {
 }
 
 const manifestCache = new WeakMap<object, CacheSlot>();
+/** 条目向量缓存：runtime → (缓存键 → 向量)；键含 mtime+description，内容变更自动失效。 */
+const vectorCache = new WeakMap<object, Map<string, number[]>>();
+
+function vectorCacheKey(entry: MemoryManifestEntry): string {
+  return `${entry.filename}\u0000${entry.mtimeMs}\u0000${entry.description ?? ""}`;
+}
+
+/** 融合档取全部条目向量：命中缓存直取，缺的批量补（含 64 条/请求自动分批）。 */
+async function ensureEntryVectors(
+  runtime: object,
+  endpoint: ReturnType<typeof readEmbeddingEndpointConfig>,
+  entries: readonly MemoryManifestEntry[],
+): Promise<Map<string, number[]>> {
+  let cache = vectorCache.get(runtime);
+  if (!cache) {
+    cache = new Map();
+    vectorCache.set(runtime, cache);
+  }
+  const liveKeys = new Set(entries.map(vectorCacheKey));
+  for (const key of cache.keys()) {
+    if (!liveKeys.has(key)) cache.delete(key); // 语料演化：清掉已消失/已变更条目的旧向量
+  }
+  const missing = entries.filter((entry) => !cache.has(vectorCacheKey(entry)));
+  if (missing.length > 0 && endpoint) {
+    const vectors = await fetchEmbeddings(
+      endpoint,
+      missing.map((entry) => `${entry.description ?? ""} ${entry.filename} ${entry.type ?? ""}`),
+    );
+    missing.forEach((entry, i) => cache!.set(vectorCacheKey(entry), vectors[i]!));
+  }
+  return cache;
+}
 
 export function latestRealUserText(entries: readonly RuntimeMessageEntry[]): string | null {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
@@ -80,38 +125,45 @@ export async function buildMemoryRecallReminderBody(
   }
   if (slot.entries.length === 0) return null;
 
-  const lexical = scoreMemoryEntries(query, slot.entries, { topK: 12 });
-  if (lexical.length === 0) return null;
-
-  // v2：embedding 端点已配置时，词法 + 余弦加权融合排序；任何失败静默退回词法档。
-  let ranked: Array<{ entry: (typeof slot.entries)[number]; score: number }> = lexical.slice(0, 5);
+  // 词法有命中 → 词法档保底注入内容已定；embedding 端点在 → 升级为全量融合重排。
+  const lexical = scoreMemoryEntries(query, slot.entries, { topK: slot.entries.length, minScore: 0.1 });
   const endpoint = readEmbeddingEndpointConfig();
-  if (endpoint) {
-    try {
-      const texts = [
-        query,
-        ...lexical.map((item) => `${item.entry.description ?? ""} ${item.entry.filename}`),
-      ];
-      const vectors = await fetchEmbeddings(endpoint, texts);
-      const queryVector = vectors[0]!;
-      const cosineByFilename = new Map<string, number>();
-      for (let i = 0; i < lexical.length; i += 1) {
-        cosineByFilename.set(
-          lexical[i]!.entry.filename,
-          cosineSimilarity(queryVector, vectors[i + 1]!),
-        );
-      }
-      ranked = mergeRecallScores(lexical, cosineByFilename).slice(0, 5);
-    } catch {
-      // embedding 失败：保持词法排序（ranked 已是词法 top-5）。
-    }
+  if (!endpoint) {
+    if (lexical.length === 0) return null;
+    return renderReminder(lexical.slice(0, TOP_K).map((item) => item.entry));
   }
-  ranked = ranked;
 
+  try {
+    const cache = await ensureEntryVectors(input.runtime, endpoint, slot.entries);
+    const [queryVector] = await fetchEmbeddings(endpoint, [query]);
+    if (!queryVector) return lexical.length === 0 ? null : renderReminder(lexical.slice(0, TOP_K).map((i) => i.entry));
+    const cosineByFilename = new Map<string, number>();
+    for (const entry of slot.entries) {
+      const vector = cache.get(vectorCacheKey(entry));
+      if (vector) cosineByFilename.set(entry.filename, cosineSimilarity(queryVector, vector));
+    }
+    const lexicalScoreByFilename = new Map(lexical.map((item) => [item.entry.filename, item.score]));
+    const fused = fuseRecallScoresFull(slot.entries, lexicalScoreByFilename, cosineByFilename);
+    if (lexical.length === 0 && (fused[0]?.score ?? 0) < SEMANTIC_FLOOR) return null; // 纯语义档：全都不相关
+    const byFilename = new Map(slot.entries.map((entry) => [entry.filename, entry]));
+    const rankedEntries = fused
+      .slice(0, TOP_K)
+      .map((item) => byFilename.get(item.filename))
+      .filter((entry): entry is MemoryManifestEntry => entry !== undefined);
+    if (rankedEntries.length === 0) return null;
+    return renderReminder(rankedEntries);
+  } catch {
+    // embedding 失败：静默退回词法档（词法也无命中则不注入）。
+    if (lexical.length === 0) return null;
+    return renderReminder(lexical.slice(0, TOP_K).map((item) => item.entry));
+  }
+}
+
+function renderReminder(entries: readonly MemoryManifestEntry[]): string {
   const lines = [
     "以下为与本轮输入可能相关的既有记忆（按相关度排序）。需要细节时用 Read 读取对应文件；未列出的记忆与本轮大概率无关。",
-    ...ranked.map(
-      ({ entry }) => `- ${entry.filePath}${entry.description ? ` — ${entry.description}` : ""}`,
+    ...entries.map(
+      ({ filePath, description }) => `- ${filePath}${description ? ` — ${description}` : ""}`,
     ),
   ];
   return lines.join("\n");

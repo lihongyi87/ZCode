@@ -100,7 +100,8 @@ async function readManifestEntry(
   };
 }
 
-function parseMemoryFrontmatter(content: string): {
+/** 记忆条目 frontmatter 解析（description/type）；bench 探针复用同一解析器。 */
+export function parseMemoryFrontmatter(content: string): {
   description?: string;
   type?: MemoryRecallType;
 } {

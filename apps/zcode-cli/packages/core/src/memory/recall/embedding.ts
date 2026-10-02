@@ -1,7 +1,5 @@
-import type { ScoredMemoryEntry } from "./score.js";
-
 /**
- * 记忆召回 v2：embedding 向量排序与词法打分的融合。
+ * 记忆召回 v2/v3：embedding 向量召回与词法打分的全量融合。
  *
  * 配置（环境变量，全部缺席 = 纯词法档，静默降级）：
  * - ZCODE_MEMORY_EMBEDDING_URL    embedding 端点（OpenAI 兼容 POST {input, model}）
@@ -27,23 +25,35 @@ export function cosineSimilarity(a: readonly number[], b: readonly number[]): nu
   return denom > 0 ? dot / denom : 0;
 }
 
-/** 词法分数归一化（除以最大值）后与余弦按 0.4/0.6 加权融合；无向量条目保留词法。 */
-export function mergeRecallScores(
-  lexical: readonly ScoredMemoryEntry[],
+/**
+ * 全量融合（v3 架构，2026-10-02 bench 实证）：对**全部**条目做
+ * 余弦×cosineWeight + 归一化词法×(1-cosineWeight)，词法零重叠条目按词法 0 分参与。
+ *
+ * 为什么不是「词法短名单内重排」：命理语料 bench（bench/memory-recall-probe.mjs）
+ * 实测口语化提问与记忆 description 零词元重叠——词法看不见的条目，短名单重排
+ * 永远救不回（72 条真实语料 B 档 hit@5：词法 0%、短名单重排 0%、全量融合 100%）。
+ * 短名单形态的 mergeRecallScores 已据此移除。
+ */
+export interface FusionCandidate {
+  filename: string;
+}
+
+export function fuseRecallScoresFull(
+  entries: readonly FusionCandidate[],
+  lexicalScoreByFilename: ReadonlyMap<string, number>,
   cosineByFilename: ReadonlyMap<string, number>,
   cosineWeight = 0.6,
-): ScoredMemoryEntry[] {
-  // 词法分数已经过覆盖率计算（score）；此处归一化后与余弦加权融合。
-  const maxLexical = lexical.reduce((max, item) => Math.max(max, item.score), 0);
-  return lexical
-    .map((item) => {
-      const lexicalNorm = maxLexical > 0 ? item.score / maxLexical : 0;
-      const cosine = cosineByFilename.get(item.entry.filename);
-      const score =
-        cosine === undefined
-          ? lexicalNorm
-          : lexicalNorm * (1 - cosineWeight) + cosine * cosineWeight;
-      return { entry: item.entry, score };
+): Array<{ filename: string; score: number }> {
+  let maxLexical = 0;
+  for (const value of lexicalScoreByFilename.values()) {
+    if (value > maxLexical) maxLexical = value;
+  }
+  return entries
+    .map((entry) => {
+      const lexical = lexicalScoreByFilename.get(entry.filename) ?? 0;
+      const lexicalNorm = maxLexical > 0 ? lexical / maxLexical : 0;
+      const cosine = cosineByFilename.get(entry.filename) ?? 0;
+      return { filename: entry.filename, score: lexicalNorm * (1 - cosineWeight) + cosine * cosineWeight };
     })
     .sort((left, right) => right.score - left.score);
 }
