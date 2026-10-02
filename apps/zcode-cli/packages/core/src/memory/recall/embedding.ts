@@ -66,22 +66,34 @@ export function readEmbeddingEndpointConfig(
   };
 }
 
-/** OpenAI 兼容批量 embedding 请求；失败抛错由调用方降级。 */
+/** 智谱 embedding-3 的 input 数组单请求上限（超出返回 400/code 1214）。 */
+const EMBEDDING_BATCH_LIMIT = 64;
+
+/** OpenAI 兼容批量 embedding 请求；失败抛错由调用方降级。
+ * 超过单请求条数上限时自动分批，结果按输入顺序拼接（调用方无感）。 */
 export async function fetchEmbeddings(
   endpoint: EmbeddingEndpointConfig,
   texts: readonly string[],
 ): Promise<number[][]> {
-  const res = await fetch(endpoint.url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(endpoint.key ? { authorization: `Bearer ${endpoint.key}` } : {}),
-    },
-    body: JSON.stringify({ model: endpoint.model, input: texts }),
-  });
-  if (!res.ok) throw new Error(`embedding endpoint ${res.status}`);
-  const json = (await res.json()) as { data?: Array<{ embedding: number[]; index?: number }> };
-  const data = [...(json.data ?? [])].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
-  if (data.length !== texts.length) throw new Error("embedding count mismatch");
-  return data.map((item) => item.embedding);
+  const chunks: string[][] = [];
+  for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_LIMIT) {
+    chunks.push(texts.slice(i, i + EMBEDDING_BATCH_LIMIT) as string[]);
+  }
+  const vectors: number[][] = [];
+  for (const chunk of chunks) {
+    const res = await fetch(endpoint.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(endpoint.key ? { authorization: `Bearer ${endpoint.key}` } : {}),
+      },
+      body: JSON.stringify({ model: endpoint.model, input: chunk }),
+    });
+    if (!res.ok) throw new Error(`embedding endpoint ${res.status}`);
+    const json = (await res.json()) as { data?: Array<{ embedding: number[]; index?: number }> };
+    const data = [...(json.data ?? [])].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+    if (data.length !== chunk.length) throw new Error("embedding count mismatch");
+    vectors.push(...data.map((item) => item.embedding));
+  }
+  return vectors;
 }
