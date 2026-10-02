@@ -64,6 +64,9 @@ export function cancelCacheKeepAlive(runtime: AgentRuntimeInternal): void {
 /** 保活请求本体：投影当前历史 + ping user 消息，maxOutputTokens=16。
  * 不写历史、不发会话事件；usage 仅用于日志（cache_read 应接近全量）。 */
 export async function sendCacheKeepAliveRequestImpl(runtime: AgentRuntimeInternal): Promise<void> {
+  // turn 启动只清定时器，拦不住已出发的回调：请求在途时用户开新 turn 就并发了。
+  // 保活是优化，让路——有活动 turn 时直接放弃本次刷新（下个 turn 结束会重排）。
+  if (runtime.activeTurn) return;
   const selection = runtime.getSessionModelSelection();
   if (!selection) return;
   const { createTurnModel } = await import("./turn-model.js");
