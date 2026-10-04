@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import type { SessionUsageState } from "@zcode/shared/zcode-protocol-v4";
 
 /**
- * 输出速度药丸 v2（吸收自 deepseek-harness StatsPills，口径按本仓数据面重做）。
+ * 输出速度药丸 v3（吸收自 deepseek-harness StatsPills，口径按本仓数据面重做）。
  *
  * v1 教训：用「相邻两次 usage 下发的墙时差」当分母，工具执行、权限等待、排队
  * 时间全部落进分母，agent 循环下读数被严重稀释（实测 7.9 tok/s，纯解码 30+）。
@@ -12,6 +12,14 @@ import type { SessionUsageState } from "@zcode/shared/zcode-protocol-v4";
  * usage 到达时刻，工具时间天然落在区间外）。步完成（usage 增长）时用累计
  * outputTokens 差分拿该步精确 token 数 → 速度 = stepTokens / 流式毫秒，滑窗平均。
  * 字符→token 系数用已完成步自校准（EWMA），流式中以该系数给实时估算。
+ *
+ * v3 教训（实测经常飙到上万）：v2 度量的是**到达时间**，不是解码时间。GLM 网关
+ * 重连后（Reconnecting N/10 高发）重放/缓冲一次性冲刷——数千字符在数百毫秒内
+ * 到达，隐含速度破万。解码是自回归串行的，真实解码 30-120 tok/s；单流隐含速度
+ * 超过解码合理上限的必是到达压缩伪象。v3 双向防护：
+ * - 落窗样本：隐含速度超上限 → 弃样（不污染窗口均值）；
+ * - 实时估算：超上限按上限显示，且向上一读数收敛一半（抗单批次抖动）。
+ * 字符→token 密度（EWMA）不受弃样影响——密度与时间无关，突发步照样提供标定。
  */
 
 /** 滑动窗口：只统计最近该时长内的已完成步样本。 */
@@ -20,6 +28,13 @@ const WINDOW_MS = 180_000;
 const MAX_STEP_MS = 120_000;
 /** 流式时段下限：短于该值（如纯工具步几乎无文本）噪音大，弃样。 */
 const MIN_STEP_MS = 300;
+/**
+ * 解码合理上限（tok/s）：自回归解码串行生成，单流持续高于此值必是到达侧伪象
+ * （重连重放/缓冲一次性冲刷）。覆盖现有 GLM 全系峰值解码（flash 系 ~200）。
+ */
+const MAX_PLAUSIBLE_TPS = 400;
+/** 单步最小 token 数：更小的步信噪比太差（延迟抖动主导），不进窗口。 */
+const MIN_STEP_TOKENS = 50;
 /** 残留区间判定：turn 结束后超过该时长无 tick 的未闭合区间视为中断残留。 */
 const STALE_MS = 2_000;
 /** 初始 tokens-per-char 估计（中英混合保守值），由已完成步 EWMA 自校准。 */
@@ -48,6 +63,24 @@ function windowSpeed(samples: StepSample[]): number | null {
     totalMs += sample.ms;
   }
   return totalMs > 0 ? (totalTokens / totalMs) * 1000 : null;
+}
+
+/** 样本有效性：时长区间内、token 量够、隐含速度不超解码合理上限（防冲刷伪象）。 */
+export function isPlausibleStepSample(tokens: number, ms: number): boolean {
+  if (!Number.isFinite(tokens) || !Number.isFinite(ms) || tokens < MIN_STEP_TOKENS) return false;
+  if (ms < MIN_STEP_MS || ms > MAX_STEP_MS) return false;
+  return (tokens / ms) * 1000 <= MAX_PLAUSIBLE_TPS;
+}
+
+/** 实时估算防冲刷：先按解码合理上限截断，再向上一读数收敛一半（抗单批次抖动）。 */
+export function smoothLiveEstimate(previous: number | null, rawEstimate: number): number {
+  const bounded = Math.min(Math.max(rawEstimate, 0), MAX_PLAUSIBLE_TPS);
+  if (!Number.isFinite(bounded)) {
+    // NaN/Infinity 防御：有上一读数就保持，没有就归零——绝不显示 NaN。
+    return previous !== null && Number.isFinite(previous) ? previous : 0;
+  }
+  if (previous === null || !Number.isFinite(previous)) return bounded;
+  return previous + (bounded - previous) * 0.5;
 }
 
 function useStreamSpeed(
@@ -88,15 +121,17 @@ function useStreamSpeed(
     const stepTokens = outputTokens - span.tokensStart;
     const stepMs = span.lastTickAt - span.startAt;
     const stepChars = charsRef.current - span.charsStart;
-    if (stepTokens <= 0 || stepMs < MIN_STEP_MS || stepMs > MAX_STEP_MS) return;
+    // 密度标定与弃样解耦：chars→tokens 密度与时间无关，突发步（被弃样）照样
+    // 提供真实密度，EWMA 不因防冲刷而丢标定数据。
+    if (stepTokens > 0 && stepChars > 0) {
+      const measured = stepTokens / stepChars;
+      factorRef.current = factorRef.current * (1 - FACTOR_ALPHA) + measured * FACTOR_ALPHA;
+    }
+    if (!isPlausibleStepSample(stepTokens, stepMs)) return;
     samplesRef.current = [
       ...samplesRef.current.filter((sample) => Date.now() - sample.at <= WINDOW_MS),
       { tokens: stepTokens, ms: stepMs, at: Date.now() },
     ];
-    if (stepChars > 0) {
-      const measured = stepTokens / stepChars;
-      factorRef.current = factorRef.current * (1 - FACTOR_ALPHA) + measured * FACTOR_ALPHA;
-    }
     setState({ speed: windowSpeed(samplesRef.current), live: false });
   }, [outputTokens]);
 
@@ -132,12 +167,13 @@ function useStreamSpeed(
     const streamedChars = streamingChars - span.charsStart;
     const elapsedMs = now - span.startAt;
     if (streamedChars > 0 && elapsedMs > MIN_STEP_MS) {
-      const estimate = (streamedChars * factorRef.current * 1000) / elapsedMs;
-      setState((prev) =>
-        prev.live && prev.speed !== null && Math.abs(prev.speed - estimate) < 0.5
+      const raw = (streamedChars * factorRef.current * 1000) / elapsedMs;
+      setState((prev) => {
+        const estimate = smoothLiveEstimate(prev.live ? prev.speed : null, raw);
+        return prev.live && prev.speed !== null && Math.abs(prev.speed - estimate) < 0.5
           ? prev
-          : { speed: estimate, live: true },
-      );
+          : { speed: estimate, live: true };
+      });
     }
   }, [active, streamingChars, outputTokens]);
 
