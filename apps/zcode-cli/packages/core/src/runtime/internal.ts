@@ -111,6 +111,8 @@ export interface AgentRuntimeInternal
   /** 最近一次模型请求的上下文压力（0-1，input/窗口）；供工具执行层收缩预算。 */
   lastContextPressure?: number;
   cacheKeepAliveTimer?: ReturnType<typeof setTimeout>;
+  /** ⑧ 本会话累计 compact 次数（≥2 时摘要附降准警告）。 */
+  sessionCompactCount?: number;
   sendCacheKeepAliveRequest(): Promise<void>;
   imageProcessorPort?: ImageProcessorPort;
   pdfDocumentPort?: PdfDocumentPort;

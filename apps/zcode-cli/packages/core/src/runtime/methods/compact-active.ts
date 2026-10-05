@@ -520,8 +520,10 @@ async function compactActiveConversationImpl(
       events.push(modelCompleteEvent);
 
       const summaryMessageId = createMessageId();
+      const compactionCount = (this.sessionCompactCount = (this.sessionCompactCount ?? 0) + 1);
       const summaryMessageContent = buildCompactSummaryMessage(persistedSummary, {
         suppressFollowup: true,
+        compactionCount,
       });
       // Continue 没有对应 Session message；无 store 的统计也不能把它计入保留记录。
       const recordablePreservedEntries = filterOutputTokenContinuationEntries(preservedEntries);

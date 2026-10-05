@@ -1,4 +1,5 @@
 import { DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY as DEFAULT_BUDGET_STRATEGY } from "@zcode/shared";
+import { modelMessageContentToText } from "@zcode/contracts";
 import type { CompactModelMessage } from "./manual.js";
 import { estimateMessageTokens, hasEnoughMessagesToCompact } from "./manual.js";
 import type { LocalMicrocompactPolicyConfig } from "./microcompact.js";
@@ -12,6 +13,8 @@ export const MAX_OUTPUT_TOKENS_FOR_SUMMARY = 20_000;
 export const AUTOCOMPACT_BUFFER_TOKENS = 13_000;
 export const DEFAULT_AUTOCOMPACT_THRESHOLD_PERCENT = 100;
 export const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3;
+/** body-after-prefix 口径的全量硬顶比例（吸收 codex effective_context_window_percent）。 */
+export const AUTOCOMPACT_HARD_CAP_PERCENT = 0.95;
 
 export interface AutoCompactPolicyConfig {
   enabled?: boolean;
@@ -21,6 +24,14 @@ export interface AutoCompactPolicyConfig {
   summaryReserveTokens?: number;
   bufferTokens?: number;
   thresholdPercentOverride?: number;
+  /**
+   * ⑤ 触发计数口径（吸收 codex AutoCompactTokenLimitScope，默认 body-after-prefix）：
+   * - total：上下文全量计数达到阈值即压缩（旧行为）；
+   * - body-after-prefix：只数初始前缀（system+AGENTS.md+skills listing）之后的
+   *   增量——大前缀不占压缩预算，防止「前缀就吃掉四分之一预算」导致压缩过频；
+   *   95% 硬顶（全量口径）兜底防真溢出，溢出另有 reactive compact 安全网。
+   */
+  autoCompactScope?: "total" | "body-after-prefix";
   maxConsecutiveFailures?: number;
   microcompact?: LocalMicrocompactPolicyConfig;
   /**
@@ -74,12 +85,21 @@ export interface AutoCompactDecision {
   modelContextBudgetStrategy: "legacy" | "preflight-v1";
   outputReserveTokens: number;
   thresholdPercent: number;
+  /** ⑤ BodyAfterPrefix 口径：初始前缀 token 数（system+系统提醒前缀）。 */
+  prefixTokens: number;
+  /** ⑤ 前缀之后的增量 token（触发计数面）。 */
+  bodyTokens: number;
+  /** ⑤ 全量硬顶（95% 有效窗口）；达到即压缩，与口径无关。 */
+  hardCapTokens: number;
+  /** ⑤ 生效的计数口径。 */
+  scope: "total" | "body-after-prefix";
   reason:
     | "disabled"
     | "not_enough_messages"
     | "circuit_breaker"
     | "below_threshold"
-    | "above_threshold";
+    | "above_threshold"
+    | "hard_cap";
 }
 
 export function getEffectiveContextWindowSize(config: AutoCompactPolicyConfig = {}): number {
@@ -120,6 +140,19 @@ export function shouldAutoCompact(input: {
   const estimatedTokenCount = estimateMessageTokens(input.messages);
   const tokenCount = input.tokenOverride?.tokenCount ?? estimatedTokenCount;
   const tokenSource = input.tokenOverride?.source ?? "estimate";
+  // ⑤ BodyAfterPrefix 口径：前缀 token（provider override 时按比例折算不可得，
+  // 退回估算面）不占阈值预算；95% 全量硬顶兜底。
+  const scope = config.autoCompactScope ?? "body-after-prefix";
+  const prefixTokens = estimateMessageTokens(
+    input.messages.filter(
+      (m) =>
+        m.role === "system" ||
+        (m.role === "user" &&
+          modelMessageContentToText(m.content).trimStart().startsWith("<system-reminder>")),
+    ),
+  );
+  const bodyTokens = Math.max(0, tokenCount - prefixTokens);
+  const hardCapTokens = Math.floor(effectiveContextWindow * AUTOCOMPACT_HARD_CAP_PERCENT);
   const common = {
     contextWindow,
     effectiveContextWindow,
@@ -137,6 +170,10 @@ export function shouldAutoCompact(input: {
     thresholdPercent,
     tokenCount,
     tokenSource,
+    bodyTokens,
+    prefixTokens,
+    hardCapTokens,
+    scope,
   } satisfies Omit<AutoCompactDecision, "reason" | "shouldCompact">;
 
   if (config.enabled === false) {
@@ -161,7 +198,8 @@ export function shouldAutoCompact(input: {
     };
   }
 
-  if (tokenCount < threshold) {
+  const countedTokens = scope === "body-after-prefix" ? bodyTokens : tokenCount;
+  if (countedTokens < threshold && tokenCount < hardCapTokens) {
     return {
       ...common,
       shouldCompact: false,
@@ -169,7 +207,11 @@ export function shouldAutoCompact(input: {
     };
   }
 
-  return { ...common, shouldCompact: true, reason: "above_threshold" };
+  return {
+    ...common,
+    shouldCompact: true,
+    reason: tokenCount >= hardCapTokens ? "hard_cap" : "above_threshold",
+  };
 }
 
 function positiveInt(value: number | undefined): number | undefined {

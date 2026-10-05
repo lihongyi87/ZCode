@@ -137,6 +137,8 @@ export function buildCompactSummaryMessage(
     replStateCleared?: boolean;
     suppressFollowup?: boolean;
     transcriptPath?: string;
+    /** ⑧ 本会话累计压缩次数；≥2 时附降准警告（吸收 codex：多次压缩降低准确度）。 */
+    compactionCount?: number;
   } = {},
 ): string {
   let message = `This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.
@@ -145,6 +147,10 @@ ${formatCompactSummary(summary)}`;
 
   if (options.transcriptPath) {
     message += `\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: ${options.transcriptPath}`;
+  }
+
+  if (options.compactionCount !== undefined && options.compactionCount >= 2) {
+    message += `\n\nHeads-up: this conversation has now been compacted ${options.compactionCount} times. Repeated compaction progressively loses detail and degrades accuracy — when the current task is done, start a new session to keep context small and focused.`;
   }
 
   if (options.recentMessagesPreserved) {
