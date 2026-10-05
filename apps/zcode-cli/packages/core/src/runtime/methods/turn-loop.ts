@@ -23,6 +23,7 @@ import {
 import { buildMemoryRecallReminderBody } from "./memory-recall-reminder.js";
 import { buildFollowupDueReminderBody } from "./followup-due-reminder.js";
 import { buildCaliberGuardReminderBody } from "./caliber-guard-reminder.js";
+import { buildKbRecallReminderBody } from "./kb-recall-reminder.js";
 import { buildTaskReanchorReminderBody, shouldReanchorAtStep } from "./task-reanchor-reminder.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { runModelBackedTurnStep } from "./turn-model-step.js";
@@ -166,8 +167,10 @@ export async function runRegularTurnLoop(
     // 中段死区与长索引注意力稀释同时缓解。清单扫描按 runtime 缓存 60s，
     // 失败不影响本轮。
     let memoryRecallBody: string | null = null;
-    if (!memoryRecallAttempted && this.memoryRoot && this.fileSystemPort) {
-      memoryRecallBody = await buildMemoryRecallReminderBody({
+    let kbRecallBody: string | null = null;
+    if (!memoryRecallAttempted && this.fileSystemPort) {
+      if (this.memoryRoot) {
+        memoryRecallBody = await buildMemoryRecallReminderBody({
         runtime: this,
         fileSystem: this.fileSystemPort,
         memoryRoot: this.memoryRoot,
@@ -181,6 +184,24 @@ export async function runRegularTurnLoop(
         this.logger?.info("[memory-recall] 相关记忆清单已注入本轮请求", {
           ...traceContextToLogContext(state.turnTraceContext),
         });
+      }
+      }
+      // P1 知识卡召回：对 .zcode/kb-cards 语料同源排序，注入 top-K 源锚点。
+      if (this.workingDirectory) {
+        kbRecallBody = await buildKbRecallReminderBody({
+          runtime: this,
+          fileSystem: this.fileSystemPort,
+          workingDirectory: this.workingDirectory,
+          entries: state.turnRequestState.entries,
+        });
+        if (kbRecallBody) {
+          commitTurnRequestEntries(this, state.turnRequestState, [
+            systemReminderAttachmentEntry("kb_recall", kbRecallBody),
+          ]);
+          this.logger?.info("[kb-recall] 知识锚点已注入本轮请求", {
+            ...traceContextToLogContext(state.turnTraceContext),
+          });
+        }
       }
     }
     // P5 预测回填闭环：会话首 turn 注入已到期/临期的预测登记（builder 内部
@@ -208,7 +229,7 @@ export async function runRegularTurnLoop(
         fileSystem: this.fileSystemPort,
         workingDirectory: this.workingDirectory,
         entries: state.turnRequestState.entries,
-        recalledText: memoryRecallBody,
+        recalledText: [memoryRecallBody, kbRecallBody].filter(Boolean).join("\n") || null,
       });
       if (caliberBody) {
         commitTurnRequestEntries(this, state.turnRequestState, [

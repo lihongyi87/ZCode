@@ -67,12 +67,13 @@ interface CacheSlot {
   entries: MemoryManifestEntry[];
 }
 
-const manifestCache = new WeakMap<object, CacheSlot>();
+/** manifest 扫描缓存：runtime → (rootDir → 槽)；kb 卡语料与 memory 语料各自缓存。 */
+const manifestCache = new WeakMap<object, Map<string, CacheSlot>>();
 /** 条目向量缓存：runtime → (缓存键 → 向量)；键含 mtime+description，内容变更自动失效。 */
 const vectorCache = new WeakMap<object, Map<string, number[]>>();
 
-function vectorCacheKey(entry: MemoryManifestEntry): string {
-  return `${entry.filename}\u0000${entry.mtimeMs}\u0000${entry.description ?? ""}`;
+function vectorCacheKey(rootDir: string, entry: MemoryManifestEntry): string {
+  return `${rootDir}\u0000${entry.filename}\u0000${entry.mtimeMs}\u0000${entry.description ?? ""}`;
 }
 
 // ── P7 向量盘档：进程内缓存重启即丢，盘档让重暖从数十轮降为一次加载。 ──
@@ -144,19 +145,19 @@ async function ensureEntryVectors(
   entries: readonly MemoryManifestEntry[],
   deadlineAt: number,
   fileSystem: FileSystemPort,
-  memoryRoot: string,
+  rootDir: string,
 ): Promise<Map<string, number[]>> {
   let cache = vectorCache.get(runtime);
   if (!cache) {
     cache = new Map();
     vectorCache.set(runtime, cache);
   }
-  const liveKeys = new Set(entries.map(vectorCacheKey));
+  const liveKeys = new Set(entries.map((entry) => vectorCacheKey(rootDir, entry)));
   for (const key of cache.keys()) {
     if (!liveKeys.has(key)) cache.delete(key); // 语料演化：清掉已消失/已变更条目的旧向量
   }
   // P7 盘档：按 corpus×模型分文件，加载单飞；失败按空盘档处理（静默重算）。
-  const storePath = vectorStorePath(memoryRoot, endpoint.model ?? "embedding-3");
+  const storePath = vectorStorePath(rootDir, endpoint.model ?? "embedding-3");
   const slot = diskSlotFor(storePath);
   if (slot.loadPromise === null) {
     slot.loadPromise = (async () => {
@@ -171,12 +172,12 @@ async function ensureEntryVectors(
   await slot.loadPromise;
   if (slot.store !== null) {
     for (const entry of entries) {
-      if (cache.has(vectorCacheKey(entry))) continue;
-      const decoded = decodeVector(slot.store.vectors[vectorCacheKey(entry)] ?? "");
-      if (decoded !== null) cache.set(vectorCacheKey(entry), decoded);
+      if (cache.has(vectorCacheKey(rootDir, entry))) continue;
+      const decoded = decodeVector(slot.store.vectors[vectorCacheKey(rootDir, entry)] ?? "");
+      if (decoded !== null) cache.set(vectorCacheKey(rootDir, entry), decoded);
     }
   }
-  const missing = entries.filter((entry) => !cache.has(vectorCacheKey(entry)));
+  const missing = entries.filter((entry) => !cache.has(vectorCacheKey(rootDir, entry)));
   for (let i = 0; i < missing.length; i += EMBEDDING_BATCH_LIMIT) {
     const remaining = deadlineAt - Date.now();
     if (remaining <= 0) break;
@@ -188,9 +189,9 @@ async function ensureEntryVectors(
         { signal: AbortSignal.timeout(remaining) },
       );
       batch.forEach((entry, j) => {
-        cache!.set(vectorCacheKey(entry), vectors[j]!);
+        cache!.set(vectorCacheKey(rootDir, entry), vectors[j]!);
         if (slot.store !== null) {
-          slot.store.vectors[vectorCacheKey(entry)] = encodeVector(vectors[j]!);
+          slot.store.vectors[vectorCacheKey(rootDir, entry)] = encodeVector(vectors[j]!);
           slot.dirty = true;
         }
       });
@@ -235,37 +236,58 @@ export interface MemoryRecallReminderInput {
   entries: readonly RuntimeMessageEntry[];
 }
 
-/** 返回提醒正文；无相关记忆时返回 null（不注入）。 */
-export async function buildMemoryRecallReminderBody(
-  input: MemoryRecallReminderInput,
-): Promise<string | null> {
-  const query = latestRealUserText(input.entries);
-  if (!query) return null;
+export interface RankRecallCorpusInput {
+  runtime: object;
+  fileSystem: FileSystemPort;
+  /** 语料根（memory 根或 kb 卡目录），manifest/向量缓存与盘档均按它隔离。 */
+  rootDir: string;
+  query: string;
+  topK?: number;
+  /** 词法最低分（默认 0.1）。kb 卡 description 含路径词元更长，覆盖率天然
+   * 稀释，kb 档可放宽（相关性排序仍由融合分决定，此值只管「有无一点关系」）。 */
+  minScore?: number;
+}
 
+/**
+ * 语料排序管线（P1 抽取，memory 与 kb 卡同源共用，杜绝口径漂移）：
+ * manifest 扫描（runtime×root 60s 缓存）→ 词法 → embedding 端点在则全量融合
+ * （预算/盘档/语义底线同源）。返回按相关度排序的条目；空语料/无相关返回 null。
+ */
+export async function rankRecallCorpus(
+  input: RankRecallCorpusInput,
+): Promise<MemoryManifestEntry[] | null> {
+  const topK = input.topK ?? TOP_K;
+  let roots = manifestCache.get(input.runtime);
+  if (!roots) {
+    roots = new Map();
+    manifestCache.set(input.runtime, roots);
+  }
   const now = Date.now();
-  let slot = manifestCache.get(input.runtime);
+  let slot = roots.get(input.rootDir);
   if (!slot || now - slot.at > SCAN_TTL_MS) {
     try {
       slot = {
         entries: await scanMemoryManifest({
           fileSystem: input.fileSystem,
-          rootDir: input.memoryRoot,
+          rootDir: input.rootDir,
         }),
         at: now,
       };
-      manifestCache.set(input.runtime, slot);
+      roots.set(input.rootDir, slot);
     } catch {
       return null;
     }
   }
   if (slot.entries.length === 0) return null;
 
-  // 词法有命中 → 词法档保底注入内容已定；embedding 端点在 → 升级为全量融合重排。
-  const lexical = scoreMemoryEntries(query, slot.entries, { topK: slot.entries.length, minScore: 0.1 });
+  const lexical = scoreMemoryEntries(input.query, slot.entries, {
+    topK: slot.entries.length,
+    minScore: input.minScore ?? 0.1,
+  });
   const endpoint = readEmbeddingEndpointConfig();
   if (!endpoint) {
     if (lexical.length === 0) return null;
-    return renderReminder(lexical.slice(0, TOP_K).map((item) => item.entry));
+    return lexical.slice(0, topK).map((item) => item.entry);
   }
 
   try {
@@ -276,17 +298,20 @@ export async function buildMemoryRecallReminderBody(
       slot.entries,
       deadlineAt,
       input.fileSystem,
-      input.memoryRoot,
+      input.rootDir,
     );
     const remaining = deadlineAt - Date.now();
     if (remaining <= 0) throw new Error("embedding budget exhausted");
-    const [queryVector] = await fetchEmbeddings(endpoint, [query], {
+    const [queryVector] = await fetchEmbeddings(endpoint, [input.query], {
       signal: AbortSignal.timeout(remaining),
     });
-    if (!queryVector) return lexical.length === 0 ? null : renderReminder(lexical.slice(0, TOP_K).map((i) => i.entry));
+    if (!queryVector) {
+      if (lexical.length === 0) return null;
+      return lexical.slice(0, topK).map((item) => item.entry);
+    }
     const cosineByFilename = new Map<string, number>();
     for (const entry of slot.entries) {
-      const vector = cache.get(vectorCacheKey(entry));
+      const vector = cache.get(vectorCacheKey(input.rootDir, entry));
       if (vector) cosineByFilename.set(entry.filename, cosineSimilarity(queryVector, vector));
     }
     const lexicalScoreByFilename = new Map(lexical.map((item) => [item.entry.filename, item.score]));
@@ -294,16 +319,32 @@ export async function buildMemoryRecallReminderBody(
     if (lexical.length === 0 && (fused[0]?.score ?? 0) < SEMANTIC_FLOOR) return null; // 纯语义档：全都不相关
     const byFilename = new Map(slot.entries.map((entry) => [entry.filename, entry]));
     const rankedEntries = fused
-      .slice(0, TOP_K)
+      .slice(0, topK)
       .map((item) => byFilename.get(item.filename))
       .filter((entry): entry is MemoryManifestEntry => entry !== undefined);
     if (rankedEntries.length === 0) return null;
-    return renderReminder(rankedEntries);
+    return rankedEntries;
   } catch {
     // embedding 失败：静默退回词法档（词法也无命中则不注入）。
     if (lexical.length === 0) return null;
-    return renderReminder(lexical.slice(0, TOP_K).map((item) => item.entry));
+    return lexical.slice(0, topK).map((item) => item.entry);
   }
+}
+
+/** 返回提醒正文；无相关记忆时返回 null（不注入）。 */
+export async function buildMemoryRecallReminderBody(
+  input: MemoryRecallReminderInput,
+): Promise<string | null> {
+  const query = latestRealUserText(input.entries);
+  if (!query) return null;
+  const ranked = await rankRecallCorpus({
+    runtime: input.runtime,
+    fileSystem: input.fileSystem,
+    rootDir: input.memoryRoot,
+    query,
+  });
+  if (ranked === null || ranked.length === 0) return null;
+  return renderReminder(ranked);
 }
 
 function renderReminder(entries: readonly MemoryManifestEntry[]): string {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 
 /**
@@ -27,9 +28,11 @@ function safeModelId(model: string): string {
   return model.replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 48) || "default";
 }
 
-/** 盘档文件路径：<memoryRoot 上级目录>/.vector-cache.<model>.json。 */
-export function vectorStorePath(memoryRoot: string, model: string): string {
-  return join(dirname(memoryRoot), `${FILE_PREFIX}.${safeModelId(model)}.json`);
+/** 盘档文件路径：<corpus 根上级目录>/.vector-cache.<model>.<root哈希8>.json。
+ * root 哈希区分同目录下不同语料（memory 与 kb 卡各自成档，键空间不串）。 */
+export function vectorStorePath(corpusRoot: string, model: string): string {
+  const rootHash = createHash("sha256").update(corpusRoot).digest("hex").slice(0, 8);
+  return join(dirname(corpusRoot), `${FILE_PREFIX}.${safeModelId(model)}.${rootHash}.json`);
 }
 
 /** 一条向量 → base64(Float32 LE)。空向量返回空串。 */
