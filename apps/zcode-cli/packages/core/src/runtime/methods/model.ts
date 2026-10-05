@@ -299,7 +299,6 @@ export async function runModelTextRequest(
         case "text_delta": {
           text += sanitizeLoneSurrogates(event.text);
           options.onStreamTextDelta?.(event.text);
-          options.onStreamTextDelta?.(event.text);
           publishStreamSnapshot();
           await enqueueStreamingEvent({
             assistantMessageId: options.assistantMessageId,
