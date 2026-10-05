@@ -23,6 +23,24 @@ export interface AutoCompactPolicyConfig {
   thresholdPercentOverride?: number;
   maxConsecutiveFailures?: number;
   microcompact?: LocalMicrocompactPolicyConfig;
+  /**
+   * P4 压缩域包：项目级压缩附加指令（compact.domainInstructions），随每次
+   * compact 摘要注入——域工作流（如命理：知识锚点清单/已裁决口径/分析对象
+   * 生辰四要素/已确认体用）跨压缩有结构化 slot 可依。运行时 customInstructions
+   * （/compact 命令参数）与其叠加而非互斥。
+   */
+  domainInstructions?: string;
+}
+
+/** P4：项目级域包与运行时 /compact 参数合并（均非空时以空行分隔，域包在前）。 */
+export function mergeCompactInstructions(
+  domainInstructions: string | undefined,
+  runtimeInstructions: string | undefined,
+): string | undefined {
+  const parts = [domainInstructions?.trim() ?? "", runtimeInstructions?.trim() ?? ""].filter(
+    (part) => part.length > 0,
+  );
+  return parts.length > 0 ? parts.join("\n\n") : undefined;
 }
 
 export type AutoCompactTokenSource = "estimate" | "provider_usage";

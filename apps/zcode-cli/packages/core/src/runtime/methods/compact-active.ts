@@ -11,6 +11,7 @@ import {
   createPartId,
   traceContextToLogContext,
   buildCompactPrompt,
+  mergeCompactInstructions,
   buildCompactSummaryMessage,
   buildManualCompactBoundary,
   createCompactBoundaryId,
@@ -265,7 +266,11 @@ async function compactActiveConversationImpl(
           querySource: "compact",
         },
       });
-      const compactPrompt = buildCompactPrompt(customInstructions);
+      // P4：项目级域包（compact.domainInstructions）与运行时 customInstructions
+      // 叠加——域指令不因一次 /compact 带参数而丢失。
+      const compactPrompt = buildCompactPrompt(
+        mergeCompactInstructions(this.config.compact?.domainInstructions, customInstructions),
+      );
       let result: RuntimeModelTextResult;
       let compactPromptTooLongAttempts = 0;
       let stripMediaForSummary = false;

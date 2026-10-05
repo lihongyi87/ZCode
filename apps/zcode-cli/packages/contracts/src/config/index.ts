@@ -51,6 +51,9 @@ export const ConfigKey = {
   PluginsOptions: "plugins.options",
   PluginsSuppressedBuiltins: "plugins.suppressedBuiltins",
 
+  // Compact（压缩摘要域包）
+  CompactDomainInstructions: "compact.domainInstructions",
+
   // Skills
   SkillsEnabled: "skills.enabled",
   SkillsIncludeInstructions: "skills.includeInstructions",
@@ -114,8 +117,10 @@ export type ConfigValue<K extends ConfigKey> = K extends "modelStream.idleTimeou
               ? boolean
               : K extends "memory.use"
                 ? boolean
-                : K extends "skills.metadataBudget"
-                  ? number
+                : K extends "compact.domainInstructions"
+                  ? string
+                  : K extends "skills.metadataBudget"
+                    ? number
                   : K extends "skills.roots"
                     ? string[]
                     : K extends "skill" | "command"
@@ -226,6 +231,9 @@ export interface RuntimeConfig {
     skill: boolean;
     mcp: boolean;
   };
+  compact: {
+    domainInstructions: string;
+  };
   memory: {
     use: boolean;
   };
@@ -312,6 +320,9 @@ export const DefaultRuntimeConfig: RuntimeConfig = {
     memory: true,
     skill: true,
     mcp: true,
+  },
+  compact: {
+    domainInstructions: "",
   },
   memory: {
     use: true,

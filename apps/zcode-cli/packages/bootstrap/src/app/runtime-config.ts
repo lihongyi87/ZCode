@@ -143,6 +143,13 @@ export function resolveAppRuntimeConfig(input: {
     },
     skillMetadataBudget:
       options.runtimeConfig?.skillMetadataBudget ?? configResult.config.skills.metadataBudget,
+    // P4 压缩域包：项目级 compact.domainInstructions（域指令随每次压缩注入）。
+    compact: {
+      ...options.runtimeConfig?.compact,
+      domainInstructions:
+        options.runtimeConfig?.compact?.domainInstructions ??
+        configResult.config.compact.domainInstructions,
+    },
     toolConcurrency: {
       maxConcurrency:
         options.runtimeConfig?.toolConcurrency?.maxConcurrency ??

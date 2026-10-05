@@ -291,6 +291,7 @@ export {
   MAX_COMPACT_PROMPT_TOO_LONG_RETRIES,
   MAX_OUTPUT_TOKENS_FOR_SUMMARY,
   buildCompactPrompt,
+  mergeCompactInstructions,
   buildCompactSummaryMessage,
   buildManualCompactBoundary,
   createCompactBoundaryId,
