@@ -41,6 +41,7 @@ export const SYSTEM_REMINDER_PER_REQUEST_SOURCES = [
   "incoming_message",
   "hook_context",
   "memory_recall",
+  "user_instructions_update",
   "followup_due",
   "kb_recall",
   "caliber_guard",
@@ -113,6 +114,14 @@ const SYSTEM_REMINDER_DESCRIPTORS: Record<SystemReminderSource, DescriptorShape>
   memory_recall: descriptor("current_turn", "per_current_turn", true, "sr.memory_recall"),
   // 任务再锚定：长会话每 N 个模型步在尾部重申最初任务（防漂移）。
   task_reanchor: descriptor("current_turn", "runtime_local", true, "sr.task_reanchor"),
+  // 用户指令热更新：AGENTS.md 等会话中途被修改时以 per-request 注入新版
+  // （前缀不动保缓存，②吸收 codex agents_md_manager）。
+  user_instructions_update: descriptor(
+    "current_turn",
+    "per_current_turn",
+    true,
+    "sr.user_instructions_update",
+  ),
   // 预测回填闭环：会话首 turn 注入已到期/临期的预测登记（P5）。
   followup_due: descriptor("current_turn", "runtime_local", true, "sr.followup_due"),
   // 知识卡召回：按本轮问题对技能知识卡 manifest 做全量融合召回注入锚点（P1）。

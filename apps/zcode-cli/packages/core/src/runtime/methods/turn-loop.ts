@@ -24,6 +24,7 @@ import { buildMemoryRecallReminderBody } from "./memory-recall-reminder.js";
 import { buildFollowupDueReminderBody } from "./followup-due-reminder.js";
 import { buildCaliberGuardReminderBody } from "./caliber-guard-reminder.js";
 import { buildKbRecallReminderBody } from "./kb-recall-reminder.js";
+import { buildUserInstructionsUpdateBody } from "./user-instructions-update-reminder.js";
 import { buildTaskReanchorReminderBody, shouldReanchorAtStep } from "./task-reanchor-reminder.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { runModelBackedTurnStep } from "./turn-model-step.js";
@@ -166,6 +167,27 @@ export async function runRegularTurnLoop(
     // 对记忆清单做相关性排序，命中才注入 top-K 摘要+路径——模型据此可精确重读，
     // 中段死区与长索引注意力稀释同时缓解。清单扫描按 runtime 缓存 60s，
     // 失败不影响本轮。
+    // ② 用户指令热更新：AGENTS.md 等中途修改逐 turn stat 检查，变更才注入
+    // 新版全文（前缀不动保缓存）。未变更零成本静默。
+    if (this.fileSystemPort && this.contextSourceSnapshot?.userInstructions) {
+      const sourcePaths = [
+        ...(this.contextSourceSnapshot.userInstructions.sources ?? []).map((s) => s.filePath),
+        ...(this.contextSourceSnapshot.userInstructions.sources?.length ? [] : [this.contextSourceSnapshot.userInstructions.filePath]),
+      ];
+      const instructionsUpdateBody = await buildUserInstructionsUpdateBody({
+        runtime: this,
+        fileSystem: this.fileSystemPort,
+        sourcePaths,
+      });
+      if (instructionsUpdateBody) {
+        commitTurnRequestEntries(this, state.turnRequestState, [
+          systemReminderAttachmentEntry("user_instructions_update", instructionsUpdateBody),
+        ]);
+        this.logger?.info("[user-instructions-update] 指令文件已变更，新版已注入本轮请求", {
+          ...traceContextToLogContext(state.turnTraceContext),
+        });
+      }
+    }
     let memoryRecallBody: string | null = null;
     let kbRecallBody: string | null = null;
     if (!memoryRecallAttempted && this.fileSystemPort) {
