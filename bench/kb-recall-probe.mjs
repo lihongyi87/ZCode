@@ -54,7 +54,7 @@ function loadCards(dir) {
       mtimeMs: statSync(filePath).mtimeMs,
     });
   }
-  return entries.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 200 * 40); // manifest 上限 200→生产同样截断；此处全量（护栏 8000）
+  return entries.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 8000); // 与生产 KB_FILE_LIMIT 对齐（默认 200 是 memory 档专用）
 }
 
 const entryTextOf = (e) => [e.description ?? "", e.filename ?? "", e.type ?? ""].join(" ");
