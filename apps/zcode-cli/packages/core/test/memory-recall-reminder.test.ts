@@ -70,13 +70,17 @@ function userInput(text: string) {
   ] as never;
 }
 
-function stubFetch(vectorsFor: (texts: string[]) => number[][]) {
+function stubFetch(vectorsFor: (texts: string[]) => number[][] | Promise<number[][]>) {
   const batches: string[][] = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as { input: string[] };
     batches.push(body.input);
-    return new Response(JSON.stringify({ data: vectorsFor(body.input).map((v, i) => ({ embedding: v, index: i })) }), { status: 200 });
+    const vectors = await vectorsFor(body.input);
+    return new Response(
+      JSON.stringify({ data: vectors.map((v, i) => ({ embedding: v, index: i })) }),
+      { status: 200 },
+    );
   }) as typeof fetch;
   return {
     batches,
@@ -184,5 +188,30 @@ test("向量缓存：同 runtime 第二轮只重嵌查询，不重嵌条目", as
   } finally {
     stub.restore();
     ENV.clear();
+  }
+});
+
+test("embedding 预算：端点慢时按预算快速降级，不拖死 turn", async () => {
+  ENV.set();
+  process.env.ZCODE_MEMORY_EMBEDDING_BUDGET_MS = "300";
+  // 条目批 600ms 才回（超过 300ms 预算）→ 本轮必须按词法档快速返回（零词法命中 → null）。
+  const stub = stubFetch(async (texts) => {
+    await new Promise((r) => setTimeout(r, 600));
+    return texts.map(() => [0, 1]);
+  });
+  const t0 = Date.now();
+  try {
+    const body = await buildMemoryRecallReminderBody({
+      runtime: {},
+      fileSystem: makeFileSystem(FILES),
+      memoryRoot: "memory",
+      entries: userInput("我心里惦记的那个人到底能不能成"),
+    });
+    assert.equal(body, null);
+    assert.ok(Date.now() - t0 < 2000, `应在预算内返回，实际 ${Date.now() - t0}ms`);
+  } finally {
+    stub.restore();
+    ENV.clear();
+    delete process.env.ZCODE_MEMORY_EMBEDDING_BUDGET_MS;
   }
 });

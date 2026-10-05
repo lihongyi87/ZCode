@@ -5,6 +5,7 @@ import { scanMemoryManifest } from "../../memory/recall/index.js";
 import { scoreMemoryEntries } from "../../memory/recall/score.js";
 import {
   cosineSimilarity,
+  EMBEDDING_BATCH_LIMIT,
   fetchEmbeddings,
   fuseRecallScoresFull,
   readEmbeddingEndpointConfig,
@@ -41,6 +42,18 @@ const TOP_K = 5;
  * 0.22-0.37，0.40 落在两类之间。词法有命中时沿用词法 minScore 门槛，不加此底。
  */
 const SEMANTIC_FLOOR = 0.4;
+/**
+ * 单轮 embedding 总预算（ms）：召回是增强，绝不允许拖慢 turn。undici 默认
+ * headers timeout 高达 300s——端点挂起会让每轮对话都拖死几分钟。预算内分批
+ * 暖缓存（每批完成即入缓存），预算尽则本轮用已得向量（缺失条目退纯词法分），
+ * 下轮从断点继续补。可用 ZCODE_MEMORY_EMBEDDING_BUDGET_MS 覆盖（下限 250）。
+ */
+const DEFAULT_EMBEDDING_BUDGET_MS = 2500;
+
+function readEmbeddingBudgetMs(): number {
+  const raw = Number(process.env.ZCODE_MEMORY_EMBEDDING_BUDGET_MS);
+  return Number.isFinite(raw) && raw >= 250 ? raw : DEFAULT_EMBEDDING_BUDGET_MS;
+}
 
 interface CacheSlot {
   at: number;
@@ -55,11 +68,13 @@ function vectorCacheKey(entry: MemoryManifestEntry): string {
   return `${entry.filename}\u0000${entry.mtimeMs}\u0000${entry.description ?? ""}`;
 }
 
-/** 融合档取全部条目向量：命中缓存直取，缺的批量补（含 64 条/请求自动分批）。 */
+/** 融合档取全部条目向量：命中缓存直取，缺的按 64 条/批在预算内增量补——
+ * 每批完成立即入缓存（端点中途失败/预算尽不丢已完成批次）。 */
 async function ensureEntryVectors(
   runtime: object,
-  endpoint: ReturnType<typeof readEmbeddingEndpointConfig>,
+  endpoint: NonNullable<ReturnType<typeof readEmbeddingEndpointConfig>>,
   entries: readonly MemoryManifestEntry[],
+  deadlineAt: number,
 ): Promise<Map<string, number[]>> {
   let cache = vectorCache.get(runtime);
   if (!cache) {
@@ -71,12 +86,20 @@ async function ensureEntryVectors(
     if (!liveKeys.has(key)) cache.delete(key); // 语料演化：清掉已消失/已变更条目的旧向量
   }
   const missing = entries.filter((entry) => !cache.has(vectorCacheKey(entry)));
-  if (missing.length > 0 && endpoint) {
-    const vectors = await fetchEmbeddings(
-      endpoint,
-      missing.map((entry) => `${entry.description ?? ""} ${entry.filename} ${entry.type ?? ""}`),
-    );
-    missing.forEach((entry, i) => cache!.set(vectorCacheKey(entry), vectors[i]!));
+  for (let i = 0; i < missing.length; i += EMBEDDING_BATCH_LIMIT) {
+    const remaining = deadlineAt - Date.now();
+    if (remaining <= 0) break;
+    const batch = missing.slice(i, i + EMBEDDING_BATCH_LIMIT);
+    try {
+      const vectors = await fetchEmbeddings(
+        endpoint,
+        batch.map((entry) => `${entry.description ?? ""} ${entry.filename} ${entry.type ?? ""}`),
+        { signal: AbortSignal.timeout(remaining) },
+      );
+      batch.forEach((entry, j) => cache!.set(vectorCacheKey(entry), vectors[j]!));
+    } catch {
+      break; // 预算尽/端点故障：保留已缓存批次，其余下轮续补
+    }
   }
   return cache;
 }
@@ -134,8 +157,13 @@ export async function buildMemoryRecallReminderBody(
   }
 
   try {
-    const cache = await ensureEntryVectors(input.runtime, endpoint, slot.entries);
-    const [queryVector] = await fetchEmbeddings(endpoint, [query]);
+    const deadlineAt = Date.now() + readEmbeddingBudgetMs();
+    const cache = await ensureEntryVectors(input.runtime, endpoint, slot.entries, deadlineAt);
+    const remaining = deadlineAt - Date.now();
+    if (remaining <= 0) throw new Error("embedding budget exhausted");
+    const [queryVector] = await fetchEmbeddings(endpoint, [query], {
+      signal: AbortSignal.timeout(remaining),
+    });
     if (!queryVector) return lexical.length === 0 ? null : renderReminder(lexical.slice(0, TOP_K).map((i) => i.entry));
     const cosineByFilename = new Map<string, number>();
     for (const entry of slot.entries) {
