@@ -119,6 +119,38 @@ test("词法档（无端点）：术语查询命中 gold，口语化零重叠查
   assert.equal(miss, null);
 });
 
+test("P3 子代理档：无 real_user 时退回首个 coordinator_input 任务文本作查询", async () => {
+  ENV.clear();
+  const taskEntries = [
+    {
+      message: { role: "user", content: "写一份八字命理报告，注意紫微四化庚干壬干的口径" },
+      metadata: { source: "legacy_synthetic", inputPresentation: "coordinator_input" },
+    },
+  ] as never;
+  const body = await buildMemoryRecallReminderBody({
+    runtime: {},
+    fileSystem: makeFileSystem(FILES),
+    memoryRoot: "memory",
+    entries: taskEntries,
+  });
+  assert.ok(body?.includes("sihua-koujing.md"), `任务文本应触发词法命中，实际: ${body}`);
+  // real_user 存在时优先于 coordinator_input（主 turn 语义不变）。
+  const mixed = [
+    ...taskEntries,
+    {
+      message: { role: "user", content: "六爻双卦案怎么断" },
+      metadata: { source: "real_user" },
+    },
+  ] as never;
+  const mixedBody = await buildMemoryRecallReminderBody({
+    runtime: {},
+    fileSystem: makeFileSystem(FILES),
+    memoryRoot: "memory",
+    entries: mixed,
+  });
+  assert.ok(mixedBody?.includes("liuyao-anli.md"));
+});
+
 test("融合档（v3 全量）：词法零重叠的口语查询被余弦救回", async () => {
   ENV.set();
   // 查询与 gold（六爻双卦案）同向；另一条目正交。

@@ -105,10 +105,24 @@ async function ensureEntryVectors(
 }
 
 export function latestRealUserText(entries: readonly RuntimeMessageEntry[]): string | null {
+  // 主 turn：最近一条真实用户输入即查询。
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
     // 同 task-reanchor：message entry 不带 kind 字段，按非 attachment 判定。
     if (entry && "message" in entry && entry.metadata?.source === "real_user") {
+      const text = modelMessageContentToText(entry.message.content).trim();
+      if (text) return text;
+    }
+  }
+  // 子代理档：任务输入带 inputPresentation=coordinator_input（source 被标为
+  // legacy_synthetic 而非 real_user），没有 real_user 条目——退回首个任务文本
+  // 作为召回查询（P3：子代理共享主记忆召回的查询面）。
+  for (const entry of entries) {
+    if (
+      entry &&
+      "message" in entry &&
+      entry.metadata?.inputPresentation === "coordinator_input"
+    ) {
       const text = modelMessageContentToText(entry.message.content).trim();
       if (text) return text;
     }

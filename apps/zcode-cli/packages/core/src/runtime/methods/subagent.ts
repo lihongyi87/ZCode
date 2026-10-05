@@ -324,7 +324,10 @@ export function createDefaultSubagentPort(
           httpClientPort: deps.httpClientPort,
           imageProcessorPort: deps.imageProcessorPort,
           pdfDocumentPort: deps.pdfDocumentPort,
-          memoryRoot: persistentMemory?.rootDir,
+          // P3：无 per-agent 持久记忆目录的通用子代理（含 workflow actor）此前
+          // memoryRoot=undefined，turn-loop 的 memory_recall 门控使其对主记忆全盲；
+          // 退回父 runtime 的记忆根，让子代理共享主记忆召回（口径裁决/用户偏好等）。
+          memoryRoot: persistentMemory?.rootDir ?? this.memoryRoot,
           mcpPort: childMcpAccess.port,
           skillPort: childSkillPort,
           artifactStore: deps.artifactStore,
