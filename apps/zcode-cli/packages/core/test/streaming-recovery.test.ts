@@ -50,3 +50,53 @@ test("重置不改变计数起点：归零后从 1 重新计数", () => {
   assert.equal(attempt.retryNumber, 1);
   assert.equal(attempt.maxRetries, 10);
 });
+
+// ── ① 错误分类学重试间隔（吸收 codex retry_delay 三分类） ──
+
+test("① 终态错误：鉴权/模型不存在不重试（返回 null 且不再消耗恢复预算的判定面）", async () => {
+  const { isTerminalStreamFailure, streamRecoveryRetryDelayMs } = await import(
+    "../src/runtime/methods/streaming-recovery.js"
+  );
+  const authError = Object.assign(new Error("API key invalid: 401 unauthorized"), {
+    code: "model_auth_failed",
+    context: { status: 401 },
+  });
+  assert.equal(isTerminalStreamFailure(authError), true);
+  assert.equal(streamRecoveryRetryDelayMs(authError, 1), null);
+  const notFound = Object.assign(new Error("model not found: glm-x"), { code: "model_not_found" });
+  assert.equal(isTerminalStreamFailure(notFound), true);
+  // 普通网络错误不是终态
+  const netError = Object.assign(new Error("socket hang up"), { code: "model_network_error" });
+  assert.equal(isTerminalStreamFailure(netError), false);
+});
+
+test("① 服务器显式建议优先于指数退避", async () => {
+  const { streamRecoveryRetryDelayMs } = await import(
+    "../src/runtime/methods/streaming-recovery.js"
+  );
+  const err = Object.assign(new Error("rate limited"), {
+    code: "model_rate_limited",
+    context: { status: 429, retryAfterMs: 12_000 },
+  });
+  assert.equal(streamRecoveryRetryDelayMs(err, 5), 12_000);
+});
+
+test("① 本地指数退避+确定性抖动：限流基座 2s、网络基座 400ms，×2^(n-1) 封顶 8s", async () => {
+  const { streamRecoveryRetryDelayMs } = await import(
+    "../src/runtime/methods/streaming-recovery.js"
+  );
+  const net = Object.assign(new Error("timeout"), { code: "model_request_timeout" });
+  const rate = Object.assign(new Error("rate"), {
+    code: "model_rate_limited",
+    context: { status: 429 },
+  });
+  // 网络 n=1：400×2^0×1.25=500；n=2：400×2×0.75=600；n=3：400×4×1.25=2000
+  assert.equal(streamRecoveryRetryDelayMs(net, 1), 500);
+  assert.equal(streamRecoveryRetryDelayMs(net, 2), 600);
+  assert.equal(streamRecoveryRetryDelayMs(net, 3), 2000);
+  // 限流 n=1：2000×1.25=2500；n=5：2000×16 封顶 8000×1.25=10000
+  assert.equal(streamRecoveryRetryDelayMs(rate, 1), 2500);
+  assert.equal(streamRecoveryRetryDelayMs(rate, 5), 10000);
+  // 封顶验证：n=8 网络 400×128=51200 → cap 8000 ×0.75=6000
+  assert.equal(streamRecoveryRetryDelayMs(net, 8), 6000);
+});

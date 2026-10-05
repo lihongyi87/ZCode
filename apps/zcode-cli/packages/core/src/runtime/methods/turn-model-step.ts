@@ -55,6 +55,7 @@ import {
   getStartPlanBusyAdmissionRetryDelayMs,
   isStartPlanBusyStreamRecoveryFailure,
   resetStreamRecoveryBudgetOnSuccess,
+  streamRecoveryRetryDelayMs,
 } from "./streaming-recovery.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
 import {
@@ -291,6 +292,14 @@ async function runModelBackedTurnStepImpl(
     ) {
       if (state.toolCallCount > toolCallCountBeforeStreamRecovery) {
         completeOutputTokenRecovery(state.turnRequestState);
+      }
+      // ① 错误分类学重试间隔（吸收 codex retry_delay）：恢复已受理，重开流前
+      // 按分类等待——限流指数退避更长、网络抖动短退避、服务器显式建议优先。
+      // 终态错误不会走到这里（isRetryable 已挡），此处仅是延迟决策。
+      const recoveryDelayMs = streamRecoveryRetryDelayMs(error, state.streamRecoveryRetryCount);
+      if (recoveryDelayMs !== null && recoveryDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, recoveryDelayMs));
+        throwIfTurnAborted(state.turnAbortSignal);
       }
       return "continue";
     }

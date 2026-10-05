@@ -38,6 +38,90 @@ const TRANSIENT_ERROR_REASONS = new Set([
   "network_error",
   "timeout",
 ]);
+// ── 错误分类学驱动的重试间隔（吸收 codex retry_delay 三分类） ──
+// 终态错误不恢复（预算再多也不该重试）；服务器显式建议（Retry-After 语义）
+// 优先采用；其余本地指数退避+抖动。抖动用.retryNumber派生的确定性因子，
+// 保持模块可测（不引随机源）。
+
+/** 终态：鉴权失败/模型不存在——重试同样必败，恢复层直接放弃。 */
+const TERMINAL_ERROR_MARKERS = [
+  "401",
+  "403",
+  "invalid_api_key",
+  "invalid api key",
+  "unauthorized",
+  "authentication",
+  "model_not_found",
+  "model not found",
+];
+
+/** 服务器建议的等待：错误 context 里 retryAfterMs / retryAfterSeconds（ provider 头未透传时的预留面）。 */
+function serverSuggestedDelayMs(error: unknown): number | undefined {
+  for (const record of walkErrorRecords(error)) {
+    const context = asRecord(record.context);
+    for (const source of [record, context]) {
+      const candidate = asRecord(source);
+      if (!candidate) continue;
+      const ms = numberValue(candidate.retryAfterMs);
+      if (ms !== undefined && Number.isFinite(ms) && ms >= 0) return Math.min(ms, 60_000);
+      const seconds = numberValue(candidate.retryAfterSeconds);
+      if (seconds !== undefined && Number.isFinite(seconds) && seconds >= 0) {
+        return Math.min(seconds * 1000, 60_000);
+      }
+    }
+  }
+  return undefined;
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
+
+export function isTerminalStreamFailure(error: unknown): boolean {
+  for (const record of walkErrorRecords(error)) {
+    const context = asRecord(record.context);
+    const code = stringValue(record.code) ?? stringValue(context?.code);
+    const status = numberValue(context?.status) ?? numberValue(record.status);
+    if (status === 401 || status === 403) return true;
+    const haystack = `${stringValue(record.code) ?? ""} ${stringValue(context?.code) ?? ""} ${stringValue(record.message) ?? ""} ${stringValue(record.reason) ?? ""}`.toLowerCase();
+    if (TERMINAL_ERROR_MARKERS.some((marker) => haystack.includes(marker))) return true;
+    if (code === undefined) continue;
+  }
+  return false;
+}
+
+/**
+ * 恢复重试前的等待（ms）。三分类：
+ * - 终态（401/403/模型不存在）：返回 null——调用方不应恢复；
+ * - 服务器显式建议：原样采用（上限 60s）；
+ * - 其余：按 retryNumber 指数退避（限流基座 2000ms，网络/超时基座 400ms，
+ *   ×2^(n-1)，上限 8000ms），叠加 ±25% 确定性抖动（retryNumber 派生因子）。
+ */
+export function streamRecoveryRetryDelayMs(error: unknown, retryNumber: number): number | null {
+  if (isTerminalStreamFailure(error)) return null;
+  const suggested = serverSuggestedDelayMs(error);
+  if (suggested !== undefined) return suggested;
+  const rateLimited = isRateLimitedStreamFailure(error);
+  const base = rateLimited ? 2_000 : 400;
+  const capped = Math.min(base * 2 ** Math.max(0, retryNumber - 1), 8_000);
+  // 确定性抖动：odd→+25%，even→-25%（同错误同轮可测，避免引入随机源）。
+  const jitterFactor = retryNumber % 2 === 1 ? 1.25 : 0.75;
+  return Math.round(capped * jitterFactor);
+}
+
+function isRateLimitedStreamFailure(error: unknown): boolean {
+  for (const record of walkErrorRecords(error)) {
+    const context = asRecord(record.context);
+    const code = stringValue(record.code) ?? stringValue(context?.code);
+    if (code === "model_rate_limited" || code === "MODEL_RATE_LIMITED") return true;
+    const status = numberValue(context?.status) ?? numberValue(record.status);
+    if (status === 429) return true;
+    const reason = stringValue(record.reason) ?? stringValue(context?.reason);
+    if (reason === "rate_limited") return true;
+  }
+  return false;
+}
+
 
 interface StreamRecoveryAttempt {
   maxRetries: number;
@@ -305,6 +389,7 @@ function findStartPlanBusyProviderCode(error: unknown): string | undefined {
 }
 
 function isRetryableStreamRecoveryFailure(error: unknown): boolean {
+  if (isTerminalStreamFailure(error)) return false;
   for (const record of walkErrorRecords(error)) {
     if (record.retryable === true) return true;
     const context = asRecord(record.context);
