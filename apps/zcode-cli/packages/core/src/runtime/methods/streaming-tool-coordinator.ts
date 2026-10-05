@@ -21,6 +21,7 @@ import {
   emitStreamRecoveryRetryEvents,
   emitStreamRecoveryStarted,
   hasStreamRecoveryBudget,
+  isTerminalStreamFailure,
   recoverPartialAssistantOutputFailure,
 } from "./streaming-recovery.js";
 import { executeToolCallsForModelStep } from "./turn-tools.js";
@@ -146,7 +147,16 @@ export function createStreamingToolCoordinator(
     },
 
     async recoverFromModelFailure(error, assistantCreatedAt, recoveryOptions = {}) {
-      if (state.turnAbortSignal.aborted || !hasStreamRecoveryBudget(state)) return false;
+      // 终态错误（401/403/模型不存在）两条恢复路径都不该烧预算——此前只有
+      // partial 输出路径内挡（isRetryable→isTerminal），工具结算路径漏防
+      // （红队 R5：401 在有工具提交时照样恢复重试到预算耗尽）。
+      if (
+        state.turnAbortSignal.aborted ||
+        !hasStreamRecoveryBudget(state) ||
+        isTerminalStreamFailure(error)
+      ) {
+        return false;
+      }
       const recoveryEventOptions = {
         ...options,
         ...(recoveryOptions.failedRequestId
