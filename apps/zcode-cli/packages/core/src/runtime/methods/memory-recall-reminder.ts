@@ -10,6 +10,13 @@ import {
   fuseRecallScoresFull,
   readEmbeddingEndpointConfig,
 } from "../../memory/recall/embedding.js";
+import {
+  decodeVector,
+  encodeVector,
+  parseVectorStoreFile,
+  vectorStorePath,
+  type PersistedVectorFile,
+} from "../../memory/recall/vector-store.js";
 import type { MemoryManifestEntry } from "../../memory/recall/types.js";
 
 /**
@@ -68,13 +75,76 @@ function vectorCacheKey(entry: MemoryManifestEntry): string {
   return `${entry.filename}\u0000${entry.mtimeMs}\u0000${entry.description ?? ""}`;
 }
 
-/** 融合档取全部条目向量：命中缓存直取，缺的按 64 条/批在预算内增量补——
- * 每批完成立即入缓存（端点中途失败/预算尽不丢已完成批次）。 */
+// ── P7 向量盘档：进程内缓存重启即丢，盘档让重暖从数十轮降为一次加载。 ──
+const PERSIST_DEBOUNCE_MS = 5_000;
+
+interface DiskSlot {
+  loadPromise: Promise<void> | null;
+  store: PersistedVectorFile | null;
+  dirty: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+  fileSystem?: FileSystemPort;
+}
+
+const diskSlots = new Map<string, DiskSlot>();
+
+function diskSlotFor(storePath: string): DiskSlot {
+  let slot = diskSlots.get(storePath);
+  if (!slot) {
+    slot = { loadPromise: null, store: null, dirty: false };
+    diskSlots.set(storePath, slot);
+  }
+  return slot;
+}
+
+function schedulePersist(slot: DiskSlot, storePath: string, fileSystem: FileSystemPort): void {
+  slot.fileSystem = fileSystem;
+  if (slot.timer !== undefined) return;
+  slot.timer = setTimeout(() => {
+    slot.timer = undefined;
+    void persistSlot(slot, storePath);
+  }, PERSIST_DEBOUNCE_MS);
+  slot.timer.unref?.();
+}
+
+async function persistSlot(slot: DiskSlot, storePath: string): Promise<void> {
+  if (!slot.dirty || !slot.store || !slot.fileSystem) return;
+  slot.dirty = false;
+  try {
+    await slot.fileSystem.writeTextFile({ path: storePath, content: JSON.stringify(slot.store), atomic: true });
+  } catch {
+    slot.dirty = true; // 写失败留脏位，下个窗口再试；盘档是加速器，失败不阻断召回。
+  }
+}
+
+/** 立即落盘所有脏槽（测试与进程收尾用）。 */
+export async function flushVectorStores(): Promise<void> {
+  for (const [storePath, slot] of diskSlots) {
+    if (slot.timer !== undefined) {
+      clearTimeout(slot.timer);
+      slot.timer = undefined;
+    }
+    await persistSlot(slot, storePath);
+  }
+}
+
+/** 测试隔离：清空盘档内存态（不删文件）。 */
+export function resetVectorStoresForTesting(): void {
+  for (const slot of diskSlots.values()) {
+    if (slot.timer !== undefined) clearTimeout(slot.timer);
+  }
+  diskSlots.clear();
+}
+
+/** 融合档取全部条目向量：命中缓存直取，缺的先从盘档补水、再按 64 条/批在
+ * 预算内增量补——每批完成立即入缓存与盘档（中断不丢批次）。 */
 async function ensureEntryVectors(
   runtime: object,
   endpoint: NonNullable<ReturnType<typeof readEmbeddingEndpointConfig>>,
   entries: readonly MemoryManifestEntry[],
   deadlineAt: number,
+  fileSystem: FileSystemPort,
+  memoryRoot: string,
 ): Promise<Map<string, number[]>> {
   let cache = vectorCache.get(runtime);
   if (!cache) {
@@ -84,6 +154,27 @@ async function ensureEntryVectors(
   const liveKeys = new Set(entries.map(vectorCacheKey));
   for (const key of cache.keys()) {
     if (!liveKeys.has(key)) cache.delete(key); // 语料演化：清掉已消失/已变更条目的旧向量
+  }
+  // P7 盘档：按 corpus×模型分文件，加载单飞；失败按空盘档处理（静默重算）。
+  const storePath = vectorStorePath(memoryRoot, endpoint.model ?? "embedding-3");
+  const slot = diskSlotFor(storePath);
+  if (slot.loadPromise === null) {
+    slot.loadPromise = (async () => {
+      try {
+        const read = await fileSystem.readTextFile({ path: storePath });
+        slot.store = parseVectorStoreFile(read.content, endpoint.model ?? "embedding-3");
+      } catch {
+        slot.store = { version: 1, model: endpoint.model ?? "embedding-3", vectors: {} };
+      }
+    })();
+  }
+  await slot.loadPromise;
+  if (slot.store !== null) {
+    for (const entry of entries) {
+      if (cache.has(vectorCacheKey(entry))) continue;
+      const decoded = decodeVector(slot.store.vectors[vectorCacheKey(entry)] ?? "");
+      if (decoded !== null) cache.set(vectorCacheKey(entry), decoded);
+    }
   }
   const missing = entries.filter((entry) => !cache.has(vectorCacheKey(entry)));
   for (let i = 0; i < missing.length; i += EMBEDDING_BATCH_LIMIT) {
@@ -96,7 +187,14 @@ async function ensureEntryVectors(
         batch.map((entry) => `${entry.description ?? ""} ${entry.filename} ${entry.type ?? ""}`),
         { signal: AbortSignal.timeout(remaining) },
       );
-      batch.forEach((entry, j) => cache!.set(vectorCacheKey(entry), vectors[j]!));
+      batch.forEach((entry, j) => {
+        cache!.set(vectorCacheKey(entry), vectors[j]!);
+        if (slot.store !== null) {
+          slot.store.vectors[vectorCacheKey(entry)] = encodeVector(vectors[j]!);
+          slot.dirty = true;
+        }
+      });
+      if (slot.dirty) schedulePersist(slot, storePath, fileSystem);
     } catch {
       break; // 预算尽/端点故障：保留已缓存批次，其余下轮续补
     }
@@ -172,7 +270,14 @@ export async function buildMemoryRecallReminderBody(
 
   try {
     const deadlineAt = Date.now() + readEmbeddingBudgetMs();
-    const cache = await ensureEntryVectors(input.runtime, endpoint, slot.entries, deadlineAt);
+    const cache = await ensureEntryVectors(
+      input.runtime,
+      endpoint,
+      slot.entries,
+      deadlineAt,
+      input.fileSystem,
+      input.memoryRoot,
+    );
     const remaining = deadlineAt - Date.now();
     if (remaining <= 0) throw new Error("embedding budget exhausted");
     const [queryVector] = await fetchEmbeddings(endpoint, [query], {

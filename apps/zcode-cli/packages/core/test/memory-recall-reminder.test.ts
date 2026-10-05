@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildMemoryRecallReminderBody } from "../src/runtime/methods/memory-recall-reminder.js";
+import {
+  buildMemoryRecallReminderBody,
+  flushVectorStores,
+  resetVectorStoresForTesting,
+} from "../src/runtime/methods/memory-recall-reminder.js";
+import {
+  decodeVector,
+  encodeVector,
+  vectorStorePath,
+} from "../src/memory/recall/vector-store.js";
 import type { FileSystemPort } from "@zcode/contracts";
 
 /**
@@ -15,7 +24,7 @@ interface StubFile {
   content: string;
 }
 
-function makeFileSystem(files: StubFile[]): FileSystemPort {
+function makeFileSystem(files: StubFile[], storage = new Map<string, string>()): FileSystemPort {
   return {
     async listDirectory({ path }) {
       return {
@@ -44,6 +53,22 @@ function makeFileSystem(files: StubFile[]): FileSystemPort {
         lineCount: 1,
         totalLines: 1,
       };
+    },
+    async readTextFile({ path }) {
+      const content = storage.get(path);
+      if (content === undefined) throw new Error(`readTextFile: ${path}`);
+      return {
+        path,
+        content,
+        encoding: "utf8",
+        bytesRead: content.length,
+        sizeBytes: content.length,
+        truncated: false,
+      };
+    },
+    async writeTextFile({ path, content }) {
+      storage.set(path, content);
+      return { path, bytesWritten: content.length };
     },
   } as unknown as FileSystemPort;
 }
@@ -152,6 +177,7 @@ test("P3 子代理档：无 real_user 时退回首个 coordinator_input 任务�
 });
 
 test("融合档（v3 全量）：词法零重叠的口语查询被余弦救回", async () => {
+  resetVectorStoresForTesting();
   ENV.set();
   // 查询与 gold（六爻双卦案）同向；另一条目正交。
   const stub = stubFetch((texts) =>
@@ -172,6 +198,7 @@ test("融合档（v3 全量）：词法零重叠的口语查询被余弦救回",
 });
 
 test("融合档语义底线：词法零命中且余弦全部低于 0.4 时不注入（无关闲聊）", async () => {
+  resetVectorStoresForTesting();
   ENV.set();
   // 查询向量 [1,0]，全部条目 [0,1] → 余弦恒 0，低于 0.4 底线。
   const stub = stubFetch((texts) => texts.map((t) => (t.includes("吃什么") ? [1, 0] : [0, 1])));
@@ -190,6 +217,7 @@ test("融合档语义底线：词法零命中且余弦全部低于 0.4 时不注
 });
 
 test("融合档降级：embedding 请求失败时退回词法档（口语查询 → null，不抛错）", async () => {
+  resetVectorStoresForTesting();
   ENV.set();
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async () => new Response("{}", { status: 500 })) as typeof fetch;
@@ -208,6 +236,7 @@ test("融合档降级：embedding 请求失败时退回词法档（口语查询 
 });
 
 test("向量缓存：同 runtime 第二轮只重嵌查询，不重嵌条目", async () => {
+  resetVectorStoresForTesting();
   ENV.set();
   const stub = stubFetch((texts) => texts.map((t) => (t.includes("惦记") ? [1, 0] : [0, 1])));
   const runtime = {};
@@ -224,6 +253,7 @@ test("向量缓存：同 runtime 第二轮只重嵌查询，不重嵌条目", as
 });
 
 test("embedding 预算：端点慢时按预算快速降级，不拖死 turn", async () => {
+  resetVectorStoresForTesting();
   ENV.set();
   process.env.ZCODE_MEMORY_EMBEDDING_BUDGET_MS = "300";
   // 条目批 600ms 才回（超过 300ms 预算）→ 本轮必须按词法档快速返回（零词法命中 → null）。
@@ -245,5 +275,71 @@ test("embedding 预算：端点慢时按预算快速降级，不拖死 turn", as
     stub.restore();
     ENV.clear();
     delete process.env.ZCODE_MEMORY_EMBEDDING_BUDGET_MS;
+  }
+});
+
+// ── P7 向量盘档持久化 ──
+
+test("P7 序列化：Float32×base64 往返，精度 1e-6 内", () => {
+  const vector = [0.1, -0.5, 0.999999, 3.25, -1e-8, 0];
+  const decoded = decodeVector(encodeVector(vector));
+  assert.ok(decoded !== null);
+  assert.equal(decoded.length, vector.length);
+  for (let i = 0; i < vector.length; i += 1) {
+    assert.ok(Math.abs(decoded[i]! - vector[i]!) < 1e-6);
+  }
+  // 坏输入按未缓存处理
+  assert.equal(decodeVector("not-base64!!"), null);
+  assert.equal(decodeVector(""), null);
+});
+
+test("P7 重启补水：落盘后新 runtime 只嵌查询，不重嵌条目", async () => {
+  resetVectorStoresForTesting();
+  ENV.set();
+  const storage = new Map<string, string>();
+  const fs = makeFileSystem(FILES, storage);
+  const stub = stubFetch((texts) => texts.map((t) => (t.includes("惦记") ? [1, 0] : [0, 1])));
+  try {
+    // 第一次进程：嵌入 2 条目 + 查询
+    await buildMemoryRecallReminderBody({ runtime: {}, fileSystem: fs, memoryRoot: "mem-p7", entries: userInput("惦记的那个人") });
+    await flushVectorStores();
+    const storePath = vectorStorePath("mem-p7", "embedding-3");
+    assert.ok(storage.has(storePath), "盘档文件必须已写入");
+    // 模拟重启：清空进程内盘档槽（文件仍在 storage），新 runtime 从文件补水
+    resetVectorStoresForTesting();
+    await buildMemoryRecallReminderBody({ runtime: {}, fileSystem: fs, memoryRoot: "mem-p7", entries: userInput("惦记的那个人") });
+    // 第一轮 [2条目,1查询]；重启后仅 [1查询]
+    assert.deepEqual(stub.batches.map((b) => b.length), [2, 1, 1]);
+  } finally {
+    stub.restore();
+    ENV.clear();
+    resetVectorStoresForTesting();
+  }
+});
+
+test("P7 键失效：description 变更的条目单独重算，其余直取盘档", async () => {
+  resetVectorStoresForTesting();
+  ENV.set();
+  const storage = new Map<string, string>();
+  const fs = makeFileSystem(FILES, storage);
+  const stub = stubFetch((texts) => texts.map((t) => (t.includes("惦记") ? [1, 0] : [0, 1])));
+  try {
+    await buildMemoryRecallReminderBody({ runtime: {}, fileSystem: fs, memoryRoot: "mem-p7b", entries: userInput("惦记的那个人") });
+    await flushVectorStores();
+    resetVectorStoresForTesting();
+    // 语料演化：改 gold 条目的 description（mtime 不变，键含 description 即失效）
+    const evolved = FILES.map((f) =>
+      f.name === "liuyao-anli.md"
+        ? { ...f, content: "---\ndescription: 六爻双卦案改写后的新描述\n---\n正文" }
+        : f,
+    );
+    const fs2 = makeFileSystem(evolved, storage);
+    await buildMemoryRecallReminderBody({ runtime: {}, fileSystem: fs2, memoryRoot: "mem-p7b", entries: userInput("惦记的那个人") });
+    // 重启后：1 条目（改写的那条）+ 1 查询
+    assert.deepEqual(stub.batches.map((b) => b.length), [2, 1, 1, 1]);
+  } finally {
+    stub.restore();
+    ENV.clear();
+    resetVectorStoresForTesting();
   }
 });
