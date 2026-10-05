@@ -60,6 +60,9 @@ export function mergeConfigs(...configs: PrioritizedConfig[]): RuntimeConfigPatc
     if (config.features) {
       result.features = { ...result.features, ...config.features };
     }
+    if (config.compact) {
+      result.compact = { ...result.compact, ...config.compact };
+    }
     if (config.memory) {
       result.memory = { ...result.memory, ...config.memory };
     }

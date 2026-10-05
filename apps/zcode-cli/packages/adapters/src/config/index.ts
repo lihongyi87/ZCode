@@ -127,6 +127,11 @@ class ConfigStore {
       if (config.features.mcp !== undefined)
         this.set(ConfigKey.FeatureMcp, config.features.mcp, scope);
     }
+    if (config.compact) {
+      if (config.compact.domainInstructions !== undefined) {
+        this.set(ConfigKey.CompactDomainInstructions, config.compact.domainInstructions, scope);
+      }
+    }
     if (config.memory) {
       if (config.memory.use !== undefined) this.set(ConfigKey.MemoryUse, config.memory.use, scope);
     }
@@ -287,6 +292,11 @@ export class ConfigPortImpl implements ConfigPort {
         memory: this.store.get(ConfigKey.FeatureMemory) ?? true,
         skill: this.store.get(ConfigKey.FeatureSkill) ?? true,
         mcp: this.store.get(ConfigKey.FeatureMcp) ?? true,
+      },
+      compact: {
+        domainInstructions:
+          this.store.get(ConfigKey.CompactDomainInstructions) ??
+          DefaultConfig.compact.domainInstructions,
       },
       memory: {
         use: this.store.get(ConfigKey.MemoryUse) ?? DefaultConfig.memory.use,

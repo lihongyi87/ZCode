@@ -271,6 +271,7 @@ export interface RuntimeConfigPatch {
   storage?: Partial<RuntimeConfig["storage"]>;
   network?: Partial<RuntimeConfig["network"]>;
   features?: Partial<RuntimeConfig["features"]>;
+  compact?: Partial<RuntimeConfig["compact"]>;
   memory?: Partial<RuntimeConfig["memory"]>;
   mcp?: Partial<RuntimeConfig["mcp"]>;
   plugins?: Partial<RuntimeConfig["plugins"]>;
