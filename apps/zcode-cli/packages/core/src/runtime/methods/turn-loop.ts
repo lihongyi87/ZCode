@@ -22,6 +22,7 @@ import {
 } from "../../agent/message-history.js";
 import { buildMemoryRecallReminderBody } from "./memory-recall-reminder.js";
 import { buildFollowupDueReminderBody } from "./followup-due-reminder.js";
+import { buildCaliberGuardReminderBody } from "./caliber-guard-reminder.js";
 import { buildTaskReanchorReminderBody, shouldReanchorAtStep } from "./task-reanchor-reminder.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { runModelBackedTurnStep } from "./turn-model-step.js";
@@ -164,8 +165,9 @@ export async function runRegularTurnLoop(
     // 对记忆清单做相关性排序，命中才注入 top-K 摘要+路径——模型据此可精确重读，
     // 中段死区与长索引注意力稀释同时缓解。清单扫描按 runtime 缓存 60s，
     // 失败不影响本轮。
+    let memoryRecallBody: string | null = null;
     if (!memoryRecallAttempted && this.memoryRoot && this.fileSystemPort) {
-      const memoryRecallBody = await buildMemoryRecallReminderBody({
+      memoryRecallBody = await buildMemoryRecallReminderBody({
         runtime: this,
         fileSystem: this.fileSystemPort,
         memoryRoot: this.memoryRoot,
@@ -194,6 +196,25 @@ export async function runRegularTurnLoop(
           systemReminderAttachmentEntry("followup_due", followupBody),
         ]);
         this.logger?.info("[followup-due] 到期预测登记已注入本轮请求", {
+          ...traceContextToLogContext(state.turnTraceContext),
+        });
+      }
+    }
+    // P2 口径裁决护栏：本轮输入/已召回记忆命中已裁决口径注册表时注入
+    // 权威源指引（复合键 AND 匹配，防翻案）。未登记/无命中静默。
+    if (this.workingDirectory && this.fileSystemPort) {
+      const caliberBody = await buildCaliberGuardReminderBody({
+        runtime: this,
+        fileSystem: this.fileSystemPort,
+        workingDirectory: this.workingDirectory,
+        entries: state.turnRequestState.entries,
+        recalledText: memoryRecallBody,
+      });
+      if (caliberBody) {
+        commitTurnRequestEntries(this, state.turnRequestState, [
+          systemReminderAttachmentEntry("caliber_guard", caliberBody),
+        ]);
+        this.logger?.info("[caliber-guard] 已裁决口径护栏已注入本轮请求", {
           ...traceContextToLogContext(state.turnTraceContext),
         });
       }
