@@ -54,6 +54,7 @@ import {
   emitStreamRecoveryStarted,
   getStartPlanBusyAdmissionRetryDelayMs,
   isStartPlanBusyStreamRecoveryFailure,
+  resetStreamRecoveryBudgetOnSuccess,
 } from "./streaming-recovery.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
 import {
@@ -262,6 +263,12 @@ async function runModelBackedTurnStepImpl(
       traceContext: modelTraceContext,
     });
     throwIfTurnAborted(state.turnAbortSignal);
+    // 本次模型调用完整返回 = 此前的流恢复（若有）已奏效。恢复预算按「连续失败」
+    // 计，而非整个 turn 生命周期累计——长任务横跨上百个模型步、可运行数小时，
+    // 偶发流抖动每次消耗 1 次额度，累计到 10 后预算耗尽，下一次抖动直接杀死整个
+    // turn（「长任务经常自己停止」的根因）。成功即重置后，同一处连续失败仍在
+    // 10 次内熔断，防死循环性质不变。
+    resetStreamRecoveryBudgetOnSuccess(state);
   } catch (error) {
     let finalError = error;
     await recordMainTurnModelUsage(this, state, {

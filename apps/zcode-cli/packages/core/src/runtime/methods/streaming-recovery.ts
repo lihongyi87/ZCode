@@ -90,6 +90,16 @@ export function beginStreamRecoveryAttempt(state: RegularTurnLoopState): StreamR
   };
 }
 
+/**
+ * 成功完成的模型步把恢复预算归零：预算语义 = 「连续失败次数」而非整个 turn
+ * 生命周期累计。长任务（上百模型步、数小时）里偶发流抖动每次消耗 1 次额度，
+ * 若不重置，累计到上限后下一次抖动会直接杀死整个 turn——「长任务经常自己
+ * 停止」的根因。归零后同一处连续失败仍在 STREAM_RECOVERY_MAX_RETRIES 内熔断。
+ */
+export function resetStreamRecoveryBudgetOnSuccess(state: RegularTurnLoopState): void {
+  state.streamRecoveryRetryCount = 0;
+}
+
 export function beginStartPlanBusyAdmissionRetryAttempt(
   state: RegularTurnLoopState,
 ): StreamRecoveryAttempt {
