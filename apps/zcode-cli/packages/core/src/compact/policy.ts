@@ -143,7 +143,7 @@ export function shouldAutoCompact(input: {
   // ⑤ BodyAfterPrefix 口径：前缀 token（provider override 时按比例折算不可得，
   // 退回估算面）不占阈值预算；95% 全量硬顶兜底。
   const scope = config.autoCompactScope ?? "body-after-prefix";
-  const prefixTokens = estimateMessageTokens(
+  const prefixTokensEstimated = estimateMessageTokens(
     input.messages.filter(
       (m) =>
         m.role === "system" ||
@@ -151,6 +151,15 @@ export function shouldAutoCompact(input: {
           modelMessageContentToText(m.content).trimStart().startsWith("<system-reminder>")),
     ),
   );
+  // provider usage 与本地 4B/token 估算是两个口径，直接相减会混算（对抗审查）：
+  // provider 计数生效时，前缀按估算占比折算到 provider 口径再扣。
+  const providerScaled =
+    input.tokenOverride !== undefined &&
+    tokenCount !== estimatedTokenCount &&
+    estimatedTokenCount > 0;
+  const prefixTokens = providerScaled
+    ? Math.round((prefixTokensEstimated / estimatedTokenCount) * tokenCount)
+    : prefixTokensEstimated;
   const bodyTokens = Math.max(0, tokenCount - prefixTokens);
   const hardCapTokens = Math.floor(effectiveContextWindow * AUTOCOMPACT_HARD_CAP_PERCENT);
   const common = {

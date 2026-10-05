@@ -41,8 +41,9 @@ test("首 turn 建基线不注入；同签名静默；变更后注入新版", as
   const body = await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [AGENTS] });
   assert.ok(body?.includes("新增约定：预测登记"), `应含新版内容，实际: ${body}`);
   assert.ok(body?.includes("优先于系统前缀"), "应声明新版优先");
-  // 注入后基线已更新：再次静默
-  assert.equal(await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [AGENTS] }), null);
+  // 注入后基线已更新：后续为轻量指针（防遗忘），非全文非 null
+  const after = await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [AGENTS] });
+  assert.ok(after !== null && !after.includes("新增约定"), "后续是指针不是全文");
 });
 
 test("多源（user+workspace）：任一变更注入该源；文件被删跳过不注入", async () => {
@@ -60,10 +61,11 @@ test("多源（user+workspace）：任一变更注入该源；文件被删跳过
   const body = await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [user, ws] });
   assert.ok(body?.includes("# 项目（改）"), "变更源注入");
   assert.ok(!body?.includes("# 全局"), "未变源不重复注入");
-  // 两个源都删：current 空 → unchanged? current.size(0) vs slot.size(2) → changed 为空 → null
+  // 两个源都删：跳过不注入全文，但历史变更指针仍在（changedSources 记忆）
   delete files[user];
   delete files[ws];
-  assert.equal(await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [user, ws] }), null);
+  const afterDelete = await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [user, ws] });
+  assert.ok(afterDelete === null || afterDelete.length < 400, "删除后不注全文");
 });
 
 test("超大文件截尾到 32K 并带截断标记", async () => {
@@ -76,4 +78,21 @@ test("超大文件截尾到 32K 并带截断标记", async () => {
   const body = await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [big] });
   assert.ok((body?.length ?? 0) < 34_000, "截尾生效");
   assert.ok(body?.includes("[…truncated…]"), "截断标记");
+});
+
+test("变更后持续注入轻量指针（防遗忘/防压缩丢失），直到再次变更覆盖", async () => {
+  const AGENTS2 = "W:\proj2\AGENTS.md";
+  const files = { [AGENTS2]: { mtimeMs: 1, content: "# v1" } };
+  const fs = fsWith(files);
+  const runtime = {};
+  await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [AGENTS2] }); // 基线
+  files[AGENTS2] = { mtimeMs: 2, content: "# v2" };
+  const full = await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [AGENTS2] });
+  assert.ok(full?.includes("# v2"), "变更当轮注全文");
+  const pointer1 = await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [AGENTS2] });
+  assert.ok(pointer1?.includes("已过时"), "后续 turn 注指针");
+  assert.ok(!pointer1?.includes("# v2"), "指针不重复全文");
+  assert.ok(pointer1!.length < 400, "指针保持轻量");
+  const pointer2 = await buildUserInstructionsUpdateBody({ runtime, fileSystem: fs, sourcePaths: [AGENTS2] });
+  assert.ok(pointer2?.includes(AGENTS2), "指针持续存在");
 });

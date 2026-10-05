@@ -100,3 +100,20 @@ test("① 本地指数退避+确定性抖动：限流基座 2s、网络基座 40
   // 封顶验证：n=8 网络 400×128=51200 → cap 8000 ×0.75=6000
   assert.equal(streamRecoveryRetryDelayMs(net, 8), 6000);
 });
+
+test("① 终态误杀防御：正常网络错误消息含 401/403 数字片段不判终态（红队实证收紧）", async () => {
+  const { isTerminalStreamFailure } = await import("../src/runtime/methods/streaming-recovery.js");
+  const notTerminal = [
+    Object.assign(new Error("connection reset after 14013ms"), { code: "model_network_error" }),
+    Object.assign(new Error("read ECONNRESET bytes=40328"), { code: "model_network_error" }),
+    Object.assign(new Error("upstream returned 40133 tokens"), { code: "model_server_error" }),
+  ];
+  for (const err of notTerminal) {
+    assert.equal(isTerminalStreamFailure(err), false, `${err.message} 不应判终态`);
+  }
+  // 数字终态只认结构化 code 精确等值
+  assert.equal(
+    isTerminalStreamFailure(Object.assign(new Error("gateway says 401"), { code: "401" })),
+    true,
+  );
+});

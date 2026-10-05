@@ -17,6 +17,12 @@ const MAX_UPDATE_CONTENT_CHARS = 32_000;
 interface FreshnessSlot {
   /** path → `${mtimeMs}:${sizeBytes}` 签名；null = 尚未建立基线（首turn 建立，不注入）。 */
   signatures: Map<string, string> | null;
+  /**
+   * 已发生变更的源路径列表；非空时后续 turn 持续注入一行指针——per-request
+   * 全文只在变更当 turn 注入一次，但模型下一 turn 就看不到它了（且压缩会
+   * 进一步丢失），轻量指针保证「新版已生效」这一事实常驻直到再次变更。
+   */
+  changedSources: string[];
 }
 
 const freshnessCache = new WeakMap<object, FreshnessSlot>();
@@ -39,7 +45,7 @@ export async function buildUserInstructionsUpdateBody(
   if (input.sourcePaths.length === 0) return null;
   let slot = freshnessCache.get(input.runtime);
   if (!slot) {
-    slot = { signatures: null };
+    slot = { signatures: null, changedSources: [] };
     freshnessCache.set(input.runtime, slot);
   }
 
@@ -63,7 +69,16 @@ export async function buildUserInstructionsUpdateBody(
   const unchanged = current.size === slot.signatures.size &&
     [...current.entries()].every(([path, sig]) => slot.signatures!.get(path) === sig);
   slot.signatures = current;
-  if (unchanged || changed.length === 0) return null;
+  if (unchanged || changed.length === 0) {
+    // 未再变更：若本会话曾变更过，持续注入轻量指针（防遗忘/防压缩丢失）。
+    if (slot.changedSources.length === 0) return null;
+    return [
+      "用户指令文件（AGENTS.md 等）本会话中途已修改，当前系统前缀中的版本已过时：",
+      ...slot.changedSources.map((path) => `- ${path}`),
+      "遵循最新版内容（变更当轮已注入全文；不确定细节时用 Read 重读上述文件）。",
+    ].join("\n");
+  }
+  slot.changedSources = [...new Set([...slot.changedSources, ...changed])];
 
   const sections: string[] = [];
   for (const path of changed) {

@@ -43,10 +43,13 @@ const TRANSIENT_ERROR_REASONS = new Set([
 // 优先采用；其余本地指数退避+抖动。抖动用.retryNumber派生的确定性因子，
 // 保持模块可测（不引随机源）。
 
-/** 终态：鉴权失败/模型不存在——重试同样必败，恢复层直接放弃。 */
+/**
+ * 终态：鉴权失败/模型不存在——重试同样必败，恢复层直接放弃。
+ * 只收**长词标记**做消息/码面匹配：纯数字（401/403）绝不做子串匹配——
+ * 「connection reset after 14013ms」这类正常网络错误会被误杀成终态
+ * （红队实测三连误杀后收紧）；数字状态只认结构化 status/code 字段。
+ */
 const TERMINAL_ERROR_MARKERS = [
-  "401",
-  "403",
   "invalid_api_key",
   "invalid api key",
   "unauthorized",
@@ -54,6 +57,8 @@ const TERMINAL_ERROR_MARKERS = [
   "model_not_found",
   "model not found",
 ];
+/** code 字段的精确等值终态（结构化面，非消息子串）。 */
+const TERMINAL_ERROR_CODES = new Set(["401", "403", "401_unauthorized", "403_forbidden"]);
 
 /** 服务器建议的等待：错误 context 里 retryAfterMs / retryAfterSeconds（ provider 头未透传时的预留面）。 */
 function serverSuggestedDelayMs(error: unknown): number | undefined {
@@ -83,9 +88,9 @@ export function isTerminalStreamFailure(error: unknown): boolean {
     const code = stringValue(record.code) ?? stringValue(context?.code);
     const status = numberValue(context?.status) ?? numberValue(record.status);
     if (status === 401 || status === 403) return true;
-    const haystack = `${stringValue(record.code) ?? ""} ${stringValue(context?.code) ?? ""} ${stringValue(record.message) ?? ""} ${stringValue(record.reason) ?? ""}`.toLowerCase();
+    if (code !== undefined && TERMINAL_ERROR_CODES.has(code)) return true;
+    const haystack = `${stringValue(record.message) ?? ""} ${stringValue(record.reason) ?? ""}`.toLowerCase();
     if (TERMINAL_ERROR_MARKERS.some((marker) => haystack.includes(marker))) return true;
-    if (code === undefined) continue;
   }
   return false;
 }
