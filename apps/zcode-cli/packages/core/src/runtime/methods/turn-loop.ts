@@ -21,6 +21,7 @@ import {
   todoReminderRuntimeMetadata,
 } from "../../agent/message-history.js";
 import { buildMemoryRecallReminderBody } from "./memory-recall-reminder.js";
+import { buildFollowupDueReminderBody } from "./followup-due-reminder.js";
 import { buildTaskReanchorReminderBody, shouldReanchorAtStep } from "./task-reanchor-reminder.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { runModelBackedTurnStep } from "./turn-model-step.js";
@@ -176,6 +177,23 @@ export async function runRegularTurnLoop(
           systemReminderAttachmentEntry("memory_recall", memoryRecallBody),
         ]);
         this.logger?.info("[memory-recall] 相关记忆清单已注入本轮请求", {
+          ...traceContextToLogContext(state.turnTraceContext),
+        });
+      }
+    }
+    // P5 预测回填闭环：会话首 turn 注入已到期/临期的预测登记（builder 内部
+    // 按 runtime 一次性触发；未登记/无到期项静默跳过）。
+    if (this.workingDirectory && this.fileSystemPort) {
+      const followupBody = await buildFollowupDueReminderBody({
+        runtime: this,
+        fileSystem: this.fileSystemPort,
+        workingDirectory: this.workingDirectory,
+      });
+      if (followupBody) {
+        commitTurnRequestEntries(this, state.turnRequestState, [
+          systemReminderAttachmentEntry("followup_due", followupBody),
+        ]);
+        this.logger?.info("[followup-due] 到期预测登记已注入本轮请求", {
           ...traceContextToLogContext(state.turnTraceContext),
         });
       }

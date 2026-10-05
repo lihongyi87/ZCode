@@ -41,6 +41,9 @@ export const SYSTEM_REMINDER_PER_REQUEST_SOURCES = [
   "incoming_message",
   "hook_context",
   "memory_recall",
+  "followup_due",
+  "kb_recall",
+  "caliber_guard",
   "task_reanchor",
   "runtime_mode",
   "plan_mode_exit",
@@ -110,6 +113,12 @@ const SYSTEM_REMINDER_DESCRIPTORS: Record<SystemReminderSource, DescriptorShape>
   memory_recall: descriptor("current_turn", "per_current_turn", true, "sr.memory_recall"),
   // 任务再锚定：长会话每 N 个模型步在尾部重申最初任务（防漂移）。
   task_reanchor: descriptor("current_turn", "runtime_local", true, "sr.task_reanchor"),
+  // 预测回填闭环：会话首 turn 注入已到期/临期的预测登记（P5）。
+  followup_due: descriptor("current_turn", "runtime_local", true, "sr.followup_due"),
+  // 知识卡召回：按本轮问题对技能知识卡 manifest 做全量融合召回注入锚点（P1）。
+  kb_recall: descriptor("current_turn", "per_current_turn", true, "sr.kb_recall"),
+  // 口径裁决护栏：本轮输入命中已裁决口径注册表时注入权威源指引（P2）。
+  caliber_guard: descriptor("current_turn", "per_current_turn", true, "sr.caliber_guard"),
   task_status: descriptor("mid_turn_event", "mid_turn_event", true, "sr.task_status"),
   // 只用于 Read 等 tool result 内容内联 warning，不作为 synthetic user notice 持久化。
   tool_result_warning: descriptor("tool_result", "tool_result", true, "sr.tool_result_warning"),
