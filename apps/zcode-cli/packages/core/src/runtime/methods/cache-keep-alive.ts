@@ -72,23 +72,36 @@ export async function sendCacheKeepAliveRequestImpl(runtime: AgentRuntimeInterna
   // turn 启动只清定时器，拦不住已出发的回调：请求在途时用户开新 turn 就并发了。
   // 保活是优化，让路——有活动 turn 时直接放弃本次刷新（下个 turn 结束会重排）。
   if (runtime.activeTurn) return;
-  const selection = runtime.getSessionModelSelection();
-  if (!selection) return;
-  const { createTurnModel } = await import("./turn-model.js");
-  const model = createTurnModel(runtime, { selection });
-  const projected = buildProviderRequestMessages({
-    entries: runtime.messageHistory.borrowReadOnlyRuntimeEntries(),
-    applyCacheControl: true,
-  }).messages;
-  if (projected.length === 0) return;
-  const messages = [...projected, buildKeepAlivePingMessage()];
-  const result = await model.generateText({
-    messages,
-    options: { maxOutputTokens: KEEP_ALIVE_MAX_OUTPUT_TOKENS },
-  });
-  const contextTokens = getModelUsageContextTokens(result.usage);
-  runtime.logger?.info(`${CACHE_KEEP_ALIVE_TAG} cache refreshed`, {
-    contextTokens: contextTokens ?? null,
-    cacheReadTokens: result.usage?.cacheReadTokens ?? null,
-  });
+  try {
+    const selection = runtime.getSessionModelSelection();
+    if (!selection) return;
+    const { createTurnModel } = await import("./turn-model.js");
+    const model = createTurnModel(runtime, { selection });
+    const projected = buildProviderRequestMessages({
+      entries: runtime.messageHistory.borrowReadOnlyRuntimeEntries(),
+      applyCacheControl: true,
+    }).messages;
+    if (projected.length === 0) return;
+    const messages = [...projected, buildKeepAlivePingMessage()];
+    const result = await model.generateText({
+      messages,
+      options: { maxOutputTokens: KEEP_ALIVE_MAX_OUTPUT_TOKENS },
+    });
+    const contextTokens = getModelUsageContextTokens(result.usage);
+    runtime.logger?.info(`${CACHE_KEEP_ALIVE_TAG} cache refreshed`, {
+      contextTokens: contextTokens ?? null,
+      cacheReadTokens: result.usage?.cacheReadTokens ?? null,
+    });
+  } catch (error) {
+    // 保活失败静默降级（优化不是功能依赖），但必须捕获——定时器回调里
+    // `void runtime.sendCacheKeepAliveRequest()` 的拒绝无人接会变 unhandled rejection。
+    runtime.logger?.debug(`${CACHE_KEEP_ALIVE_TAG} refresh failed`, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    // 续排：单次 ping 只把缓存续活一个 TTL 窗（实测 ≥15min）。定时器只 fire 一次，
+    // 不续排的话空闲超过约两个窗口缓存照样过期——保活形同虚设。空闲期间持续
+    // 链式续排；turn 进行中不排（turn 结束会重排），成本每 12 分钟一次 cache-read 价。
+    if (!runtime.activeTurn) scheduleCacheKeepAlive(runtime);
+  }
 }
