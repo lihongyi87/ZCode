@@ -1,0 +1,185 @@
+{
+  "ranAt": "2026-10-05T03:25:53.064Z",
+  "corpus": "kb-live:7674",
+  "embedding": "embedding-3",
+  "summary": {
+    "lexical": {
+      "A": {
+        "n": 8,
+        "hitAt1": "0%",
+        "hitAt3": "13%",
+        "hitAt5": "13%",
+        "fileHitAt5": "38%",
+        "mrr": 0.04
+      },
+      "B": {
+        "n": 4,
+        "hitAt1": "0%",
+        "hitAt3": "0%",
+        "hitAt5": "0%",
+        "fileHitAt5": "0%",
+        "mrr": 0
+      },
+      "overall": {
+        "n": 12,
+        "hitAt1": "0%",
+        "hitAt3": "8%",
+        "hitAt5": "8%",
+        "fileHitAt5": "25%",
+        "mrr": 0.03
+      }
+    },
+    "fused": {
+      "A": {
+        "n": 8,
+        "hitAt1": "0%",
+        "hitAt3": "13%",
+        "hitAt5": "25%",
+        "fileHitAt5": "50%",
+        "mrr": 0.09
+      },
+      "B": {
+        "n": 4,
+        "hitAt1": "0%",
+        "hitAt3": "0%",
+        "hitAt5": "0%",
+        "fileHitAt5": "0%",
+        "mrr": 0
+      },
+      "overall": {
+        "n": 12,
+        "hitAt1": "0%",
+        "hitAt3": "8%",
+        "hitAt5": "17%",
+        "fileHitAt5": "33%",
+        "mrr": 0.06
+      }
+    }
+  },
+  "perQuery": {
+    "lexical": [
+      {
+        "id": "K01",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K02",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K03",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K04",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K05",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K06",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K07",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K08",
+        "tier": "A",
+        "rank": 3
+      },
+      {
+        "id": "K09",
+        "tier": "B",
+        "rank": null
+      },
+      {
+        "id": "K10",
+        "tier": "B",
+        "rank": null
+      },
+      {
+        "id": "K11",
+        "tier": "B",
+        "rank": null
+      },
+      {
+        "id": "K12",
+        "tier": "B",
+        "rank": null
+      }
+    ],
+    "fused": [
+      {
+        "id": "K01",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K02",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K03",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K04",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K05",
+        "tier": "A",
+        "rank": 5
+      },
+      {
+        "id": "K06",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K07",
+        "tier": "A",
+        "rank": null
+      },
+      {
+        "id": "K08",
+        "tier": "A",
+        "rank": 2
+      },
+      {
+        "id": "K09",
+        "tier": "B",
+        "rank": null
+      },
+      {
+        "id": "K10",
+        "tier": "B",
+        "rank": null
+      },
+      {
+        "id": "K11",
+        "tier": "B",
+        "rank": null
+      },
+      {
+        "id": "K12",
+        "tier": "B",
+        "rank": null
+      }
+    ]
+  }
+}

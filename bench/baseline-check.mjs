@@ -68,9 +68,10 @@ function scoreResult(file, data) {
     const fused = data.summary["fused-full"]?.overall
       ? `；fused-full hit@5 ${data.summary["fused-full"].overall.hitAt5}`
       : "";
+    const kind = String(data.corpus ?? "").startsWith("kb") ? "kb-recall" : "memory-recall";
     return {
-      kind: "memory-recall",
-      key: `memory-recall:${data.corpus ?? "fixture"}`,
+      kind,
+      key: `${kind}:${data.corpus ?? "fixture"}`,
       score: lexicalHit5,
       detail: `词法 overall hit@5 ${data.summary.lexical.overall.hitAt5}${fused}`,
     };

@@ -34,6 +34,12 @@
       "detail": "词法 overall hit@5 44%；fused-full hit@5 100%",
       "updatedAt": "2026-10-02T09:54:53.623Z",
       "source": "bench/memory-recall-result.json"
+    },
+    "kb-recall": {
+      "score": 8,
+      "detail": "7674 卡×12 查询：词法 strict 8%/文件级 25%；fused strict 17%/文件级 33%（A档文件级 50%）。strict 单金标低估真实有用性——诊断抽检 fused top-5 15/15 切题（口语化问题多体系均有效答案）；改进方向：两阶段精排/LLM judge。语料由 workspace gen_kb_cards.py 生成",
+      "updatedAt": "2026-10-05T03:28:18.574Z",
+      "source": "bench/kb-recall-result.json"
     }
   }
 }
