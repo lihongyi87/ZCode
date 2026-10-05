@@ -13,8 +13,14 @@ export const MAX_OUTPUT_TOKENS_FOR_SUMMARY = 20_000;
 export const AUTOCOMPACT_BUFFER_TOKENS = 13_000;
 export const DEFAULT_AUTOCOMPACT_THRESHOLD_PERCENT = 100;
 export const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3;
-/** body-after-prefix 口径的全量硬顶比例（吸收 codex effective_context_window_percent）。 */
-export const AUTOCOMPACT_HARD_CAP_PERCENT = 0.95;
+/**
+ * body-after-prefix 口径的全量硬顶比例。对齐 codex 间距语义：cap = limit +
+ * ~5% 全窗口（codex 90%/95% 于全窗口；本仓 threshold≈77.5% 全窗口，故
+ * 0.98×effective≈limit+8K）。红队审查：0.95×effective 仅比 threshold 高
+ * 4.6K（2.3% 窗口），大前缀的 body 余量会被硬顶钳到比设计意图薄一半以上。
+ * 真溢出另有 preflight 输入预算（effective）与 reactive compact 两层安全网。
+ */
+export const AUTOCOMPACT_HARD_CAP_PERCENT = 0.98;
 
 export interface AutoCompactPolicyConfig {
   enabled?: boolean;
