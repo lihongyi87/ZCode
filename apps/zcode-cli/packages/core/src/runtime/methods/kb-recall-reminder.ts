@@ -20,9 +20,10 @@ const KB_CARDS_DIR = join(".zcode", "kb-cards");
 const KB_TOP_K = 5;
 /** kb 卡词法门槛：锚点 description 带路径词元更长，覆盖率天然稀释，放宽至 0.02。 */
 const KB_LEXICAL_MIN_SCORE = 0.02;
-/** kb 清单上限：与生成器护栏（8000）对齐——默认 200 会把数千卡语料截成
- * 「最新改动的 200 张」（对抗审查抓到），生产召回必须全量可见。 */
-const KB_FILE_LIMIT = 8000;
+/** kb 清单上限：与生成器护栏（24000）对齐——默认 200/旧 8000 都会把语料
+ * 截断（对抗审查：8000 按字母序截断曾整门派砍掉 ziwei-*），生产召回必须
+ * 全量可见。生成器护栏变更时同步此值（两处注释互指）。 */
+const KB_FILE_LIMIT = 24000;
 
 export function kbCardsRootDir(workingDirectory: string): string {
   return join(workingDirectory, KB_CARDS_DIR);

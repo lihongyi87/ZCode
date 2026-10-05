@@ -71,6 +71,14 @@ interface CacheSlot {
 const manifestCache = new WeakMap<object, Map<string, CacheSlot>>();
 /** 条目向量缓存：runtime → (缓存键 → 向量)；键含 mtime+description，内容变更自动失效。 */
 const vectorCache = new WeakMap<object, Map<string, number[]>>();
+/** 查询向量备忘：同一 runtime 内同 query 文本复用上次向量——memory 与 kb 两语料
+ * 在同一 turn 用同一查询各调一次 rankRecallCorpus，不备忘会双花一次 embedding
+ * 请求（每次几百 ms 落在 TTFT 上）。query 变了自然失效（键含全文）。 */
+interface QueryVectorSlot {
+  query: string;
+  vector: number[];
+}
+const queryVectorCache = new WeakMap<object, QueryVectorSlot>();
 
 function vectorCacheKey(rootDir: string, entry: MemoryManifestEntry): string {
   return `${rootDir}\u0000${entry.filename}\u0000${entry.mtimeMs}\u0000${entry.description ?? ""}`;
@@ -307,9 +315,14 @@ export async function rankRecallCorpus(
     );
     const remaining = deadlineAt - Date.now();
     if (remaining <= 0) throw new Error("embedding budget exhausted");
-    const [queryVector] = await fetchEmbeddings(endpoint, [input.query], {
-      signal: AbortSignal.timeout(remaining),
-    });
+    const memo = queryVectorCache.get(input.runtime);
+    let queryVector: number[] | undefined = memo?.query === input.query ? memo.vector : undefined;
+    if (queryVector === undefined) {
+      [queryVector] = await fetchEmbeddings(endpoint, [input.query], {
+        signal: AbortSignal.timeout(remaining),
+      });
+      if (queryVector) queryVectorCache.set(input.runtime, { query: input.query, vector: queryVector });
+    }
     if (!queryVector) {
       if (lexical.length === 0) return null;
       return lexical.slice(0, topK).map((item) => item.entry);

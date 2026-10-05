@@ -244,8 +244,9 @@ test("向量缓存：同 runtime 第二轮只重嵌查询，不重嵌条目", as
   try {
     await buildMemoryRecallReminderBody({ runtime, fileSystem: fs, memoryRoot: "memory", entries: userInput("惦记的那个人") });
     await buildMemoryRecallReminderBody({ runtime, fileSystem: fs, memoryRoot: "memory", entries: userInput("惦记的那个人") });
-    // 第一轮：条目批（2条）+ 查询批（1条）；第二轮：仅查询批（1条）。
-    assert.deepEqual(stub.batches.map((b) => b.length), [2, 1, 1]);
+    // 第一轮：条目批（2条）+ 查询批（1条）；第二轮：条目走缓存、查询向量走
+    // 同 runtime memo（同 query 复用，防 memory/kb 双花）——零嵌入请求。
+    assert.deepEqual(stub.batches.map((b) => b.length), [2, 1]);
   } finally {
     stub.restore();
     ENV.clear();
