@@ -20,6 +20,9 @@ const KB_CARDS_DIR = join(".zcode", "kb-cards");
 const KB_TOP_K = 5;
 /** kb 卡词法门槛：锚点 description 带路径词元更长，覆盖率天然稀释，放宽至 0.02。 */
 const KB_LEXICAL_MIN_SCORE = 0.02;
+/** kb 清单上限：与生成器护栏（8000）对齐——默认 200 会把数千卡语料截成
+ * 「最新改动的 200 张」（对抗审查抓到），生产召回必须全量可见。 */
+const KB_FILE_LIMIT = 8000;
 
 export function kbCardsRootDir(workingDirectory: string): string {
   return join(workingDirectory, KB_CARDS_DIR);
@@ -45,6 +48,7 @@ export async function buildKbRecallReminderBody(
     query,
     topK: KB_TOP_K,
     minScore: KB_LEXICAL_MIN_SCORE,
+    fileLimit: KB_FILE_LIMIT,
   });
   if (ranked === null || ranked.length === 0) return null;
   const lines = [

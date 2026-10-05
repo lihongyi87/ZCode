@@ -11,6 +11,9 @@ export async function scanMemoryManifest(input: {
   fileSystem: FileSystemPort;
   rootDir: string;
   signal?: AbortSignal;
+  /** 清单条数上限（默认 200）。kb 卡语料（数千张）必须显式放宽，否则生产
+   * 召回只看得见最新改动的 200 张——对抗审查抓到的口径坑。 */
+  fileLimit?: number;
 }): Promise<MemoryManifestEntry[]> {
   try {
     const paths = await collectMemoryPaths(input.fileSystem, input.rootDir, input.signal);
@@ -26,7 +29,7 @@ export async function scanMemoryManifest(input: {
       )
       .map((result) => result.value)
       .sort((left, right) => right.mtimeMs - left.mtimeMs)
-      .slice(0, MANIFEST_FILE_LIMIT);
+      .slice(0, input.fileLimit ?? MANIFEST_FILE_LIMIT);
   } catch {
     return [];
   }

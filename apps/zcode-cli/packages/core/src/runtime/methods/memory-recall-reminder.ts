@@ -195,11 +195,13 @@ async function ensureEntryVectors(
           slot.dirty = true;
         }
       });
-      if (slot.dirty) schedulePersist(slot, storePath, fileSystem);
     } catch {
       break; // 预算尽/端点故障：保留已缓存批次，其余下轮续补
     }
   }
+  // 落盘调度一次/调用（批次内不重复挂表）：kb 规模（数千卡≈数十 MB JSON）
+  // 下每批一写会把 stringify-写盘变成热路径；防抖窗口本就跨 turn，无丢失代价。
+  if (slot.dirty) schedulePersist(slot, storePath, fileSystem);
   return cache;
 }
 
@@ -246,6 +248,8 @@ export interface RankRecallCorpusInput {
   /** 词法最低分（默认 0.1）。kb 卡 description 含路径词元更长，覆盖率天然
    * 稀释，kb 档可放宽（相关性排序仍由融合分决定，此值只管「有无一点关系」）。 */
   minScore?: number;
+  /** 清单条数上限（默认 200=memory 档；kb 卡语料必须放宽）。 */
+  fileLimit?: number;
 }
 
 /**
@@ -270,6 +274,7 @@ export async function rankRecallCorpus(
         entries: await scanMemoryManifest({
           fileSystem: input.fileSystem,
           rootDir: input.rootDir,
+          ...(input.fileLimit !== undefined ? { fileLimit: input.fileLimit } : {}),
         }),
         at: now,
       };

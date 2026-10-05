@@ -120,3 +120,24 @@ test("共享管线：embedding 全量融合对 kb 卡同样生效（口语化零
     resetVectorStoresForTesting();
   }
 });
+
+test("清单上限：201+ 卡语料不被默认 200 截断（KB_FILE_LIMIT 生效）", async () => {
+  resetVectorStoresForTesting();
+  delete process.env.ZCODE_MEMORY_EMBEDDING_URL;
+  // 250 张卡：前 250 张都是「八字某节」，金标卡排最后（mtime 最老=清单排序垫底，
+  // 默认 200 上限会把它截掉——本测试锁死 fileLimit 放行）。
+  const files: Record<string, string> = {};
+  for (let i = 0; i < 250; i += 1) {
+    files[`kb-pad-${String(i).padStart(3, "0")}.md`] =
+      `---\ndescription: 八字/知识库/总论.md#第${i}节 —— 大运流年与命局关系的总论性内容第${i}节\n---\n`;
+  }
+  files["kb-gold-last.md"] =
+    "---\ndescription: .agents/skills/liuyao-duanpan/references/02_鬼神专论提炼卡.md#查五鬼法 —— 初家亲二土地三外鬼\n---\n";
+  const body = await buildKbRecallReminderBody({
+    runtime: {},
+    fileSystem: fsWith(files),
+    workingDirectory: "W:\proj",
+    entries: userInput("六爻看鬼神怎么查五鬼"),
+  });
+  assert.ok(body?.includes("查五鬼法"), `垫底金标卡必须可见（fileLimit 放行），实际: ${body}`);
+});
