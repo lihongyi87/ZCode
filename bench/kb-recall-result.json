@@ -1,6 +1,6 @@
 {
-  "ranAt": "2026-10-05T03:25:53.064Z",
-  "corpus": "kb-live:7674",
+  "ranAt": "2026-10-05T04:35:14.295Z",
+  "corpus": "kb-live:22525",
   "embedding": "embedding-3",
   "summary": {
     "lexical": {
@@ -34,9 +34,9 @@
         "n": 8,
         "hitAt1": "0%",
         "hitAt3": "13%",
-        "hitAt5": "25%",
-        "fileHitAt5": "50%",
-        "mrr": 0.09
+        "hitAt5": "13%",
+        "fileHitAt5": "38%",
+        "mrr": 0.06
       },
       "B": {
         "n": 4,
@@ -50,9 +50,9 @@
         "n": 12,
         "hitAt1": "0%",
         "hitAt3": "8%",
-        "hitAt5": "17%",
-        "fileHitAt5": "33%",
-        "mrr": 0.06
+        "hitAt5": "8%",
+        "fileHitAt5": "25%",
+        "mrr": 0.04
       }
     }
   },
@@ -143,7 +143,7 @@
       {
         "id": "K05",
         "tier": "A",
-        "rank": 5
+        "rank": null
       },
       {
         "id": "K06",

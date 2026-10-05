@@ -37,9 +37,10 @@
     },
     "kb-recall": {
       "score": 8,
-      "detail": "7674 卡×12 查询：词法 strict 8%/文件级 25%；fused strict 17%/文件级 33%（A档文件级 50%）。strict 单金标低估真实有用性——诊断抽检 fused top-5 15/15 切题（口语化问题多体系均有效答案）；改进方向：两阶段精排/LLM judge。语料由 workspace gen_kb_cards.py 生成",
+      "detail": "22525 卡（全量，紫微8728卡）×12 查询：词法 strict 8%/文件级 25%；fused strict 8%/文件级 25%（top-12 池+源文件多样化每文件≤2）。定性诊断（5 查询×top-5）：25/25 切题且多体系覆盖（家人生病→六爻/数字/紫微/六壬四体系；六爻鬼神→原典排位卡直中）——strict 单金标在 22.5K 语料已饱和失真（多个等价答案只认一个）；摘要增浓与多样化对 strict 均无增益已实证。kb_recall v1 定位=多体系切题锚点线索层；精排（两阶段/LLM judge）为后续课题。语料由 workspace gen_kb_cards.py 生成（护栏 24000，与 KB_FILE_LIMIT 互指同步）",
       "updatedAt": "2026-10-05T03:28:18.574Z",
-      "source": "bench/kb-recall-result.json"
+      "source": "bench/kb-recall-result.json",
+      "date": "2026-10-05"
     }
   }
 }

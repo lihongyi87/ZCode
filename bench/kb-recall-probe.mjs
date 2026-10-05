@@ -24,6 +24,13 @@ import {
   fuseRecallScoresFull,
 } from "../apps/zcode-cli/packages/core/src/memory/recall/embedding.ts";
 import { parseMemoryFrontmatter } from "../apps/zcode-cli/packages/core/src/memory/recall/manifest.ts";
+import {
+  decodeVector,
+  encodeVector,
+  parseVectorStoreFile,
+  vectorStorePath,
+} from "../apps/zcode-cli/packages/core/src/memory/recall/vector-store.ts";
+import { diversifyKbAnchors } from "../apps/zcode-cli/packages/core/src/runtime/methods/kb-recall-reminder.ts";
 
 const argOf = (n, f) => {
   const i = process.argv.indexOf(n);
@@ -37,7 +44,8 @@ const EMBEDDING_KEY = argOf("--embedding-key", process.env.ZCODE_MEMORY_EMBEDDIN
 const EMBEDDING_MODEL = argOf("--embedding-model", "embedding-3");
 const OUT = argOf("--out", "bench/kb-recall-result.json");
 const KB_LEXICAL_MIN_SCORE = 0.02; // 与生产 kb-recall-reminder 同值
-const TOP_K = 5;
+const TOP_K = 5; // 注入位数（与生产一致，含源文件多样化）
+const DIVERSIFY_POOL = 12; // 与生产 KB_DIVERSIFY_POOL 一致
 
 function loadCards(dir) {
   const entries = [];
@@ -95,10 +103,11 @@ async function main() {
 
   const modes = {};
   modes.lexical = queries.map((q) => {
-    const descs = scoreMemoryEntries(q.text, entries, {
-      topK: TOP_K,
+    const pool = scoreMemoryEntries(q.text, entries, {
+      topK: DIVERSIFY_POOL,
       minScore: KB_LEXICAL_MIN_SCORE,
-    }).map((r) => entryTextOf(r.entry));
+    }).map((r) => r.entry);
+    const descs = diversifyKbAnchors(pool).map(entryTextOf);
     return {
       id: q.id,
       tier: q.tier,
@@ -110,7 +119,30 @@ async function main() {
   if (WANT_EMBEDDING) {
     if (!EMBEDDING_URL) throw new Error("--embedding 需要 --embedding-url");
     const endpoint = { url: EMBEDDING_URL, key: EMBEDDING_KEY, model: EMBEDDING_MODEL };
-    const entryVecs = await fetchEmbeddings(endpoint, entries.map(entryTextOf));
+    // 盘档向量复用（与生产同键同路径）：重跑只嵌缺失与查询，22.5K 语料从
+    // ~10 分钟降到秒级。
+    const storePath = vectorStorePath(CARDS_DIR, EMBEDDING_MODEL);
+    let store;
+    try {
+      store = parseVectorStoreFile(readFileSync(storePath, "utf8"), EMBEDDING_MODEL);
+    } catch {
+      store = { version: 1, model: EMBEDDING_MODEL, vectors: {} };
+    }
+    const entryKey = (e) =>
+      `${CARDS_DIR}\u0000${e.filename}\u0000${e.mtimeMs}\u0000${e.description ?? ""}`;
+    const missing = entries.filter((e) => !store.vectors[entryKey(e)]);
+    for (let i = 0; i < missing.length; i += 64) {
+      const batch = missing.slice(i, i + 64);
+      const vecs = await fetchEmbeddings(endpoint, batch.map(entryTextOf));
+      batch.forEach((e, j) => (store.vectors[entryKey(e)] = encodeVector(vecs[j])));
+      process.stdout.write(`\r[embed] ${Math.min(i + 64, missing.length)}/${missing.length}`);
+    }
+    if (missing.length > 0) {
+      writeFileSync(storePath, JSON.stringify(store));
+      console.log(`\n[embed] 新嵌 ${missing.length} 条已落盘`);
+    }
+    const entryVecs = entries.map((e) => decodeVector(store.vectors[entryKey(e)] ?? "") ?? []);
+    const byFilename = new Map(entries.map((e) => [e.filename, e]));
     const queryVecs = await fetchEmbeddings(
       endpoint,
       queries.map((q) => q.text),
@@ -122,8 +154,12 @@ async function main() {
         entries.map((e, i) => [e.filename, cosineSimilarity(queryVecs[qi], entryVecs[i])]),
       );
       const fused = fuseRecallScoresFull(entries, lexByName, cosines);
-      const descByName = new Map(entries.map((e) => [e.filename, entryTextOf(e)]));
-      const descs = fused.slice(0, TOP_K).map((f) => descByName.get(f.filename) ?? "");
+      // 生产口径：top-12 融合池 → 源文件多样化（每文件≤2）→ 注入 5。
+      const pool = fused
+        .slice(0, DIVERSIFY_POOL)
+        .map((f) => byFilename.get(f.filename))
+        .filter((e) => e !== undefined);
+      const descs = diversifyKbAnchors(pool).map(entryTextOf);
       return {
         id: q.id,
         tier: q.tier,
