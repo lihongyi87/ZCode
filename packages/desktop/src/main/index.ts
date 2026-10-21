@@ -770,8 +770,11 @@ function awaitFirstHostSpawnDecision(): Promise<void> {
   })();
   return firstHostSpawnDecisionPromise;
 }
+// 遥测总闸启动快照(spec 149 批四):进程生命周期读盘一次,后续 report 查内存值;
+// 改设置重启生效(与 spawn env/ARMS 同语义)。必须先于 createTelemetryCore 定义。
+const telemetryEnabledAtStartup = readTelemetryEnabledFromSettings();
 const appTelemetryCore = createTelemetryCore({
-  enabled: () => readTelemetryEnabledFromSettings(),
+  enabled: () => telemetryEnabledAtStartup,
   loadUserId: createTelemetryUserIdLoader(appTelemetryCredentialService),
   loadAuthorization: createTelemetryAuthorizationLoader(appTelemetryCredentialService),
   loadMarketingParams: createTelemetryMarketingParamsLoader(appTelemetryCredentialService),
@@ -871,8 +874,6 @@ const rendererActionTraceRollout = createRendererActionTraceRollout({
   fetchConfig: electronClientConfigsFetcher,
   logger,
 });
-// 遥测总开关(spec 149 批四):main 进程出口在启动时读一次 settings,改动重启生效。
-const telemetryEnabledAtStartup = readTelemetryEnabledFromSettings();
 const localTtftExporter = createLocalTtftExporter({
   env: telemetryEnabledAtStartup ? { ...hostProcessLocalEnv, ...process.env } : {},
   version: ZCODE_VERSION || app.getVersion(),

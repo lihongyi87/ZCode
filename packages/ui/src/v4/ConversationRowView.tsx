@@ -1424,7 +1424,7 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
           )}
         </div>
       ) : null}
-      {row.kind === "userInput" && row.originMeta?.senderSessionId ? (
+      {row.kind === "userInput" && row.origin === "realUser" && row.originMeta?.senderSessionId ? (
         // spec 149:任务消息注入行——来源来自 CLI 持久化的 intent.taskMessage,
         // renderer 只消费 originMeta,不推断。
         <div

@@ -18,14 +18,14 @@
 
 ## 批次路线图与状态
 
-| 批 | 内容 | 状态 | 落点 |
-| -- | ---- | ---- | ---- |
-| 一 | A 任务互发 steer 化 + B proactive 深度护栏 | **完成**(信封/护栏/发送链/可见性/跨机接收侧;仅剩无消费者的跨 host 发起侧 API,待消费场景) | contracts/adapters/core/services/shared/ui |
-| 二 | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关) | 未开工 | core/tool、services |
-| 三 | D 记忆 write-lease(租约+history/diff+撤销;extraction cursor 持久化 migration 0023) | 未开工 | core/memory、adapters/storage |
-| 四 | E 遥测统一总开关 | **后端总闸完成**(settings 键 telemetryEnabled + 四出口门);UI 开关待接 | shared、services、desktop |
-| 四b | E 补齐:SettingsPage UI 开关(zh/en) | 未开工 | ui |
-| 五 | F 会话导入泛化(来源枚举+附件保留+导入会话只读边界) | 未开工 | services、shared |
+| 批  | 内容                                                                               | 状态                                                                                     | 落点                                       |
+| --- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------ |
+| 一  | A 任务互发 steer 化 + B proactive 深度护栏                                         | **完成**(信封/护栏/发送链/可见性/跨机接收侧;仅剩无消费者的跨 host 发起侧 API,待消费场景) | contracts/adapters/core/services/shared/ui |
+| 二  | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关)      | 未开工                                                                                   | core/tool、services                        |
+| 三  | D 记忆 write-lease(租约+history/diff+撤销;extraction cursor 持久化 migration 0023) | 未开工                                                                                   | core/memory、adapters/storage              |
+| 四  | E 遥测统一总开关                                                                   | **后端总闸完成**(settings 键 telemetryEnabled + 四出口门);UI 开关待接                    | shared、services、desktop                  |
+| 四b | E 补齐:SettingsPage UI 开关(zh/en)                                                 | 未开工                                                                                   | ui                                         |
+| 五  | F 会话导入泛化(来源枚举+附件保留+导入会话只读边界)                                 | 未开工                                                                                   | services、shared                           |
 
 ## 批四实现状态(2026-10-21)
 
@@ -52,9 +52,9 @@ updateSharedSettings 链;schema/patch 已就绪。
 
 - **信封 v2**:`session-mailbox.port.ts` 加可选 `sourceType/sourceCommandId/depth/senderLabel` +
   `SessionMailboxPort.append`(适配器生成 messageId/createdAt,tmp+rename 原子落盘,文件名毫秒前缀保序)
-  + `drainUnread` 的 `filter` 谓词(limit 只计命中,非命中留在 unread)+ `isWakeableTaskMessage`
-  纯函数(信任锚三件套齐全且 depth≤上限)。可选字段类型非法→解析失败走既有死信语义(整批拒绝,
-  与 JSON.parse 损坏同路径);旧格式照常解析。测试 5/5(adapters/tests/session-mailbox.test.ts)。
+  - `drainUnread` 的 `filter` 谓词(limit 只计命中,非命中留在 unread)+ `isWakeableTaskMessage`
+    纯函数(信任锚三件套齐全且 depth≤上限)。可选字段类型非法→解析失败走既有死信语义(整批拒绝,
+    与 JSON.parse 损坏同路径);旧格式照常解析。测试 5/5(adapters/tests/session-mailbox.test.ts)。
 - **消费端护栏**:`core/hooks/session-mailbox.ts` 按 hook 事件选择性 drain——PostToolUse(忙 steer)
   与 Stop(唤醒)只取可唤醒信封;UserPromptSubmit(人驱动)全量交付。深度上限常量
   `MAX_TASK_MESSAGE_WAKE_DEPTH=4`。注入 XML 携带 `sender_label/depth/source_type` 属性。
@@ -95,6 +95,25 @@ updateSharedSettings 链;schema/patch 已就绪。
 
 已知降级边界:CLI 重启窗口内已入队未 drain 的任务消息会丢来源标识(快照队列未含
 taskMessageOrigin,旧事件回退路径无徽标)——可接受,不为此扩快照 schema。
+
+对抗审查补充(2026-10-21,第二批):
+
+- **steer 拒绝即消息已消费**(既有行为,非本批回归):PostToolUse 路径先 drain(消费即归档)
+  再 steerTurn,被拒(no_active_turn/expected mismatch)只打日志,消息不回 unread。护栏使
+  拒绝概率极低(PostToolUse 必在活跃 turn 内),但严格语义是「至多一次」。回退未做:需要
+  drain 两阶段(peek→ack),待真实丢消息案例再立项。
+- **ARMS 直调出口未闸**:desktopMcpTelemetry/desktopStabilityTelemetry 直接调
+  armsRum.sendCustom/sendEvent,绕过 init(enable)。总闸对它们是否生效取决于 ARMS SDK
+  在 disabled 下的行为(init 不启动则 send 为 no-op)——未验证,列为批四验收项:抓包确认
+  关闸后无 ARMS 外发;若 SDK 仍外发,在两文件调用点补同闸。
+- **链路级测试补齐**:hook 管道测试(core/tests/session-mailbox-hook.test.ts,2 用例)——
+  append→hook drain→Stop 唤醒门(无锚信封留存等人)/PostToolUse steer 元数据
+  (source/wakeDepth/fromSessionId)/深度超限不 steer 但人驱动可读。此前只有组件级单测,
+  本测试补上组件间接缝。
+- **UI 徽标加 origin 限定**(防误标):徽标条件加 origin==="realUser"——originMeta 的
+  senderSessionId 字段 backgroundResult 行 schema 上也允许,防御性隔离。
+- **遥测闸改启动快照**:enabled 闭包原实现每条上报同步读盘一次,违背「启动读一次」设计;
+  改为进程生命周期读盘一次的常量快照,并先于 createTelemetryCore 定义。
 
 不做:ChatGPT 订阅模型接入(逆向订阅,与本仓许可合规取向冲突)。
 
@@ -170,14 +189,14 @@ A 会话(zcodeTaskService.deliverSessionMessage)
 
 ### 验收场景
 
-| 场景 | 期望 |
-| ---- | ---- |
-| A 向忙的 B 发消息 | B 下一工具批次边界以 guide steer 注入,气泡带「来自任务 X」徽标,V4 行 origin=task_message |
-| A 向闲的 B 发消息 | B Stop 唤醒,消息进入上下文 |
-| requestId 重复投递 | 总线幂等,目标 mailbox 不双写 |
-| depth=5 的消息到达 | 投递成功、可读,但不唤醒不 steer |
-| 旧格式信封(无来源字段) | 照常解析可读,永不唤醒 |
-| envelope 字段类型非法 | 解析失败走既有死信语义,不崩溃 |
+| 场景                   | 期望                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| A 向忙的 B 发消息      | B 下一工具批次边界以 guide steer 注入,气泡带「来自任务 X」徽标,V4 行 origin=task_message |
+| A 向闲的 B 发消息      | B Stop 唤醒,消息进入上下文                                                               |
+| requestId 重复投递     | 总线幂等,目标 mailbox 不双写                                                             |
+| depth=5 的消息到达     | 投递成功、可读,但不唤醒不 steer                                                          |
+| 旧格式信封(无来源字段) | 照常解析可读,永不唤醒                                                                    |
+| envelope 字段类型非法  | 解析失败走既有死信语义,不崩溃                                                            |
 
 ## 后续批次契约
 
