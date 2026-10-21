@@ -130,6 +130,8 @@ export function GeneralSectionContent({
   interfaceMode = "coding",
   setInterfaceMode = () => {},
   notificationEnabled,
+  telemetryEnabled,
+  onTelemetryEnabledChange,
   notificationSoundEnabled,
   closeToTrayOnWindows,
   keepAwakeWhileRunning = false,
@@ -192,6 +194,9 @@ export function GeneralSectionContent({
   interfaceMode?: InterfaceMode;
   setInterfaceMode?: (mode: InterfaceMode) => void;
   notificationEnabled: boolean;
+  /** spec 149 批四b:遥测总闸;关闭时四类上报出口全停(agent OTLP 下次 spawn 生效,main 出口重启生效)。 */
+  telemetryEnabled: boolean;
+  onTelemetryEnabledChange: (enabled: boolean) => void;
   notificationSoundEnabled: boolean;
   closeToTrayOnWindows: boolean;
   keepAwakeWhileRunning?: boolean;
@@ -746,6 +751,13 @@ export function GeneralSectionContent({
           control={
             <Switch checked={notificationEnabled} onCheckedChange={setNotificationEnabled} />
           }
+        />
+        <SettingsRow
+          label={intl.formatMessage({ id: "settings.telemetry" })}
+          description={intl.formatMessage({
+            id: "settings.telemetryDescription",
+          })}
+          control={<Switch checked={telemetryEnabled} onCheckedChange={onTelemetryEnabledChange} />}
         />
         <SettingsRow
           label={intl.formatMessage({ id: "settings.notificationSound" })}

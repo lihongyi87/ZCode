@@ -807,6 +807,8 @@ export function SettingsPage({
     setDesktopChromiumHardwareAccelerationEnabled,
   ] = useState(true);
   const [receivePreviewUpdates, setReceivePreviewUpdates] = useState(false);
+  // spec 149 批四b:总闸 UI 值;缺省 true 与 schema/后端门一致。
+  const [telemetryEnabled, setTelemetryEnabled] = useState(true);
   const [autoDownloadAndInstallUpdates, setAutoDownloadAndInstallUpdates] = useState(false);
   const [messageStreamShowReasoning, setMessageStreamShowReasoning] = useState(true);
   const [messageStreamShowTodos, setMessageStreamShowTodos] = useState(false);
@@ -950,6 +952,7 @@ export function SettingsPage({
     setToolGroupingChangesEnabled(sharedSettings.toolGroupingChangesEnabled ?? false);
     setZCodeInteractionBehavior(sharedSettings.zcodeInteractionBehavior ?? "queue");
     setReceivePreviewUpdates(sharedSettings.receivePreviewUpdates ?? false);
+    setTelemetryEnabled(sharedSettings.telemetryEnabled ?? true);
     setAutoDownloadAndInstallUpdates(sharedSettings.autoDownloadAndInstallUpdates ?? false);
   }, [sharedSettings]);
   const handleTerminalInheritSystemProfileChange = useCallback(
@@ -1290,6 +1293,22 @@ export function SettingsPage({
         },
       });
       setReceivePreviewUpdates(enabled);
+    },
+    [updateSharedSettings],
+  );
+  const handleTelemetryEnabledChange = useCallback(
+    async (enabled: boolean) => {
+      await runSettingsActionAsync({
+        featureId: "settings.telemetry",
+        action: "toggle_telemetry",
+        trigger: "switch",
+        operation: () => updateSharedSettings({ telemetryEnabled: enabled }),
+        completed: {
+          resultSource: "shared_settings",
+          stateAfter: enabled ? "enabled" : "disabled",
+        },
+      });
+      setTelemetryEnabled(enabled);
     },
     [updateSharedSettings],
   );
@@ -1827,6 +1846,8 @@ export function SettingsPage({
                                 desktopChromiumHardwareAccelerationEnabled
                               }
                               receivePreviewUpdates={receivePreviewUpdates}
+                              telemetryEnabled={telemetryEnabled}
+                              onTelemetryEnabledChange={handleTelemetryEnabledChange}
                               autoDownloadAndInstallUpdates={autoDownloadAndInstallUpdates}
                               dataBaseDir={dataBaseDir}
                               terminalInheritSystemProfile={terminalInheritSystemProfile}

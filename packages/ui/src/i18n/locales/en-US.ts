@@ -3207,6 +3207,9 @@ const enUS: Record<string, string> = {
   "settings.autoDownloadAndInstallUpdatesDescription":
     "When enabled, updates start downloading as soon as they are found. Restart still requires confirmation when tasks are running.",
   "settings.notification": "Task notifications",
+  "settings.telemetry": "Telemetry & data reporting",
+  "settings.telemetryDescription":
+    "When off, all product-improvement reporting stops (app events, performance metrics, model telemetry). Some outlets take effect after an app restart or the next session.",
   "settings.notificationDescription":
     "Send desktop notifications when a task completes, fails, or needs approval.",
   "settings.notificationSound": "Notification sound",

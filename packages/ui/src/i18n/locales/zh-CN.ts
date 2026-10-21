@@ -3006,6 +3006,9 @@ const zhCN: Record<string, string> = {
     "开启后检测到更新会自动开始下载；下载完成后，如有任务正在运行，重启更新前仍会要求确认。",
   "settings.notification": "任务通知",
   "settings.notificationDescription": "任务完成、失败或需要确认时发送桌面通知。",
+  "settings.telemetry": "遥测与数据上报",
+  "settings.telemetryDescription":
+    "关闭后停止全部产品改进数据上报(应用事件、性能指标、模型遥测);部分出口在重启应用或下次会话后生效。",
   "settings.notificationSound": "通知声音",
   "settings.notificationSoundDescription": "通知开启后，可单独关闭任务通知提示音。",
   "notification.taskWithTitle": "任务：{title}",
