@@ -151,6 +151,7 @@ export interface PendingSteerInputInfo {
   inputSize: number;
   commandKind?: TurnSteerCommandKind;
   source?: TurnSteerSource;
+  taskMessageOrigin?: TaskMessageOriginMeta;
   inputPresentation?: RuntimeInputPresentation;
   /** 当前排队输入附带的工具隐藏列表；automation busy 入队必须在消费时继续生效。 */
   toolDisallowlist?: readonly string[];
@@ -272,6 +273,7 @@ export interface TurnSteerInput {
   inputPresentation?: RuntimeInputPresentation;
   delivery?: TurnSteerDeliveryMode;
   intent?: TurnInputIntentMetadata;
+  taskMessageOrigin?: TaskMessageOriginMeta;
   attachments?: PendingTurnAttachment[];
   pendingInputId?: string;
   traceContext?: TraceContext;
@@ -280,6 +282,12 @@ export interface TurnSteerInput {
 }
 
 export type TurnSteerCommandKind = "sendText" | "sendGoalCommand" | "compact";
+/** 任务消息来源(spec 149):steer 注入附带的发送方信息,经 pending→drained 事件投影到 originMeta。 */
+export interface TaskMessageOriginMeta {
+  fromSessionId: string;
+  senderLabel?: string;
+  depth?: number;
+}
 export type TurnSteerSource =
   | "plan_approval_feedback"
   | "workflow_refine_feedback"
@@ -433,6 +441,7 @@ export interface PendingTurnInput {
   queryId?: QueryId;
   commandKind?: TurnSteerCommandKind;
   source?: TurnSteerSource;
+  taskMessageOrigin?: TaskMessageOriginMeta;
   inputPresentation?: RuntimeInputPresentation;
   delivery?: TurnSteerDeliveryMode;
   intent?: TurnInputIntentMetadata;

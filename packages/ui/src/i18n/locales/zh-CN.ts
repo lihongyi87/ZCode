@@ -1462,6 +1462,7 @@ const zhCN: Record<string, string> = {
   "genUi.submit": "提交设计变更",
   "genUi.from": "来自交互视图 {name}",
   "pluginUi.fromPlugin": "来自插件 {name}",
+  "taskMessage.fromTask": "来自任务 {name} 的自动消息",
   "pluginUi.followUp.title": "插件想以你的身份发送消息",
   "pluginUi.followUp.description": "来自插件 {name}。可以先修改再发送。",
   "pluginUi.followUp.send": "发送",

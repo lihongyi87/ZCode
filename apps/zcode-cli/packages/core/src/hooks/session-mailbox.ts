@@ -19,6 +19,8 @@ export function createSessionMailboxHookRegistrations(options: {
       steerSource?: "task_message";
       /** 本批可唤醒信封的最大深度;发送侧据此递增下一跳 depth(spec 149)。 */
       wakeDepth?: number;
+      fromSessionId: string;
+      senderLabel?: string;
     },
   ) => Promise<void>;
   mailbox: SessionMailboxPort;
@@ -53,6 +55,8 @@ export function createSessionMailboxHookRegistrations(options: {
           {
             ...(message.sourceType !== undefined ? { steerSource: "task_message" } : {}),
             wakeDepth,
+            fromSessionId: message.fromSessionId,
+            ...(message.senderLabel !== undefined ? { senderLabel: message.senderLabel } : {}),
           },
         );
       }

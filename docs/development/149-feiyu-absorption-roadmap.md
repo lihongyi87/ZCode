@@ -20,7 +20,7 @@
 
 | 批 | 内容 | 状态 | 落点 |
 | -- | ---- | ---- | ---- |
-| 一 | A 任务互发 steer 化 + B proactive 深度护栏 | 信封契约与消费端护栏已落地(见下「批一实现状态」);发送路由/接收投递/投影/UI 待接线 | contracts/adapters/core/services/shared/ui |
+| 一 | A 任务互发 steer 化 + B proactive 深度护栏 | **信封/护栏/发送链/来源可见性(UI)全通**;跨机器投递(deliverSessionMessage)为后续单元 | contracts/adapters/core/services/shared/ui |
 | 二 | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关) | 未开工 | core/tool、services |
 | 三 | D 记忆 write-lease(租约+history/diff+撤销;extraction cursor 持久化 migration 0023) | 未开工 | core/memory、adapters/storage |
 | 四 | E 遥测统一总开关(复刻 memoryEnabled 跨层链;main 进程 ARMS/数仓出口改读 settings 门) | 未开工 | shared、services、desktop |
@@ -47,19 +47,28 @@
   `delivery:"queued"`;忙/闲注入由目标会话自身 drain hook 承担(涌现语义,发送方不判断忙闲)。
   唤醒深度状态在 runtime-tools 的 steer 成功路径记录(`recordTaskMessageWakeDepth`,turnId 绑定)。
   测试 2/2(core/tests/task-message-send.test.ts)。**SendMessage 跨会话投递自此可用。**
+- **来源可见性(commit ④)**:`TaskMessageOriginMeta`(contracts)贯穿 steer 全管道——
+  `TurnSteerInput/PendingSteerInputInfo/PendingTurnInput/TurnSteerDrained.drainedInputs` 平行可选
+  字段 `taskMessageOrigin`(不经 `TurnInputIntentMetadata`:那是完整准入元数据,必填
+  sourceCommandId/queueItemId/clientId/kind/admissionSeq 等,hook 无法构造,首次尝试已回退)。
+  投影在 userInput 行落 `originMeta.senderSessionId/senderLabel`(行保持 origin=realUser+guided,
+  不动 origin 枚举);UI 来源徽标「来自任务 {name} 的自动消息」(zh-CN/en-US)。
 
 已定设计决策(接线时照此执行):
 
-- **信箱=同进程跨会话传输**(commit ③ 已按此实现);跨 host(远程/多窗口)才走既有
-  `workspace_session_message_send_requested` 事件链(host 监听/总线/host 入口全部现成,只差
-  `deliverSessionMessage` 实现)。
+- **信箱=同进程跨会话传输**(commit ③ 已按此实现)。同机跨 workspace 也走文件信箱
+  (信箱根是机器级 `~/.zcode/mailbox`,不随 workspace 分)。跨机器(远程 workspace)才走
+  `workspace_session_message_send_requested` 事件链——host 监听/总线/host 入口现成,差
+  `deliverSessionMessage` 实现与请求契约的来源字段扩展,为后续单元;当前该 stub 无调用方
+  (无 emitter),不影响同机路径。
 - **depth 状态以 turnId 绑定,宁可少计不可多计**:guide steer 注入与当前 turn 同 id 可计;
   Stop 唤醒产生的新 turn 计 0(链深被低估,护栏只会更保守)。状态并入 runtime-tools.ts
   (避免 core/src/runtime 下新文件触发 unmanaged-new-file)。
+- **senderLabel 现缺发送方任务名**(桥暂不感知自身任务展示名),UI 回退显示 fromSessionId;
+  补任务名需桥接侧读任务元数据,随跨机单元一起做。
 
-待接线(下一提交单元):① `deliverSessionMessage` 接收实现(host→services→目标 CLI;同机走
-信箱 append,跨机走事件链);② V4 投影 `origin:"task_message"` +
-`originMeta.senderSessionId/senderLabel` 填充;③ UI 来源徽标与 i18n。
+已知降级边界:CLI 重启窗口内已入队未 drain 的任务消息会丢来源标识(快照队列未含
+taskMessageOrigin,旧事件回退路径无徽标)——可接受,不为此扩快照 schema。
 
 不做:ChatGPT 订阅模型接入(逆向订阅,与本仓许可合规取向冲突)。
 

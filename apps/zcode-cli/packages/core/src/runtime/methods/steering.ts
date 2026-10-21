@@ -143,6 +143,7 @@ export async function steerTurn(
     queryId,
     ...(commandKind ? { commandKind } : {}),
     ...(source ? { source } : {}),
+    ...(request.taskMessageOrigin ? { taskMessageOrigin: request.taskMessageOrigin } : {}),
     ...(request.inputPresentation ? { inputPresentation: request.inputPresentation } : {}),
     ...(delivery ? { delivery } : {}),
     ...(intent ? { intent } : {}),
@@ -932,6 +933,9 @@ export async function editPendingInputById(
         ? { inputPresentation: pendingInput.inputPresentation }
         : {}),
       ...(pendingInput.intent ? { intent: pendingInput.intent } : {}),
+      ...(pendingInput.taskMessageOrigin
+        ? { taskMessageOrigin: pendingInput.taskMessageOrigin }
+        : {}),
       ...(pendingInput.toolDisallowlist ? { toolDisallowlist: pendingInput.toolDisallowlist } : {}),
       queueLength: activeTurn.pendingInputs.length,
       targetTurnId: activeTurn.turnId,

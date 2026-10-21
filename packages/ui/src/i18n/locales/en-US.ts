@@ -1587,6 +1587,7 @@ const enUS: Record<string, string> = {
   "genUi.submit": "Submit design changes",
   "genUi.from": "From interactive view {name}",
   "pluginUi.fromPlugin": "From plugin {name}",
+  "taskMessage.fromTask": "Auto message from task {name}",
   "pluginUi.followUp.title": "A plugin wants to send a message as you",
   "pluginUi.followUp.description": "From plugin {name}. You can edit it before sending.",
   "pluginUi.followUp.send": "Send",

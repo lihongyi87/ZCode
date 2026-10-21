@@ -1424,6 +1424,21 @@ const SingleUserInputRowView = memo(function SingleUserInputRowView({
           )}
         </div>
       ) : null}
+      {row.kind === "userInput" && row.originMeta?.senderSessionId ? (
+        // spec 149:任务消息注入行——来源来自 CLI 持久化的 intent.taskMessage,
+        // renderer 只消费 originMeta,不推断。
+        <div
+          data-v4-user-input-source="taskMessage"
+          className="mt-1 text-right text-ui-sm text-foreground-subtlest"
+        >
+          {intl.formatMessage(
+            { id: "taskMessage.fromTask" },
+            {
+              name: row.originMeta.senderLabel || row.originMeta.senderSessionId,
+            },
+          )}
+        </div>
+      ) : null}
       {status ? (
         <div
           data-v4-user-input-status="true"

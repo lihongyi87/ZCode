@@ -3932,6 +3932,18 @@ export class ProductProjection {
         ...(item.intent?.highspeed ? { highspeed: item.intent.highspeed } : {}),
         ...(item.intent?.attachmentRefs?.length ? { attachments: item.intent.attachmentRefs } : {}),
         ...(item.intent?.source ? { source: item.intent.source } : {}),
+        // spec 149:任务消息注入行带发送方(originMeta.senderSessionId/senderLabel),
+        // UI 据此渲染「来自任务 X 的自动消息」;不动 origin(行仍是 realUser+guided)。
+        ...("taskMessageOrigin" in item && item.taskMessageOrigin
+          ? {
+              originMeta: {
+                senderSessionId: item.taskMessageOrigin.fromSessionId,
+                ...(item.taskMessageOrigin.senderLabel
+                  ? { senderLabel: item.taskMessageOrigin.senderLabel }
+                  : {}),
+              },
+            }
+          : {}),
       };
       // queue/guide 消费后的 real-user row 与普通 TurnStarted 共用完整 canonical target；
       // 缺 messageId 的旧事件仍只可展示，不暴露无法执行的 edit action。

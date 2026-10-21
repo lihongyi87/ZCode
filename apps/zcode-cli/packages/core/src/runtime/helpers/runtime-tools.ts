@@ -170,7 +170,16 @@ function createRuntimeHookRunner(
         expectedTurnId: traceContext.turnId,
         input,
         // spec 149:信箱消息经 steer 注入时携带来源,投影层据此打 task_message 徽标。
-        ...(meta?.steerSource ? { source: meta.steerSource } : {}),
+        ...(meta?.steerSource && meta.fromSessionId
+          ? {
+              source: meta.steerSource,
+              taskMessageOrigin: {
+                fromSessionId: meta.fromSessionId,
+                ...(meta.senderLabel !== undefined ? { senderLabel: meta.senderLabel } : {}),
+                ...(meta.wakeDepth !== undefined ? { depth: meta.wakeDepth } : {}),
+              },
+            }
+          : {}),
         traceContext,
       });
       if (result.kind === "rejected") {

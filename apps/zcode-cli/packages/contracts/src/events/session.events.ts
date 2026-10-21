@@ -592,6 +592,7 @@ export interface TurnSteerDrainedPayload {
     text: string;
     delivery?: TurnSteerDeliveryMode;
     intent?: TurnInputIntentMetadata;
+    taskMessageOrigin?: import("../interfaces/session.port.js").TaskMessageOriginMeta;
     toolDisallowlist?: readonly string[];
   }>;
 }
