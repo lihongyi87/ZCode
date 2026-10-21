@@ -10302,3 +10302,78 @@ describe("usage.decode（DSH sessionStats 口径）", () => {
     expect(projection.getSnapshot().usage.decode).toEqual({ tokens: 20, ms: 1_000 });
   });
 });
+
+// ── 解码吞吐:切模型清零重计(spec 149 速度修复)──
+
+describe("decode throughput model switch", () => {
+  function completeWithSpeed(
+    log: EventLog,
+    turnId: string,
+    outputTokens: number,
+    stepMs: number,
+  ): void {
+    log.push(
+      SessionEventType.ModelComplete,
+      {
+        content: "ok",
+        stopReason: "end_turn",
+        querySource: "main_turn",
+        contextWindow: 200_000,
+        firstTokenAt: Date.now() - stepMs,
+        usage: { inputTokens: 10, outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      },
+      { turnId },
+    );
+  }
+
+  it("切换模型后 decode 清零重计,不继承旧模型的墙钟", () => {
+    const log = new EventLog();
+    log.push(SessionEventType.SessionCreated, { mode: "default", contextWindow: 200_000 });
+    log.push(
+      SessionEventType.ModelSelected,
+      { modelSelection: { providerId: "p", modelId: "model-a" } },
+    );
+    log.push(
+      SessionEventType.TurnStarted,
+      { turnNumber: 1, input: "slow model run" },
+      { turnId: "turn-1" },
+    );
+    // 模型 A:30 tokens / 10_000ms(慢)
+    completeWithSpeed(log, "turn-1", 30, 10_000);
+    log.push(SessionEventType.TurnComplete, {
+      response: "ok",
+      tokenCount: 30,
+      toolCallCount: 0,
+      duration: 10_000,
+      resultType: "success",
+    }, { turnId: "turn-1" });
+
+    // 切到模型 B:100 tokens / 1_000ms(快)
+    log.push(
+      SessionEventType.ModelSelected,
+      {
+        modelSelection: { providerId: "p", modelId: "model-b" },
+        previousModelSelection: { providerId: "p", modelId: "model-a" },
+      },
+    );
+    log.push(
+      SessionEventType.TurnStarted,
+      { turnNumber: 2, input: "fast model run" },
+      { turnId: "turn-2" },
+    );
+    completeWithSpeed(log, "turn-2", 100, 1_000);
+
+    const projection = new ProductProjection("session-1", "epoch-1");
+    for (const event of log.events) projection.applyEvent(event);
+    const decode = projection.getSnapshot().usage.decode;
+    // 修复后:只累计新模型的步(100 tokens);旧实现会给出 {130, ~11_000} ≈ 11.8 tok/s,
+    // 新模型实际 ≈100 tok/s,读数被旧模型墙钟支配(用户实测"切模型后速度还是原来的")。
+    expect(decode?.tokens).toBe(100);
+    expect(decode?.ms).toBeLessThan(5_000);
+
+    // 同模型继续:正常累计不重置。
+    completeWithSpeed(log, "turn-2", 100, 1_000);
+    for (const event of log.events.slice(-1)) projection.applyEvent(event);
+    expect(projection.getSnapshot().usage.decode?.tokens).toBe(200);
+  });
+});

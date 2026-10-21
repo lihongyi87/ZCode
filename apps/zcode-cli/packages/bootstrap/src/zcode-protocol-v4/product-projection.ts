@@ -509,6 +509,9 @@ export class ProductProjection {
   // silentInitial 保持普通 Main 首轮静默；sourceLess 表示显式 ∅→X；known 保存上一轮
   // 实际使用的 provider/model。thought 只随基线记录，不触发模型身份变化。
   private lastTurnModel: TurnModelBaseline = { kind: "silentInitial" };
+  // 解码吞吐累计所属的模型(provider/model)。切模型即重置 decode(spec 149 速度修复):
+  // 会话累计口径会被旧模型的墙钟支配,切换后读数几乎不动(用户实测)。
+  private decodeModelKey: string | undefined;
   // 种子守卫：事件（权威日志）触碰过的 config 区块不再接受种子覆盖。
   private configModelTouchedByEvent = false;
   // 旧 ModelSelected 不含能力集合；独立守卫允许 runtime seed 补齐旧日志，
@@ -1192,6 +1195,7 @@ export class ProductProjection {
     clone.currentTurnStartedModelOnly = this.currentTurnStartedModelOnly;
     clone.contextWindowState = { ...this.contextWindowState };
     clone.lastTurnModel = { ...this.lastTurnModel };
+    clone.decodeModelKey = this.decodeModelKey;
     clone.configModelTouchedByEvent = this.configModelTouchedByEvent;
     clone.configThoughtLevelsTouchedByEvent = this.configThoughtLevelsTouchedByEvent;
     clone.configModeTouchedByEvent = this.configModeTouchedByEvent;
@@ -1237,6 +1241,7 @@ export class ProductProjection {
     this.currentTurnStartedModelOnly = candidate.currentTurnStartedModelOnly;
     this.contextWindowState = candidate.contextWindowState;
     this.lastTurnModel = candidate.lastTurnModel;
+    this.decodeModelKey = candidate.decodeModelKey;
     this.configModelTouchedByEvent = candidate.configModelTouchedByEvent;
     this.configThoughtLevelsTouchedByEvent = candidate.configThoughtLevelsTouchedByEvent;
     this.configModeTouchedByEvent = candidate.configModeTouchedByEvent;
@@ -4940,6 +4945,18 @@ export class ProductProjection {
     // DSH sessionStats 口径：只把「有首 token 且有 outputTokens」的完成步计入解码吞吐。
     // 纯 tool-call 步没有首 token，不能计入；否则分母缺失会把速度算成 0 或无穷大。
     const decodeTokens = usage.outputTokens;
+    // Bug 原因(用户实测):decode 是会话累计,切模型后旧模型的墙钟仍在分母里沉淀,
+    // 新模型速度读数几乎不动。现按 lastTurnModel 的 provider/model 判定切换:切换后
+    // 第一个完成步清零重计,读数回到「当前模型的解码速度」(对齐 DeepSeek 展示口径)。
+    const decodeModelKey =
+      this.lastTurnModel.kind === "known"
+        ? `${this.lastTurnModel.provider}/${this.lastTurnModel.model}`
+        : undefined;
+    const decodeModelSwitched =
+      decodeModelKey !== undefined &&
+      this.decodeModelKey !== undefined &&
+      this.decodeModelKey !== decodeModelKey;
+    const decodeBase = decodeModelSwitched ? undefined : this.snapshot.usage.decode;
     const decode =
       payload.firstTokenAt !== undefined &&
       Number.isFinite(payload.firstTokenAt) &&
@@ -4947,12 +4964,13 @@ export class ProductProjection {
       Number.isFinite(decodeTokens) &&
       decodeTokens >= 0
         ? {
-            tokens: (this.snapshot.usage.decode?.tokens ?? 0) + decodeTokens,
+            tokens: (decodeBase?.tokens ?? 0) + decodeTokens,
             ms:
-              (this.snapshot.usage.decode?.ms ?? 0) +
+              (decodeBase?.ms ?? 0) +
               Math.max(0, event.timestamp.getTime() - payload.firstTokenAt),
           }
         : this.snapshot.usage.decode;
+    if (decodeModelKey !== undefined) this.decodeModelKey = decodeModelKey;
     deltas.push({
       op: "state.updated",
       patch: {
