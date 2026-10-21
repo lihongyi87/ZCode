@@ -1,7 +1,9 @@
+import { join } from "node:path";
 import { selectActiveConversationBranch, type TraceContext } from "../deps.js";
 import {
   buildMemoryExtractionPrompt,
   createMemoryExtractionScheduler,
+  type MemoryExtractionCursorStore,
   type MemoryExtractionScheduler,
   type MemoryExtractionSnapshot,
 } from "../../memory/extraction.js";
@@ -41,6 +43,8 @@ export function scheduleProjectMemoryExtraction(
   if (!memoryRoot) return;
   if (runtime.isRemoteWorkspace()) return;
   if (!runtime.sessionStore || !runtime.fileSystemPort) return;
+  // const 局部:闭包内 TS 不传播对 runtime 属性的 narrowing。
+  const fileSystemPort = runtime.fileSystemPort;
 
   const snapshotBase = captureProjectMemoryAgentContext(runtime, {
     memoryRoot,
@@ -74,8 +78,39 @@ export function scheduleProjectMemoryExtraction(
     },
   );
 
-  runtime.memoryExtractionScheduler ??= createMemoryExtractionScheduler((extraction) =>
-    executeProjectMemoryExtraction(runtime, extraction),
+  // 批三 D1(spec 149):提取游标持久化到项目记忆根,进程重启后不丢进度
+  // (不漏不重)。文件与被治理记忆同域(按项目天然隔离);坏文件/缺席=从头,
+  // 代价仅是可能重复提取一小段(提取幂等),绝不阻塞调度。
+  const extractionCursorStore: MemoryExtractionCursorStore = {
+    load: async () => {
+      try {
+        const result = await fileSystemPort.readTextFile({
+          path: join(memoryRoot, ".extraction-cursor.json"),
+        });
+        const parsed = JSON.parse(result.content) as { cursor?: unknown };
+        return typeof parsed.cursor === "string" && parsed.cursor
+          ? (parsed.cursor as ProjectMemoryExtractionSnapshot["boundaryMessageId"])
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    save: async (cursor) => {
+      await fileSystemPort.writeTextFile({
+        path: join(memoryRoot, ".extraction-cursor.json"),
+        content: JSON.stringify(
+          { version: 1, cursor, updatedAt: new Date().toISOString() },
+          null,
+          2,
+        ),
+        createParents: true,
+        atomic: true,
+      });
+    },
+  };
+  runtime.memoryExtractionScheduler ??= createMemoryExtractionScheduler(
+    (extraction) => executeProjectMemoryExtraction(runtime, extraction),
+    { cursorStore: extractionCursorStore },
   );
   runtime.memoryExtractionScheduler.schedule(snapshot);
 }

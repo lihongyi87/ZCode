@@ -82,25 +82,48 @@ export function evaluateMemoryExtraction(
   return { decision: "run", messageCount };
 }
 
+/** 批三 D1(spec 149):游标持久化端口。load 失败按「从头提取」处理,不阻塞调度。 */
+export interface MemoryExtractionCursorStore {
+  load(): Promise<MessageId | undefined>;
+  save(cursor: MessageId): Promise<void>;
+}
+
 export function createMemoryExtractionScheduler<
   TSnapshot extends MemoryExtractionSnapshot = MemoryExtractionSnapshot,
 >(
   execute: (
     input: Omit<MemoryExtractionExecutionInput, "snapshot"> & { snapshot: TSnapshot },
   ) => Promise<MemoryExtractionExecutionStatus>,
+  options?: { cursorStore?: MemoryExtractionCursorStore },
 ): MemoryExtractionScheduler<TSnapshot> {
   let cursor: MessageId | undefined;
+  // 初始游标异步加载:首个 snapshot 处理前 await,加载失败=从头(与文件缺席同语义)。
+  const cursorReady: Promise<void> = options?.cursorStore
+    ? options.cursorStore
+        .load()
+        .then((loaded) => {
+          if (loaded) cursor = loaded;
+        })
+        .catch(() => {})
+    : Promise.resolve();
+  // 统一推进口:内存值与持久化同步走;save 失败只丢持久化(下次重启可能重复提取
+  // 一小段,幂等),绝不影响内存推进与本次提取结果。
+  const advanceCursor = (value: MessageId): void => {
+    cursor = value;
+    options?.cursorStore?.save(value).catch(() => {});
+  };
   let latestPending: Promise<SnapshotAcquisition<TSnapshot>> | undefined;
   let running: Promise<void> | undefined;
   let shuttingDown = false;
   const shutdownController = new AbortController();
 
   const processSnapshot = async (snapshot: TSnapshot): Promise<void> => {
+    await cursorReady;
     const decision = evaluateMemoryExtraction(snapshot, cursor);
     const snapshotEnd = snapshot.boundaryMessageId;
 
     if (decision.decision === "skip") {
-      if (snapshotEnd) cursor = snapshotEnd;
+      if (snapshotEnd) advanceCursor(snapshotEnd);
       return;
     }
 
@@ -116,7 +139,7 @@ export function createMemoryExtractionScheduler<
     }
 
     if (!shuttingDown && (status === "success" || status === "no-op") && snapshotEnd) {
-      cursor = snapshotEnd;
+      advanceCursor(snapshotEnd);
     }
   };
 

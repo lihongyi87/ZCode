@@ -132,6 +132,77 @@ describe("memory extraction gate", () => {
   });
 });
 
+describe("memory extraction cursor persistence (spec 149 批三 D1)", () => {
+  it("seeds the cursor from the store and only extracts messages after it", async () => {
+    const saved: MessageId[] = [];
+    const scheduler = createMemoryExtractionScheduler(
+      async () => "success" as MemoryExtractionExecutionStatus,
+      {
+        cursorStore: {
+          load: async () => createMessageId("cursor-1"),
+          save: async (cursor) => {
+            saved.push(cursor);
+          },
+        },
+      },
+    );
+
+    const alreadyExtracted = userMessage("cursor-1", ["previous durable request"]);
+    const fresh = userMessage("fresh-1", ["durable preference two"]);
+    scheduler.schedule(snapshot([alreadyExtracted, fresh]));
+    await scheduler.drain();
+
+    // cursor-1 已提取过:本次只跑 fresh-1 一条,推进点=新边界并立即持久化。
+    expect(scheduler.getCursor()).toBe(fresh.info.id);
+    expect(saved).toEqual([fresh.info.id]);
+  });
+
+  it("starts from scratch when loading the stored cursor fails", async () => {
+    let executed = 0;
+    const scheduler = createMemoryExtractionScheduler(
+      async () => {
+        executed += 1;
+        return "success" as MemoryExtractionExecutionStatus;
+      },
+      {
+        cursorStore: {
+          load: async () => {
+            throw new Error("corrupt cursor file");
+          },
+          save: async () => {},
+        },
+      },
+    );
+
+    scheduler.schedule(snapshot([userMessage("m1", ["durable preference three"])]));
+    await scheduler.drain();
+
+    // 加载失败=从头提取(与文件缺席同语义),不阻塞调度。
+    expect(executed).toBe(1);
+  });
+
+  it("keeps the in-memory advance when persisting fails", async () => {
+    const scheduler = createMemoryExtractionScheduler(
+      async () => "success" as MemoryExtractionExecutionStatus,
+      {
+        cursorStore: {
+          load: async () => undefined,
+          save: async () => {
+            throw new Error("disk full");
+          },
+        },
+      },
+    );
+
+    const m1 = userMessage("m1", ["durable preference four"]);
+    scheduler.schedule(snapshot([m1]));
+    await scheduler.drain();
+
+    // save 失败只丢持久化(重启后可能重复提取一小段,提取幂等),绝不影响内存推进。
+    expect(scheduler.getCursor()).toBe(m1.info.id);
+  });
+});
+
 describe("memory extraction scheduler", () => {
   it("reports pending work from schedule until the running extraction settles", async () => {
     const run = deferred<MemoryExtractionExecutionStatus>();
