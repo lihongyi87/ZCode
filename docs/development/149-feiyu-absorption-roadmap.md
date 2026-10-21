@@ -24,7 +24,6 @@
 | 二  | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关)      | 未开工                                                                                   | core/tool、services                        |
 | 三  | D 记忆 write-lease(租约+history/diff+撤销;extraction cursor 持久化 migration 0023) | 未开工                                                                                   | core/memory、adapters/storage              |
 | 四  | E 遥测统一总开关                                                                   | **后端总闸完成**(settings 键 telemetryEnabled + 四出口门);UI 开关待接                    | shared、services、desktop                  |
-| 四b | E 补齐:SettingsPage UI 开关(zh/en)                                                 | 未开工                                                                                   | ui                                         |
 | 五  | F 会话导入泛化(来源枚举+附件保留+导入会话只读边界)                                 | 未开工                                                                                   | services、shared                           |
 
 ## 批四实现状态(2026-10-21)
@@ -43,8 +42,13 @@
 `~/.zcode/v2/setting.json` 一次,文件缺席/损坏/键缺席=启用(总闸只允许显式关闭);
 运行中改设置重启生效(与 spawn env 同语义,已注释登记)。
 
-待接(UI 开关):SettingsPage 增设分区渲染 toggle(zh/en i18n),复刻 memoryEnabled 的
-updateSharedSettings 链;schema/patch 已就绪。
+UI 开关(批四b,已接):放「通用设置」分区(不放「反馈与诊断」——该分区头注释登记了
+用户已确认方向「遥测状态只读展示,本分区不提供开启入口」,不推翻)。链:SettingsPage
+state+同步+handleTelemetryEnabledChange(updateSharedSettings)→ GeneralSectionContent
+Switch 行 → i18n(settings.telemetry[Description],zh/en)。userActionTraceCatalog 的
+SETTINGS_USER_ACTION_FEATURES 登记 "settings.telemetry": ["toggle_telemetry"](featureId
+是闭合 catalog,keyof 推导,漏登记会 typecheck 报错)。另注:packages/ui 无自身测试脚本,
+混合 runner 是根 run-tests.mjs,node:test 文件在 npx vitest 下会误报无套件。
 
 ## 批一实现状态(2026-10-21)
 
