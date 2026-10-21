@@ -20,11 +20,41 @@
 
 | 批 | 内容 | 状态 | 落点 |
 | -- | ---- | ---- | ---- |
-| 一 | A 任务互发 steer 化 + B proactive 深度护栏 | 本 spec 契约已定,实现中 | contracts/adapters/core/services/shared/ui |
+| 一 | A 任务互发 steer 化 + B proactive 深度护栏 | 信封契约与消费端护栏已落地(见下「批一实现状态」);发送路由/接收投递/投影/UI 待接线 | contracts/adapters/core/services/shared/ui |
 | 二 | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关) | 未开工 | core/tool、services |
 | 三 | D 记忆 write-lease(租约+history/diff+撤销;extraction cursor 持久化 migration 0023) | 未开工 | core/memory、adapters/storage |
 | 四 | E 遥测统一总开关(复刻 memoryEnabled 跨层链;main 进程 ARMS/数仓出口改读 settings 门) | 未开工 | shared、services、desktop |
 | 五 | F 会话导入泛化(来源枚举+附件保留+导入会话只读边界) | 未开工 | services、shared |
+
+## 批一实现状态(2026-10-21)
+
+已落地(commit ②):
+
+- **信封 v2**:`session-mailbox.port.ts` 加可选 `sourceType/sourceCommandId/depth/senderLabel` +
+  `SessionMailboxPort.append`(适配器生成 messageId/createdAt,tmp+rename 原子落盘,文件名毫秒前缀保序)
+  + `drainUnread` 的 `filter` 谓词(limit 只计命中,非命中留在 unread)+ `isWakeableTaskMessage`
+  纯函数(信任锚三件套齐全且 depth≤上限)。可选字段类型非法→解析失败走既有死信语义(整批拒绝,
+  与 JSON.parse 损坏同路径);旧格式照常解析。测试 5/5(adapters/tests/session-mailbox.test.ts)。
+- **消费端护栏**:`core/hooks/session-mailbox.ts` 按 hook 事件选择性 drain——PostToolUse(忙 steer)
+  与 Stop(唤醒)只取可唤醒信封;UserPromptSubmit(人驱动)全量交付。深度上限常量
+  `MAX_TASK_MESSAGE_WAKE_DEPTH=4`。注入 XML 携带 `sender_label/depth/source_type` 属性。
+- **steer 来源**:`TurnSteerSource` 闭集加 `"task_message"`;runtime-tools 把 hook 透传的
+  steerSource 传给 `steerTurn({source})`。
+
+已定设计决策(接线时照此执行):
+
+- **信箱=同进程跨会话传输**:发送侧对 `sess_*` 目标直接 `sessionMailboxPort.append`,不新开
+  workspace 事件;唤醒与忙时 steer 由目标会话自身的 drain hook 承担(涌现语义,无需在发送方判断
+  忙闲)。跨 host(远程/多窗口)才走既有 `workspace_session_message_send_requested` 事件链
+  (host 监听/总线/host 入口全部现成,只差 `deliverSessionMessage` 实现)。
+- **depth 来源**:发送时取「当前 turn 的唤醒深度+1」;该状态需在 drain 注入时记录(落点:
+  runtime-tools 的 enqueuePendingInput 回调处,随发送路由一起接线)。未接线前所有发送 depth=0,
+  护栏退化为「信任锚缺失不唤醒」,不可先放开唤醒链测试。
+
+待接线(下一提交单元):① `core/subagent/runner.ts` 的 `sendMessageToLocalAgent` 增加 `sess_*`
+目标路由(append+返回 delivery:"queued");② `deliverSessionMessage` 接收实现(host→services→
+目标 CLI;同机走信箱 append,跨机走事件链);③ V4 投影 `origin:"task_message"` +
+`originMeta.senderSessionId/senderLabel` 填充;④ UI 来源徽标与 i18n。
 
 不做:ChatGPT 订阅模型接入(逆向订阅,与本仓许可合规取向冲突)。
 

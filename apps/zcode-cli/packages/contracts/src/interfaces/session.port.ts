@@ -280,7 +280,11 @@ export interface TurnSteerInput {
 }
 
 export type TurnSteerCommandKind = "sendText" | "sendGoalCommand" | "compact";
-export type TurnSteerSource = "plan_approval_feedback" | "workflow_refine_feedback";
+export type TurnSteerSource =
+  | "plan_approval_feedback"
+  | "workflow_refine_feedback"
+  /** 会话信箱任务消息(spec 149):mailbox drain 经 PostToolUse 边界注入当前轮。 */
+  | "task_message";
 
 /**
  * 输入投递语义：
