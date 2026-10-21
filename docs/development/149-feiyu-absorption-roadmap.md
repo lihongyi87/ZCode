@@ -28,7 +28,7 @@
 
 ## 批一实现状态(2026-10-21)
 
-已落地(commit ②):
+已落地(commit ② 信封契约+护栏;commit ③ 发送链):
 
 - **信封 v2**:`session-mailbox.port.ts` 加可选 `sourceType/sourceCommandId/depth/senderLabel` +
   `SessionMailboxPort.append`(适配器生成 messageId/createdAt,tmp+rename 原子落盘,文件名毫秒前缀保序)
@@ -40,21 +40,26 @@
   `MAX_TASK_MESSAGE_WAKE_DEPTH=4`。注入 XML 携带 `sender_label/depth/source_type` 属性。
 - **steer 来源**:`TurnSteerSource` 闭集加 `"task_message"`;runtime-tools 把 hook 透传的
   steerSource 传给 `steerTurn({source})`。
+- **发送链(commit ③)**:SendMessage 工具此前"有壳无芯"(`subagentPort.sendMessage` 无实现,
+  `includeSendMessage` 恒 false,工具从不注册)。现补齐:runner `sendMessageToLocalAgent` 对
+  非本地 agent 的 `sess_*` 目标路由到 `sendTaskMessage` 桥;桥(`methods/subagent.ts`)写目标
+  会话信箱(`sourceType:"task"`,depth=当前 turn 唤醒深度+1,人驱动 turn=0),返回
+  `delivery:"queued"`;忙/闲注入由目标会话自身 drain hook 承担(涌现语义,发送方不判断忙闲)。
+  唤醒深度状态在 runtime-tools 的 steer 成功路径记录(`recordTaskMessageWakeDepth`,turnId 绑定)。
+  测试 2/2(core/tests/task-message-send.test.ts)。**SendMessage 跨会话投递自此可用。**
 
 已定设计决策(接线时照此执行):
 
-- **信箱=同进程跨会话传输**:发送侧对 `sess_*` 目标直接 `sessionMailboxPort.append`,不新开
-  workspace 事件;唤醒与忙时 steer 由目标会话自身的 drain hook 承担(涌现语义,无需在发送方判断
-  忙闲)。跨 host(远程/多窗口)才走既有 `workspace_session_message_send_requested` 事件链
-  (host 监听/总线/host 入口全部现成,只差 `deliverSessionMessage` 实现)。
-- **depth 来源**:发送时取「当前 turn 的唤醒深度+1」;该状态需在 drain 注入时记录(落点:
-  runtime-tools 的 enqueuePendingInput 回调处,随发送路由一起接线)。未接线前所有发送 depth=0,
-  护栏退化为「信任锚缺失不唤醒」,不可先放开唤醒链测试。
+- **信箱=同进程跨会话传输**(commit ③ 已按此实现);跨 host(远程/多窗口)才走既有
+  `workspace_session_message_send_requested` 事件链(host 监听/总线/host 入口全部现成,只差
+  `deliverSessionMessage` 实现)。
+- **depth 状态以 turnId 绑定,宁可少计不可多计**:guide steer 注入与当前 turn 同 id 可计;
+  Stop 唤醒产生的新 turn 计 0(链深被低估,护栏只会更保守)。状态并入 runtime-tools.ts
+  (避免 core/src/runtime 下新文件触发 unmanaged-new-file)。
 
-待接线(下一提交单元):① `core/subagent/runner.ts` 的 `sendMessageToLocalAgent` 增加 `sess_*`
-目标路由(append+返回 delivery:"queued");② `deliverSessionMessage` 接收实现(host→services→
-目标 CLI;同机走信箱 append,跨机走事件链);③ V4 投影 `origin:"task_message"` +
-`originMeta.senderSessionId/senderLabel` 填充;④ UI 来源徽标与 i18n。
+待接线(下一提交单元):① `deliverSessionMessage` 接收实现(host→services→目标 CLI;同机走
+信箱 append,跨机走事件链);② V4 投影 `origin:"task_message"` +
+`originMeta.senderSessionId/senderLabel` 填充;③ UI 来源徽标与 i18n。
 
 不做:ChatGPT 订阅模型接入(逆向订阅,与本仓许可合规取向冲突)。
 

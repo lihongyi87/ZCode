@@ -15,7 +15,11 @@ export function createSessionMailboxHookRegistrations(options: {
   enqueuePendingInput?: (
     input: string,
     traceContext: TraceContext,
-    meta?: { steerSource?: "task_message" },
+    meta?: {
+      steerSource?: "task_message";
+      /** 本批可唤醒信封的最大深度;发送侧据此递增下一跳 depth(spec 149)。 */
+      wakeDepth?: number;
+    },
   ) => Promise<void>;
   mailbox: SessionMailboxPort;
   sessionId: SessionId;
@@ -37,6 +41,7 @@ export function createSessionMailboxHookRegistrations(options: {
     if (messages.length === 0) return undefined;
 
     if (input.hookEventName === HookEventName.PostToolUse && options.enqueuePendingInput) {
+      const wakeDepth = Math.max(0, ...messages.map((message) => message.depth ?? 0));
       for (const message of messages) {
         await options.enqueuePendingInput(
           formatMailboxMessages([message]),
@@ -45,7 +50,10 @@ export function createSessionMailboxHookRegistrations(options: {
             traceId: input.traceId,
             turnId: input.turnId,
           },
-          message.sourceType !== undefined ? { steerSource: "task_message" } : undefined,
+          {
+            ...(message.sourceType !== undefined ? { steerSource: "task_message" } : {}),
+            wakeDepth,
+          },
         );
       }
       return undefined;

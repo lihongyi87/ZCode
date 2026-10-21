@@ -29,6 +29,7 @@ import type {
   SubagentPort,
 } from "../deps.js";
 import { AgentRuntime } from "../agent-runtime.js";
+import { resolveOutgoingTaskMessageDepth } from "../helpers/runtime-tools.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { cloneModelSelection } from "../model-selection.js";
 import { resolveSubagentSelection } from "../helpers/subagent-selection.js";
@@ -72,6 +73,9 @@ export function createDefaultSubagentPort(
     return undefined;
   }
 
+  // const 局部:闭包内 TS 不传播对 deps 属性的 narrowing,先固定再进桥接。
+  const taskMailbox = deps.sessionMailboxPort;
+
   return createExploreSubagentPort({
     logger: this.logger,
     inactivityTimeoutMs: this.config.subagents?.inactivityTimeoutMs,
@@ -94,6 +98,43 @@ export function createDefaultSubagentPort(
         traceContext: notification.traceContext,
       });
     },
+    sendTaskMessage: taskMailbox
+      ? async (input) => {
+          // spec 149:跨会话任务消息=写目标会话信箱。depth=当前 turn 唤醒深度+1
+          // (人驱动 turn 唤醒深度 undefined→depth 0);忙/闲注入由目标会话 drain hook 承担。
+          const depth = (resolveOutgoingTaskMessageDepth(this, this.activeTurn?.turnId) ?? -1) + 1;
+          try {
+            const envelope = await taskMailbox.append({
+              toSessionId: input.toSessionId as Parameters<typeof taskMailbox.append>[0]["toSessionId"],
+              fromSessionId: this.sessionId,
+              content: input.content,
+              sourceType: "task",
+              sourceCommandId: input.sourceCommandId,
+              depth,
+            });
+            this.logger?.info("Task message appended to session mailbox", {
+              event: "session.task_message.appended",
+              module: "core.runtime",
+              toSessionId: input.toSessionId,
+              messageId: envelope.messageId,
+              depth,
+              status: "completed",
+            });
+            return {
+              status: "success",
+              messageId: envelope.messageId,
+              delivery: "queued",
+              taskId: input.toSessionId,
+            };
+          } catch (error) {
+            return {
+              status: "failed",
+              messageId: "",
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        }
+      : undefined,
     getAllowedTools: () => {
       return buildExploreAllowedTools({
         embeddedSearchEnabled: resolveSubagentEmbeddedSearchEnabled(),

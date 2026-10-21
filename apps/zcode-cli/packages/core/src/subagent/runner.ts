@@ -120,6 +120,9 @@ export type EnqueueParentTaskNotification = (
   notification: ParentTaskNotificationCommand,
 ) => ParentTaskNotificationEnqueueResult;
 
+/** 跨会话任务消息目标:会话 id(sess_*)。与信箱适配器的 SESSION_ID_PATTERN 同源惯例。 */
+const TASK_MESSAGE_TARGET_PATTERN = /^sess_[A-Za-z0-9._-]+$/;
+
 export interface ExploreSubagentPortOptions {
   runExploreAgent: (
     request: ExploreSubagentRuntimeRequest,
@@ -130,6 +133,16 @@ export interface ExploreSubagentPortOptions {
   // 既让 TypeScript 拒绝 async enqueue，又把父队列的显式拒绝暴露给调用方
   // （stale_branch / shutdown），避免 fake-notified（issue #64）。
   enqueueParentTaskNotification?: EnqueueParentTaskNotification;
+  /**
+   * 跨会话任务消息桥(spec 149):`to` 为 sess_* 目标时,sendMessage 经此写入目标会话
+   * 信箱;忙/闲的注入与唤醒由目标会话自身的 drain hook 承担,发送方不做忙闲判断。
+   * 深度递增在桥接实现内完成(它才能读到 runtime 唤醒状态)。
+   */
+  sendTaskMessage?: (input: {
+    toSessionId: string;
+    content: string;
+    sourceCommandId?: string;
+  }) => Promise<SubagentSendMessageResult>;
   outputRootDir?: string;
   profiles?: readonly AgentProfile[];
   getAgentDefinitions?: GetAgentDefinitions;
@@ -930,6 +943,17 @@ async function sendMessageToLocalAgent(
 
   const task = registry.get(request.to);
   if (!task || task.type !== "local_agent") {
+    // spec 149:非本地 agent 的 sess_* 目标=同进程其他顶层会话,走信箱投递。
+    if (
+      options.sendTaskMessage &&
+      TASK_MESSAGE_TARGET_PATTERN.test(request.to)
+    ) {
+      return options.sendTaskMessage({
+        toSessionId: request.to,
+        content: request.message,
+        sourceCommandId: request.trace?.traceId,
+      });
+    }
     return createSendMessageFailure(
       request,
       `No active local_agent task found for target ${request.to}.`,

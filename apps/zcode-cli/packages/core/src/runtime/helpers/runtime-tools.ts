@@ -26,6 +26,47 @@ import { isStaleBranchRuntimeTaskEvent } from "../methods/runtime-command-genera
 import { resolveEnabledProjectMemoryRoot } from "./project-memory.js";
 import { sessionHasLoadedSkill } from "../../agent/loaded-skills.js";
 
+import type { TurnId } from "@zcode/contracts";
+
+/**
+ * 任务消息唤醒深度状态(spec 149)。
+ *
+ * 记录「当前 turn 是被 depth=N 的任务消息唤醒/注入」这一事实,发送侧据此递增:
+ * 被唤醒 turn 内的再发送 depth=N+1;人驱动 turn 的发送 depth=0。
+ * 以 turnId 绑定:guide steer 注入与当前 turn 同 id(可计);Stop 唤醒产生的新 turn
+ * id 不同(计 0)——宁可少计不可多计,护栏只允许被低估。
+ */
+export interface TaskMessageWakeState {
+  turnId: TurnId | undefined;
+  depth: number;
+}
+
+const wakeDepthByRuntime = new WeakMap<object, TaskMessageWakeState>();
+
+/** drain 注入成功后记录;同一 turn 内多条取最大深度。 */
+export function recordTaskMessageWakeDepth(
+  runtime: object,
+  turnId: TurnId | undefined,
+  depth: number,
+): void {
+  const existing = wakeDepthByRuntime.get(runtime);
+  const merged =
+    existing && existing.turnId === turnId ? Math.max(existing.depth, depth) : depth;
+  wakeDepthByRuntime.set(runtime, { turnId, depth: merged });
+}
+
+/** 发送侧取当前 turn 的唤醒深度;非唤醒 turn(人驱动)返回 undefined → 发送 depth=0。 */
+export function resolveOutgoingTaskMessageDepth(
+  runtime: object,
+  activeTurnId: TurnId | undefined,
+): number | undefined {
+  const state = wakeDepthByRuntime.get(runtime);
+  if (!state || activeTurnId === undefined || state.turnId !== activeTurnId) {
+    return undefined;
+  }
+  return state.depth;
+}
+
 const DEFAULT_SUBAGENT_BACKGROUND_BASH_MAX_MS = 3_600_000;
 const EMPTY_RUNTIME_HOOK_CONFIG = {
   enabled: false,
@@ -140,6 +181,11 @@ function createRuntimeHookRunner(
           reason: result.reason,
           status: "completed",
         });
+        return;
+      }
+      // 注入成功即记录本 turn 的唤醒深度:该 turn 内的再发送 depth=N+1(spec 149)。
+      if (meta?.wakeDepth !== undefined) {
+        recordTaskMessageWakeDepth(runtime, traceContext.turnId, meta.wakeDepth);
       }
     },
     mailbox: deps.sessionMailboxPort,
