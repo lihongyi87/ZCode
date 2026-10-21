@@ -7,7 +7,7 @@ import { uploadBotGroupAttachments } from "./groupAttachmentUpload.js";
 /* oxlint-disable eslint(max-lines) -- 迁移期需要在一个门面里集中维护旧 task projection 到 ZCode session 的协议适配。 */
 import { createHash, randomUUID } from "node:crypto";
 import { createZCodeAgentConnectionScope } from "#src/zcode-agent/zcodeAgentConnectionScope.js";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -296,7 +296,57 @@ export function createZCodeTaskServiceAdapter(
     });
   }
 
-  function unsupported(name: string): never {
+  /**
+ * spec 149:把任务信封原子写入本机会话信箱(与 CLI NodeSessionMailboxAdapter 同构)。
+ * 根目录解析与 CLI 一致:ZCODE_MAILBOX_ROOT ?? ~/.zcode/mailbox。services 不依赖
+ * apps/zcode-cli/packages/adapters(分层方向),故此处为结构性同构实现,字段以
+ * CLI contracts 的 SessionMailboxEnvelope 为权威,改动需两处同步。
+ */
+const SESSION_MAILBOX_ID_PATTERN = /^sess_[A-Za-z0-9._-]+$/;
+
+function resolveSessionMailboxRoot(): string {
+  const configured = process.env.ZCODE_MAILBOX_ROOT?.trim();
+  if (!configured) return join(homedir(), ".zcode", "mailbox");
+  if (configured === "~" || configured.startsWith("~/")) {
+    return join(homedir(), configured.slice(1));
+  }
+  return configured;
+}
+
+function appendSessionMailboxEnvelope(input: {
+  toSessionId: string;
+  fromSessionId: string;
+  content: string;
+  messageId: string;
+  sourceType?: "task" | "automation" | "offpeak";
+  sourceCommandId?: string;
+  depth?: number;
+  senderLabel?: string;
+}): void {
+  if (!SESSION_MAILBOX_ID_PATTERN.test(input.toSessionId)) {
+    throw new Error(`Invalid session id: ${input.toSessionId}`);
+  }
+  const unreadDir = join(resolveSessionMailboxRoot(), input.toSessionId, "unread");
+  mkdirSync(unreadDir, { recursive: true });
+  const envelope: Record<string, unknown> = {
+    version: 1,
+    messageId: input.messageId,
+    fromSessionId: input.fromSessionId,
+    toSessionId: input.toSessionId,
+    content: input.content,
+    createdAt: new Date().toISOString(),
+  };
+  if (input.sourceType !== undefined) envelope.sourceType = input.sourceType;
+  if (input.sourceCommandId !== undefined) envelope.sourceCommandId = input.sourceCommandId;
+  if (input.depth !== undefined) envelope.depth = input.depth;
+  if (input.senderLabel !== undefined) envelope.senderLabel = input.senderLabel;
+  const fileName = `${String(Date.now()).padStart(15, "0")}-${input.messageId}.json`;
+  const tmpPath = join(unreadDir, `.${fileName}.tmp`);
+  writeFileSync(tmpPath, JSON.stringify(envelope), "utf8");
+  renameSync(tmpPath, join(unreadDir, fileName));
+}
+
+function unsupported(name: string): never {
     throw Object.assign(
       new Error(`ZCode task service adapter does not support IZCodeTaskService.${name} yet.`),
       {
@@ -2099,9 +2149,37 @@ export function createZCodeTaskServiceAdapter(
     },
 
     async deliverSessionMessage(
-      _request: SessionMessageSendRequested,
+      request: SessionMessageSendRequested,
     ): Promise<SessionMessageDeliveryResult> {
-      unsupported("deliverSessionMessage");
+      // spec 149:接收侧=把消息写进目标会话的信箱(本机文件),忙/闲注入由目标 CLI 的
+      // drain hook 承担。requestId 幂等由 taskRealtimeBus 保证;文件名带 messageId 使
+      // 重复投递落到同一文件(rename 原子覆盖),不产生双份。
+      try {
+        appendSessionMailboxEnvelope({
+          toSessionId: request.toSessionId,
+          fromSessionId: request.fromSessionId,
+          content: request.content,
+          messageId: request.messageId,
+          sourceType: request.sourceType,
+          sourceCommandId: request.sourceCommandId ?? request.requestId,
+          depth: request.depth,
+          senderLabel: request.senderLabel,
+        });
+        return {
+          messageId: request.messageId,
+          requestId: request.requestId,
+          sessionId: request.fromSessionId,
+          status: "success",
+        };
+      } catch (error) {
+        return {
+          error: error instanceof Error ? error.message : String(error),
+          messageId: request.messageId,
+          requestId: request.requestId,
+          sessionId: request.fromSessionId,
+          status: "failed",
+        };
+      }
     },
 
     async sendSessionMessageDeliveryResult(): Promise<void> {

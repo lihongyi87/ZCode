@@ -20,7 +20,7 @@
 
 | 批 | 内容 | 状态 | 落点 |
 | -- | ---- | ---- | ---- |
-| 一 | A 任务互发 steer 化 + B proactive 深度护栏 | **信封/护栏/发送链/来源可见性(UI)全通**;跨机器投递(deliverSessionMessage)为后续单元 | contracts/adapters/core/services/shared/ui |
+| 一 | A 任务互发 steer 化 + B proactive 深度护栏 | **完成**(信封/护栏/发送链/可见性/跨机接收侧;仅剩无消费者的跨 host 发起侧 API,待消费场景) | contracts/adapters/core/services/shared/ui |
 | 二 | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关) | 未开工 | core/tool、services |
 | 三 | D 记忆 write-lease(租约+history/diff+撤销;extraction cursor 持久化 migration 0023) | 未开工 | core/memory、adapters/storage |
 | 四 | E 遥测统一总开关(复刻 memoryEnabled 跨层链;main 进程 ARMS/数仓出口改读 settings 门) | 未开工 | shared、services、desktop |
@@ -47,6 +47,12 @@
   `delivery:"queued"`;忙/闲注入由目标会话自身 drain hook 承担(涌现语义,发送方不判断忙闲)。
   唤醒深度状态在 runtime-tools 的 steer 成功路径记录(`recordTaskMessageWakeDepth`,turnId 绑定)。
   测试 2/2(core/tests/task-message-send.test.ts)。**SendMessage 跨会话投递自此可用。**
+- **跨机接收侧(commit ⑤)**:`deliverSessionMessage` 从 unsupported 占位转正——把信封原子
+  写进本机目标会话信箱(根目录 `ZCODE_MAILBOX_ROOT ?? ~/.zcode/mailbox`,与 CLI 同构;文件名
+  带 messageId,重复投递原子覆盖不双份)。请求契约(shared + services 两侧)加可选来源字段
+  (sourceType/sourceCommandId/depth/senderLabel,sourceCommandId 兜底取 requestId)。
+  实现走结构性同构而非引入 CLI adapters 依赖(services 不依赖 apps 侧包,分层方向保持)。
+  发起侧(跨 host 的 agent 主动发送事件)仍无消费者——UI/agent 的本地互发走信箱直写,已闭环。
 - **来源可见性(commit ④)**:`TaskMessageOriginMeta`(contracts)贯穿 steer 全管道——
   `TurnSteerInput/PendingSteerInputInfo/PendingTurnInput/TurnSteerDrained.drainedInputs` 平行可选
   字段 `taskMessageOrigin`(不经 `TurnInputIntentMetadata`:那是完整准入元数据,必填

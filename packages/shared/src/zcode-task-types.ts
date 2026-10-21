@@ -226,6 +226,11 @@ export interface ZCodeWorkspaceSessionMessageSendRequested {
     messageId: string;
     requestId: string;
     toSessionId: string;
+    /** spec 149 来源字段:与 SessionMailboxEnvelope 可选字段同构;缺席=旧发送方。 */
+    sourceType?: "task" | "automation" | "offpeak";
+    sourceCommandId?: string;
+    depth?: number;
+    senderLabel?: string;
   };
 }
 
