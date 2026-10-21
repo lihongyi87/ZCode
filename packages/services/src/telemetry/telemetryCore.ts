@@ -42,6 +42,8 @@ const REPORT_MAX_ATTEMPTS = 2;
 
 interface TelemetryCoreDependencies {
   fetchImpl?: typeof fetch;
+  /** 遥测总开关(spec 149 批四):返回 false 时所有上报静默跳过;缺省=启用。 */
+  enabled?: () => boolean;
   loadUserId?: () => Promise<string>;
   loadAuthorization?: (userId: string) => Promise<string | null>;
   loadMarketingParams?: () => Promise<OAuthLoginAttribution | null>;
@@ -509,6 +511,11 @@ export function createTelemetryCore(dependencies: TelemetryCoreDependencies = {}
   }
 
   function trackReport(report: Promise<void>): Promise<void> {
+    // 总闸单点:app_launch / app_daily_active / reportEvent 都经此跟踪,关闸时跳过
+    // 上报但保持调用方 promise 语义(状态锁/去重账本不再触碰)。
+    if (dependencies.enabled && !dependencies.enabled()) {
+      return Promise.resolve();
+    }
     const tracked = report.finally(() => pendingReports.delete(tracked));
     pendingReports.add(tracked);
     return tracked;

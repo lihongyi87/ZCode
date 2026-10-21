@@ -621,6 +621,8 @@ const appSettingsObjectSchema = z.object({
   onboardingOccupation: appSettingsOccupationSchema.nullish(),
   proactiveSuggestionsEnabled: z.boolean().optional(),
   memoryEnabled: z.boolean().default(false),
+  /** 遥测总开关(spec 149 批四):false 时四类出口全关;缺省 true=现行为不变。 */
+  telemetryEnabled: z.boolean().default(true),
   lastWorkspaceSession: z.array(appWorkspaceSessionEntrySchema).default([]),
   lastActiveWorkspace: appWorkspaceSessionEntrySchema.nullable().optional(),
   remoteConversationWorkspaceBySourceServerId: z
@@ -756,6 +758,7 @@ export const appSettingsPatchSchema = z.object({
     .nullish(),
   proactiveSuggestionsEnabled: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
+  telemetryEnabled: z.boolean().optional(),
   lastWorkspaceSession: z.array(appWorkspaceSessionEntrySchema).optional(),
   lastActiveWorkspace: appWorkspaceSessionEntrySchema.nullable().optional(),
   remoteConversationWorkspaceBySourceServerId: z

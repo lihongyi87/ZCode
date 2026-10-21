@@ -297,56 +297,56 @@ export function createZCodeTaskServiceAdapter(
   }
 
   /**
- * spec 149:把任务信封原子写入本机会话信箱(与 CLI NodeSessionMailboxAdapter 同构)。
- * 根目录解析与 CLI 一致:ZCODE_MAILBOX_ROOT ?? ~/.zcode/mailbox。services 不依赖
- * apps/zcode-cli/packages/adapters(分层方向),故此处为结构性同构实现,字段以
- * CLI contracts 的 SessionMailboxEnvelope 为权威,改动需两处同步。
- */
-const SESSION_MAILBOX_ID_PATTERN = /^sess_[A-Za-z0-9._-]+$/;
+   * spec 149:把任务信封原子写入本机会话信箱(与 CLI NodeSessionMailboxAdapter 同构)。
+   * 根目录解析与 CLI 一致:ZCODE_MAILBOX_ROOT ?? ~/.zcode/mailbox。services 不依赖
+   * apps/zcode-cli/packages/adapters(分层方向),故此处为结构性同构实现,字段以
+   * CLI contracts 的 SessionMailboxEnvelope 为权威,改动需两处同步。
+   */
+  const SESSION_MAILBOX_ID_PATTERN = /^sess_[A-Za-z0-9._-]+$/;
 
-function resolveSessionMailboxRoot(): string {
-  const configured = process.env.ZCODE_MAILBOX_ROOT?.trim();
-  if (!configured) return join(homedir(), ".zcode", "mailbox");
-  if (configured === "~" || configured.startsWith("~/")) {
-    return join(homedir(), configured.slice(1));
+  function resolveSessionMailboxRoot(): string {
+    const configured = process.env.ZCODE_MAILBOX_ROOT?.trim();
+    if (!configured) return join(homedir(), ".zcode", "mailbox");
+    if (configured === "~" || configured.startsWith("~/")) {
+      return join(homedir(), configured.slice(1));
+    }
+    return configured;
   }
-  return configured;
-}
 
-function appendSessionMailboxEnvelope(input: {
-  toSessionId: string;
-  fromSessionId: string;
-  content: string;
-  messageId: string;
-  sourceType?: "task" | "automation" | "offpeak";
-  sourceCommandId?: string;
-  depth?: number;
-  senderLabel?: string;
-}): void {
-  if (!SESSION_MAILBOX_ID_PATTERN.test(input.toSessionId)) {
-    throw new Error(`Invalid session id: ${input.toSessionId}`);
+  function appendSessionMailboxEnvelope(input: {
+    toSessionId: string;
+    fromSessionId: string;
+    content: string;
+    messageId: string;
+    sourceType?: "task" | "automation" | "offpeak";
+    sourceCommandId?: string;
+    depth?: number;
+    senderLabel?: string;
+  }): void {
+    if (!SESSION_MAILBOX_ID_PATTERN.test(input.toSessionId)) {
+      throw new Error(`Invalid session id: ${input.toSessionId}`);
+    }
+    const unreadDir = join(resolveSessionMailboxRoot(), input.toSessionId, "unread");
+    mkdirSync(unreadDir, { recursive: true });
+    const envelope: Record<string, unknown> = {
+      version: 1,
+      messageId: input.messageId,
+      fromSessionId: input.fromSessionId,
+      toSessionId: input.toSessionId,
+      content: input.content,
+      createdAt: new Date().toISOString(),
+    };
+    if (input.sourceType !== undefined) envelope.sourceType = input.sourceType;
+    if (input.sourceCommandId !== undefined) envelope.sourceCommandId = input.sourceCommandId;
+    if (input.depth !== undefined) envelope.depth = input.depth;
+    if (input.senderLabel !== undefined) envelope.senderLabel = input.senderLabel;
+    const fileName = `${String(Date.now()).padStart(15, "0")}-${input.messageId}.json`;
+    const tmpPath = join(unreadDir, `.${fileName}.tmp`);
+    writeFileSync(tmpPath, JSON.stringify(envelope), "utf8");
+    renameSync(tmpPath, join(unreadDir, fileName));
   }
-  const unreadDir = join(resolveSessionMailboxRoot(), input.toSessionId, "unread");
-  mkdirSync(unreadDir, { recursive: true });
-  const envelope: Record<string, unknown> = {
-    version: 1,
-    messageId: input.messageId,
-    fromSessionId: input.fromSessionId,
-    toSessionId: input.toSessionId,
-    content: input.content,
-    createdAt: new Date().toISOString(),
-  };
-  if (input.sourceType !== undefined) envelope.sourceType = input.sourceType;
-  if (input.sourceCommandId !== undefined) envelope.sourceCommandId = input.sourceCommandId;
-  if (input.depth !== undefined) envelope.depth = input.depth;
-  if (input.senderLabel !== undefined) envelope.senderLabel = input.senderLabel;
-  const fileName = `${String(Date.now()).padStart(15, "0")}-${input.messageId}.json`;
-  const tmpPath = join(unreadDir, `.${fileName}.tmp`);
-  writeFileSync(tmpPath, JSON.stringify(envelope), "utf8");
-  renameSync(tmpPath, join(unreadDir, fileName));
-}
 
-function unsupported(name: string): never {
+  function unsupported(name: string): never {
     throw Object.assign(
       new Error(`ZCode task service adapter does not support IZCodeTaskService.${name} yet.`),
       {

@@ -5,7 +5,7 @@ import "./desktopEarlyDataBaseDirBootstrap.js";
 import "./desktopEarlyChromiumHardwareAccelerationBootstrap.js";
 import { powerMonitor, powerSaveBlocker } from "electron";
 import { crashCapturePaths } from "./appCrashCaptureBootstrap.js";
-import { armsInitPromise } from "./appARMSBootstrap.js";
+import { armsInitPromise, readTelemetryEnabledFromSettings } from "./appARMSBootstrap.js";
 import {
   onLocalDatabaseStartupReady,
   configureDatabaseStartupQuit,
@@ -771,6 +771,7 @@ function awaitFirstHostSpawnDecision(): Promise<void> {
   return firstHostSpawnDecisionPromise;
 }
 const appTelemetryCore = createTelemetryCore({
+  enabled: () => readTelemetryEnabledFromSettings(),
   loadUserId: createTelemetryUserIdLoader(appTelemetryCredentialService),
   loadAuthorization: createTelemetryAuthorizationLoader(appTelemetryCredentialService),
   loadMarketingParams: createTelemetryMarketingParamsLoader(appTelemetryCredentialService),
@@ -870,8 +871,10 @@ const rendererActionTraceRollout = createRendererActionTraceRollout({
   fetchConfig: electronClientConfigsFetcher,
   logger,
 });
+// 遥测总开关(spec 149 批四):main 进程出口在启动时读一次 settings,改动重启生效。
+const telemetryEnabledAtStartup = readTelemetryEnabledFromSettings();
 const localTtftExporter = createLocalTtftExporter({
-  env: { ...hostProcessLocalEnv, ...process.env },
+  env: telemetryEnabledAtStartup ? { ...hostProcessLocalEnv, ...process.env } : {},
   version: ZCODE_VERSION || app.getVersion(),
   logger,
 });
@@ -879,10 +882,9 @@ ipcMain.on(PlatformChannels.ReportLocalTtftBatch, (_event, batch: unknown) =>
   localTtftExporter.enqueue(batch),
 );
 const rendererActionTraceBroker = createRendererActionTraceBroker({
-  exporter: createRendererActionTraceExporter({
-    ...hostProcessLocalEnv,
-    ...process.env,
-  }),
+  exporter: createRendererActionTraceExporter(
+    telemetryEnabledAtStartup ? { ...hostProcessLocalEnv, ...process.env } : {},
+  ),
   logger,
 });
 let disposeRendererActionTraceIpc: (() => void) | undefined;

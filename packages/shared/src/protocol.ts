@@ -362,6 +362,8 @@ export interface AppSettings {
   toolSearchMode?: AppToolSearchMode;
   /** 新建或冷恢复 Session 是否启用 Memory；默认关闭。 */
   memoryEnabled?: boolean;
+  /** 遥测总开关(spec 149 批四):false 时四类出口全关;缺省/缺席=启用。 */
+  telemetryEnabled?: boolean;
   onboardingOccupation?:
     | "office"
     | "developer"

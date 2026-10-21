@@ -23,8 +23,28 @@
 | 一 | A 任务互发 steer 化 + B proactive 深度护栏 | **完成**(信封/护栏/发送链/可见性/跨机接收侧;仅剩无消费者的跨 host 发起侧 API,待消费场景) | contracts/adapters/core/services/shared/ui |
 | 二 | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关) | 未开工 | core/tool、services |
 | 三 | D 记忆 write-lease(租约+history/diff+撤销;extraction cursor 持久化 migration 0023) | 未开工 | core/memory、adapters/storage |
-| 四 | E 遥测统一总开关(复刻 memoryEnabled 跨层链;main 进程 ARMS/数仓出口改读 settings 门) | 未开工 | shared、services、desktop |
+| 四 | E 遥测统一总开关 | **后端总闸完成**(settings 键 telemetryEnabled + 四出口门);UI 开关待接 | shared、services、desktop |
+| 四b | E 补齐:SettingsPage UI 开关(zh/en) | 未开工 | ui |
 | 五 | F 会话导入泛化(来源枚举+附件保留+导入会话只读边界) | 未开工 | services、shared |
+
+## 批四实现状态(2026-10-21)
+
+`telemetryEnabled`(AppSettings,缺省 true=现行为不变)为总闸,四出口门:
+
+1. **Agent OTLP**:`node.ts resolveSpawnEnv` 注入 `ZCODE_MODEL_TELEMETRY_ENABLED=false`
+   (CLI telemetry bootstrap 认此 env);改设置后下次 agent spawn 生效。
+2. **数仓上报**:`telemetryCore` 新增 `enabled?` 依赖,在 `trackReport` 单点闸
+   (app_launch/app_daily_active/reportEvent 三路径唯一汇点)——关闸跳过上报且不触碰
+   状态锁/去重账本;main 装配点传 `readTelemetryEnabledFromSettings()`。
+3. **ARMS RUM**:`appARMSBootstrap` 的 `enable` 加 settings 文件门。
+4. **桌面 OTLP(TTFT/trace)**:main 装配点关闸时传空 env(exporter 因无 endpoint 不启动)。
+
+`readTelemetryEnabledFromSettings()`(appARMSBootstrap 导出,main 复用):启动时读
+`~/.zcode/v2/setting.json` 一次,文件缺席/损坏/键缺席=启用(总闸只允许显式关闭);
+运行中改设置重启生效(与 spawn env 同语义,已注释登记)。
+
+待接(UI 开关):SettingsPage 增设分区渲染 toggle(zh/en i18n),复刻 memoryEnabled 的
+updateSharedSettings 链;schema/patch 已就绪。
 
 ## 批一实现状态(2026-10-21)
 

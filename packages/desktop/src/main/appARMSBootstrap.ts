@@ -1,6 +1,8 @@
 import { wrapStartupReporterRequest } from "./startupTelemetryDelivery.js";
 import { randomUUID } from "node:crypto";
-import { basename } from "node:path";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, join } from "node:path";
 import armsRum from "@arms/rum-electron";
 import { ZCODE_AGENT_LIFECYCLE_LOG_MARKER } from "@zcode/shared/process-diagnostic";
 import { ZCODE_ARMS_RUM_ENDPOINT, ZCODE_VERSION, mapZCodeEnvToArmsRumEnv } from "@zcode/shared";
@@ -160,9 +162,24 @@ armsRum.client.useReporter = (reporter) => {
   });
   useReporter(reporter);
 };
+/**
+ * 遥测总开关读取(spec 149 批四):settings 文件缺省/损坏/键缺席=启用(现行为不变)。
+ * 启动时读一次;运行中改设置需重启应用生效(与 agent spawn env 同语义)。
+ */
+export function readTelemetryEnabledFromSettings(): boolean {
+  try {
+    const raw = readFileSync(join(homedir(), ".zcode", "v2", "setting.json"), "utf8");
+    const parsed = JSON.parse(raw) as { telemetryEnabled?: unknown };
+    if (typeof parsed.telemetryEnabled === "boolean") return parsed.telemetryEnabled;
+  } catch {
+    // 文件不存在/损坏按启用处理:总闸只允许显式关闭。
+  }
+  return true;
+}
+
 export const armsInitPromise = armsRum
   .init({
-    enable: ZCODE_ARMS_RUM_ENDPOINT !== "",
+    enable: ZCODE_ARMS_RUM_ENDPOINT !== "" && readTelemetryEnabledFromSettings(),
     version: ZCODE_VERSION,
     endpoint: ZCODE_ARMS_RUM_ENDPOINT,
     env: armsRumEnv,

@@ -2342,6 +2342,10 @@ export function createLocalServices(options: {
               httpProxy: settings.httpProxy,
               noProxy: settings.httpProxyNoProxy,
             };
+      // 遥测总开关(spec 149 批四):关闸时向 agent 子进程注入显式禁用
+      // (CLI telemetry bootstrap 认 ZCODE_MODEL_TELEMETRY_ENABLED)。
+      const agentTelemetryGate: Record<string, string> =
+        settings.telemetryEnabled === false ? { ZCODE_MODEL_TELEMETRY_ENABLED: "false" } : {};
       const cuaPluginEnabled = isCuaEnabledForContext(context);
       let cuaProductHelperEnv: Record<string, string> = {};
       if (cuaPluginEnabled && (process.platform === "darwin" || process.platform === "win32")) {
@@ -2391,6 +2395,7 @@ export function createLocalServices(options: {
         // broker 凭据（socket/token）注入 agent spawn env，让内置 zcode-cua plugin 的
         // computer-use MCP server 经 __zcode-plugin-host 恢复 token 后连上 broker。
         ...cuaProductHelperEnv,
+        ...agentTelemetryGate,
         ...buildAgentTelemetrySpawnEnv({
           deviceMid: telemetryDeviceMid,
           runtimeSurface: options?.agentTelemetry?.runtimeSurface ?? "remote_workspace_host",
