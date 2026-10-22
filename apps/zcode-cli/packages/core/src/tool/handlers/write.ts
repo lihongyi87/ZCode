@@ -17,7 +17,11 @@ import {
   type TraceContext,
 } from "@zcode/contracts";
 import { createStructuredPatch } from "../diff.js";
-import { stampMemoryOriginSessionId } from "../../memory/origin-session.js";
+import {
+  acquireMemoryWriteLease,
+  releaseMemoryWriteLease,
+  stampMemoryOriginSessionId,
+} from "../../memory/origin-session.js";
 import { resolveWorkspacePath } from "../path-policy.js";
 import {
   createReadFileStateKey,
@@ -121,20 +125,32 @@ export const writeHandler: ToolHandler = async (input, context) => {
     memoryRoot: context.memoryRoot,
     sessionId: context.sessionId,
   });
+  // 批三b(spec 149):跨会话写保护——写前查/取租约,写后释放(含失败路径)。
+  const memoryLease = await acquireMemoryWriteLease({
+    fileSystemPort,
+    filePath,
+    memoryRoot: context.memoryRoot,
+    sessionId: context.sessionId,
+  });
   const writeStartedAt = Date.now();
-  const writeResult = await fileSystemPort.writeTextFile(
-    {
-      path: filePath,
-      content: contentToWrite,
-      encoding: originalEncoding,
-      lineEndings: originalLineEndings,
-      createParents: true,
-      atomic: true,
-      expectedRevision: originalRevision,
-      trace: createWriteTrace(context),
-    },
-    { signal: context.abortSignal },
-  );
+  let writeResult: Awaited<ReturnType<typeof fileSystemPort.writeTextFile>>;
+  try {
+    writeResult = await fileSystemPort.writeTextFile(
+      {
+        path: filePath,
+        content: contentToWrite,
+        encoding: originalEncoding,
+        lineEndings: originalLineEndings,
+        createParents: true,
+        atomic: true,
+        expectedRevision: originalRevision,
+        trace: createWriteTrace(context),
+      },
+      { signal: context.abortSignal },
+    );
+  } finally {
+    await releaseMemoryWriteLease({ fileSystemPort, guard: memoryLease });
+  }
   const fsWriteMs = elapsedMsSince(writeStartedAt);
 
   const readFileStateEntry = updateReadFileStateAfterWrite(

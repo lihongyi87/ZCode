@@ -1,7 +1,17 @@
+import { win32 } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createSessionId, createTraceId } from "@zcode/contracts";
+import {
+  createSessionId,
+  createTraceId,
+  type FileSystemRevision,
+  type ReadFileStateMap,
+} from "@zcode/contracts";
 
-import { stampMemoryOriginSessionId } from "../src/memory/origin-session.js";
+import {
+  acquireMemoryWriteLease,
+  releaseMemoryWriteLease,
+  stampMemoryOriginSessionId,
+} from "../src/memory/origin-session.js";
 import { editHandler } from "../src/tool/handlers/edit.js";
 import type { ToolExecutionContext } from "../src/tool/types.js";
 import { MemoryFileSystem } from "./memory-test-utils.js";
@@ -69,7 +79,18 @@ describe("Memory file metadata", () => {
   });
 
   it("adds a missing origin session through the Edit write boundary", async () => {
-    const filePath = `${MEMORY_ROOT}/edited-memory.md`;
+    // Bug 修复(测试):editHandler 经 resolveWorkspacePath 用 win32 normalize——
+    // POSIX 风格假路径会被转成反斜杠形态,与 MemoryFileSystem 的 POSIX 键对不上,
+    // 稳定报「File does not exist」。workspace 用 win32 形态,键与解析结果一致。
+    const editMemoryRoot = win32.join(
+      "C:",
+      "storage",
+      "memories",
+      "projects",
+      "project-0123456789abcdef",
+      "memory",
+    );
+    const filePath = win32.join(editMemoryRoot, "edited-memory.md");
     const original = [
       "---",
       "name: edited-memory",
@@ -85,16 +106,17 @@ describe("Memory file metadata", () => {
     const context: ToolExecutionContext = {
       abortSignal: new AbortController().signal,
       fileSystemPort,
-      memoryRoot: MEMORY_ROOT,
+      memoryRoot: editMemoryRoot,
       sessionId,
+      readFileState: createReadFileState(filePath, original),
       toolCallId: "edit-memory-origin",
       traceId: createTraceId(),
-      workingDirectory: "/workspace",
-      workspaceRoot: "/workspace",
+      workingDirectory: editMemoryRoot,
+      workspaceRoot: editMemoryRoot,
     };
 
     await editHandler(
-      { file_path: filePath, old_string: "Old fact.", new_string: "Updated fact." },
+      { file_path: "edited-memory.md", old_string: "Old fact.", new_string: "Updated fact." },
       context,
     );
 
@@ -125,5 +147,131 @@ describe("Memory file metadata", () => {
         sessionId: "sess_origin",
       }),
     ).toBe("- [Fact](fact.md) — index entry");
+  });
+});
+
+
+// 复刻 edit-tool-contract.test.ts 的读态夹具:editHandler 强制先读后改。
+function revisionFor(path: string, content: string, mtimeMs = 1): FileSystemRevision {
+  return {
+    id: `rev:${path}:${content.length}:${Buffer.byteLength(content, "utf8")}:${mtimeMs}`,
+    mtimeMs,
+    sizeBytes: Buffer.byteLength(content, "utf8"),
+  };
+}
+
+function createReadFileState(filePath: string, content: string): ReadFileStateMap {
+  return new Map([
+    [
+      [filePath, "1", ""].join("\0"),
+      {
+        path: filePath,
+        content,
+        offset: undefined,
+        limit: undefined,
+        isPartialView: false,
+        readAt: new Date(),
+        revisionId: revisionFor(filePath, content).id,
+        mtimeMs: 1,
+        sizeBytes: Buffer.byteLength(content, "utf8"),
+      },
+    ],
+  ]);
+}
+
+describe("memory write lease (spec 149 批三b)", () => {
+  const LEASE_PATH = `${MEMORY_ROOT}/MEMORY.md.lease`;
+  const memoryFile = `${MEMORY_ROOT}/MEMORY.md`;
+
+  function createLeaseFs(existing: Record<string, string> = {}) {
+    const files = new Map(Object.entries(existing));
+    const fs = new MemoryFileSystem(Object.fromEntries(files));
+    // MemoryFileSystem 的文件账本用 Record;这里补一个可直接断言租约存在的视图。
+    const removed: string[] = [];
+    const originalRemove = fs.removeFile.bind(fs);
+    fs.removeFile = async (request: { path: string }) => {
+      removed.push(request.path);
+      return originalRemove(request);
+    };
+    return { fs, removed, hasLease: () => Boolean(fs.files[LEASE_PATH]) };
+  }
+
+  it("非记忆 .md 路径全程 no-op", async () => {
+    const { fs } = createLeaseFs();
+    const guard = await acquireMemoryWriteLease({
+      fileSystemPort: fs,
+      filePath: "/storage/other/notes.md",
+      memoryRoot: MEMORY_ROOT,
+      sessionId: "sess_a",
+    });
+    expect(guard.leasePath).toBe("");
+    await releaseMemoryWriteLease({ fileSystemPort: fs, guard });
+    expect(fs.files[LEASE_PATH]).toBeUndefined();
+  });
+
+  it("无租约时获取并写本会话标记,释放即删除", async () => {
+    const { fs, removed, hasLease } = createLeaseFs();
+    const guard = await acquireMemoryWriteLease({
+      fileSystemPort: fs,
+      filePath: memoryFile,
+      memoryRoot: MEMORY_ROOT,
+      sessionId: "sess_a",
+    });
+    expect(guard.leasePath).toBe(LEASE_PATH);
+    expect(hasLease()).toBe(true);
+    await releaseMemoryWriteLease({ fileSystemPort: fs, guard });
+    expect(removed).toContain(LEASE_PATH);
+    expect(hasLease()).toBe(false);
+  });
+
+  it("他方新鲜租约拒写并带持有人信息", async () => {
+    const { fs } = createLeaseFs({
+      [LEASE_PATH]: JSON.stringify({
+        version: 1,
+        sessionId: "sess_b",
+        acquiredAt: Date.now() - 5_000,
+      }),
+    });
+    await expect(
+      acquireMemoryWriteLease({
+        fileSystemPort: fs,
+        filePath: memoryFile,
+        memoryRoot: MEMORY_ROOT,
+        sessionId: "sess_a",
+      }),
+    ).rejects.toThrow(/locked by another session/);
+  });
+
+  it("过期他方租约与本会话残留租约均可重入", async () => {
+    const expired = createLeaseFs({
+      [LEASE_PATH]: JSON.stringify({
+        version: 1,
+        sessionId: "sess_b",
+        acquiredAt: Date.now() - 121_000,
+      }),
+    });
+    const guard = await acquireMemoryWriteLease({
+      fileSystemPort: expired.fs,
+      filePath: memoryFile,
+      memoryRoot: MEMORY_ROOT,
+      sessionId: "sess_a",
+    });
+    expect(guard.leasePath).toBe(LEASE_PATH);
+
+    const own = createLeaseFs({
+      [LEASE_PATH]: JSON.stringify({
+        version: 1,
+        sessionId: "sess_a",
+        acquiredAt: Date.now() - 60_000,
+      }),
+    });
+    await expect(
+      acquireMemoryWriteLease({
+        fileSystemPort: own.fs,
+        filePath: memoryFile,
+        memoryRoot: MEMORY_ROOT,
+        sessionId: "sess_a",
+      }),
+    ).resolves.toMatchObject({ leasePath: LEASE_PATH });
   });
 });

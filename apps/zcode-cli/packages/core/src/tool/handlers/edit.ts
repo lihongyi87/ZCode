@@ -28,7 +28,11 @@ import {
   type TraceContext,
 } from "@zcode/contracts";
 import { createStructuredPatch } from "../diff.js";
-import { stampMemoryOriginSessionId } from "../../memory/origin-session.js";
+import {
+  acquireMemoryWriteLease,
+  releaseMemoryWriteLease,
+  stampMemoryOriginSessionId,
+} from "../../memory/origin-session.js";
 import {
   findEditMatch,
   normalizeLineEndings,
@@ -504,20 +508,32 @@ async function writeEditResult(input: {
     memoryRoot: input.context.memoryRoot,
     sessionId: input.context.sessionId,
   });
+  // 批三b(spec 149):跨会话写保护——写前查/取租约,写后释放(含失败路径)。
+  const memoryLease = await acquireMemoryWriteLease({
+    fileSystemPort,
+    filePath: input.filePath,
+    memoryRoot: input.context.memoryRoot,
+    sessionId: input.context.sessionId,
+  });
   const writeStartedAt = Date.now();
-  const writeResult = await fileSystemPort.writeTextFile(
-    {
-      path: input.filePath,
-      content: contentToWrite,
-      encoding: input.read?.encoding,
-      lineEndings: input.read?.lineEndings ?? detectLineEndings(input.originalFile),
-      createParents: true,
-      atomic: true,
-      expectedRevision: input.read?.revision,
-      trace: createEditTrace(input.context),
-    },
-    { signal: input.context.abortSignal },
-  );
+  let writeResult: Awaited<ReturnType<typeof fileSystemPort.writeTextFile>>;
+  try {
+    writeResult = await fileSystemPort.writeTextFile(
+      {
+        path: input.filePath,
+        content: contentToWrite,
+        encoding: input.read?.encoding,
+        lineEndings: input.read?.lineEndings ?? detectLineEndings(input.originalFile),
+        createParents: true,
+        atomic: true,
+        expectedRevision: input.read?.revision,
+        trace: createEditTrace(input.context),
+      },
+      { signal: input.context.abortSignal },
+    );
+  } finally {
+    await releaseMemoryWriteLease({ fileSystemPort, guard: memoryLease });
+  }
   const fsWriteMs = elapsedMsSince(writeStartedAt);
 
   const readFileStateEntry = updateReadFileStateAfterEdit(
