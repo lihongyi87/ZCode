@@ -25,7 +25,7 @@
 | 我们的 fork 点（merge-base）         | `872ad960`（`feat: open source`）                                                                                                                                                          | 2026-09-24      |
 | 上游开源仓库 main                    | 停在 `v3.14.3` = `29628c9`（2026-09-24 起无新提交，fetch 复核）                                                                                                                            | 2026-10-04      |
 | 上游开源仓库 main（2026-10-12 复核） | **已到 `v3.15.1` = `aac4756`**（整版 squash：3.14.3→3.15.1 一次跳版，core 252 文件 +10K 行；见下方 v3.15.1 节）                                                                            | 2026-10-12      |
-| 上游开源仓库 main（2026-10-20 复核） | **已到 `v3.16.1` = `0a1fc56d`**（2026-10-19 整版 sync 提交，Source-Commit `1f4d7f01`；**未打 tag**——tags 仍只有 v3.14.3 / v3.15.1；4502 文件 +356K/-122K，已整版合并，见下方 v3.16.1 节） | 2026-10-20      |
+| 上游开源仓库 main（2026-10-20 复核） | **已到 `v3.16.1` = `0a1fc56d`**（2026-10-19 整版 sync 提交，Source-Commit `1f4d7f01`；**未打 tag**——tags 仍只有 v3.14.3 / v3.15.1；4502 文件 +356K/-122K，已整版合并，见下方 v3.16.1 节）  | 2026-10-20      |
 | 上游开源仓库最新 tag                 | `v3.14.3` = `29628c9`（**开源仓库只有这一个 tag，2026-10-04 复核**）                                                                                                                       | 2026-10-04      |
 | 上游 feature 分支                    | `feat/ui-plugin` = `662c30b`（2026-09-29，UI plugins + Gen UI，426 文件 / +55671 行，**未发版**；新增带 patch 的 `@open-pencil/core@0.14.0`）—— **未跟进**（未发版分支，等进 main 再评估） | 2026-10-04 复核 |
 | 上游闭源发行包                       | `ZCode-3.14.4-linux-x64.deb` —— 逐字节对比 = 3.14.3 + 阿里云验证码健壮性补丁 + 版本号                                                                                                      | 2026-10-03 到手 |
@@ -111,12 +111,12 @@
 
 ### 实质裁决（合并时定案）
 
-| 条目 | 上游形态 | 裁决 | 依据 |
-| ---- | -------- | ---- | ---- |
-| ToolSearch/DeferredToolCall | 协议级实现：mode 配置门控（auto/native/local/off）、native 走 provider 端 tool_reference + Anthropic beta header、DeferredToolCall 包装协议 | **采上游，弃 CE 预算制 deferral**（`helpers/tool-deferral.ts` 停用） | 上游覆盖更完整（CE 版只解决声明面预算）；CE 当时修的「ToolSearch 泄漏进声明面导致 GLM 空搜」由上游 off 门控承接 |
-| 远程控制命名族 | `RemoteControl*` 全面更名 `WebRemoteControl*`（含 v2 relay 面） | **更名以上游为准**；CE 自托管 Web 服务面（`WebService*`/连接面三条）通过 platform/globals **并集**保留 | CE 的自托管形态（桌面 spawn 服务端 + `?token` 连接）与上游云 relay 形态本就是两条线 |
-| bot×project 绑定 | botsService 新增 projectService 注入与 project 关联执行 | **未跟进（deps 收形未消费）** | CE bots 线以安全加固为差异化重点；上游功能待评估后单独落地 |
-| 上游 3.16.1 UI 重构（侧栏/任务区/composer 工具栏/chat-input-toolbar 拆分） | 组件级重构，多文件删除/新增 | **跟随上游**（CE 在旧组件上的微改随删除丢弃，未发现丢失功能性 CE 特性；qimen/liuren 围栏在 ai-elements 下未受影响） | 整版跟随优于在旧组件上背维护债 |
+| 条目                                                                       | 上游形态                                                                                                                                    | 裁决                                                                                                                | 依据                                                                                                            |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| ToolSearch/DeferredToolCall                                                | 协议级实现：mode 配置门控（auto/native/local/off）、native 走 provider 端 tool_reference + Anthropic beta header、DeferredToolCall 包装协议 | **采上游，弃 CE 预算制 deferral**（`helpers/tool-deferral.ts` 停用）                                                | 上游覆盖更完整（CE 版只解决声明面预算）；CE 当时修的「ToolSearch 泄漏进声明面导致 GLM 空搜」由上游 off 门控承接 |
+| 远程控制命名族                                                             | `RemoteControl*` 全面更名 `WebRemoteControl*`（含 v2 relay 面）                                                                             | **更名以上游为准**；CE 自托管 Web 服务面（`WebService*`/连接面三条）通过 platform/globals **并集**保留              | CE 的自托管形态（桌面 spawn 服务端 + `?token` 连接）与上游云 relay 形态本就是两条线                             |
+| bot×project 绑定                                                           | botsService 新增 projectService 注入与 project 关联执行                                                                                     | **未跟进（deps 收形未消费）**                                                                                       | CE bots 线以安全加固为差异化重点；上游功能待评估后单独落地                                                      |
+| 上游 3.16.1 UI 重构（侧栏/任务区/composer 工具栏/chat-input-toolbar 拆分） | 组件级重构，多文件删除/新增                                                                                                                 | **跟随上游**（CE 在旧组件上的微改随删除丢弃，未发现丢失功能性 CE 特性；qimen/liuren 围栏在 ai-elements 下未受影响） | 整版跟随优于在旧组件上背维护债                                                                                  |
 
 ### 33 个取我们文件的上游侧差量
 

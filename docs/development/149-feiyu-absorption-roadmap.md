@@ -18,19 +18,20 @@
 
 ## 批次路线图与状态
 
-| 批  | 内容                                                                               | 状态                                                                                     | 落点                                       |
-| --- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------ |
-| 一  | A 任务互发 steer 化 + B proactive 深度护栏                                         | **完成**(信封/护栏/发送链/可见性/跨机接收侧;仅剩无消费者的跨 host 发起侧 API,待消费场景) | contracts/adapters/core/services/shared/ui |
-| 二  | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关)      | 未开工                                                                                   | core/tool、services                        |
-| 三  | D 记忆 write-lease(租约+history/diff+撤销) | D1 提取游标持久化已落地(见批三实现状态);租约/历史/撤销未开工 | core/memory、adapters/storage |
-| 四  | E 遥测统一总开关                                                                   | **后端总闸完成**(settings 键 telemetryEnabled + 四出口门);UI 开关待接                    | shared、services、desktop                  |
-| 五  | F 会话导入泛化(来源枚举+附件保留+导入会话只读边界)                                 | 未开工                                                                                   | services、shared                           |
+| 批  | 内容                                                                          | 状态                                                                                     | 落点                                       |
+| --- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------ |
+| 一  | A 任务互发 steer 化 + B proactive 深度护栏                                    | **完成**(信封/护栏/发送链/可见性/跨机接收侧;仅剩无消费者的跨 host 发起侧 API,待消费场景) | contracts/adapters/core/services/shared/ui |
+| 二  | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关) | 未开工                                                                                   | core/tool、services                        |
+| 三  | D 记忆 write-lease(租约+history/diff+撤销)                                    | D1 提取游标持久化已落地(见批三实现状态);租约/历史/撤销未开工                             | core/memory、adapters/storage              |
+| 四  | E 遥测统一总开关                                                              | **后端总闸完成**(settings 键 telemetryEnabled + 四出口门);UI 开关待接                    | shared、services、desktop                  |
+| 五  | F 会话导入泛化(来源枚举+附件保留+导入会话只读边界)                            | 未开工                                                                                   | services、shared                           |
 
 ## 批三实现状态(2026-10-21)
 
 **D1 提取游标持久化(已落地,commit 82af04bf)**:提取调度器的游标此前是进程内闭包变量,
 重启即丢——进度回退到「从头判断」,既可能漏也可能重。现以文件式游标落**项目记忆根**
 (`.extraction-cursor.json`,与被治理记忆同域、按项目天然隔离):
+
 - 契约:`MemoryExtractionCursorStore{load,save}`(extraction.ts 工厂 options);播种在首个
   snapshot 前异步完成;save 失败只丢持久化(重启可能重复提取一小段,提取幂等),绝不影响
   内存推进;坏文件/缺席=从头,不阻塞调度。
