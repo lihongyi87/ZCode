@@ -22,8 +22,8 @@
 | --- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------ |
 | 一  | A 任务互发 steer 化 + B proactive 深度护栏                                    | **完成**(信封/护栏/发送链/可见性/跨机接收侧;仅剩无消费者的跨 host 发起侧 API,待消费场景) | contracts/adapters/core/services/shared/ui |
 | 二  | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关) | 未开工                                                                                   | core/tool、services                        |
-| 三  | D 记忆 write-lease(租约+history/diff+撤销)                                    | D1 提取游标持久化已落地(见批三实现状态);租约/历史/撤销未开工                             | core/memory、adapters/storage              |
-| 四  | E 遥测统一总开关                                                              | **后端总闸完成**(settings 键 telemetryEnabled + 四出口门);UI 开关待接                    | shared、services、desktop                  |
+| 三  | D 记忆修订保护(游标持久化+写租约+history/diff 撤销)                           | **D1 游标持久化 + D2 写租约已落地**(见批三实现状态);history/diff+撤销未开工              | core/memory、adapters/storage              |
+| 四  | E 遥测统一总开关                                                              | **完成**(后端四出口门 + 通用设置分区 UI 开关 zh/en + 对抗审查修复)                       | shared、services、desktop、ui              |
 | 五  | F 会话导入泛化(来源枚举+附件保留+导入会话只读边界)                            | 未开工                                                                                   | services、shared                           |
 
 ## 批三实现状态(2026-10-21)
@@ -41,7 +41,22 @@
   未来若需进程间严格互斥再评估升级。
 - 测试:memory-extraction.test.ts 20/20(新增 3)。
 
-**剩余(批三b)**:write-lease(跨会话并发写保护)、history/diff 留档与撤销。
+**D2 写租约(已落地,commit 06cf1db2)**:记忆 .md 是跨会话共享资产(同 workspace 多窗口、
+提取子代理),写前查他方新鲜租约(120s TTL)——持有人活跃即拒写(`memory_write_lease_conflict`,
+可恢复,带持有人 sessionId 与持有时长);同会话重入不拒;过期=重入。租约文件 `<file>.lease`
+不入 manifest(glob 只认 .md)。实现并入 `memory/origin-session.ts`(记忆写协调职责,规避
+unmanaged-new-file);write/edit 两 handler 的 writeTextFile 包 acquire→try→finally release。
+建议性租约:最后写入冲突仍由 expectedRevision(stale_write)兜底,TTL 兜底崩溃残留。
+测试 4 用例(non-memory no-op/获取释放/他方新鲜拒写带持有人/过期与本会话重入)。
+
+**顺带修复推送分支上既有的坏测试**:`memory-origin-session.test.ts` 的 Edit 边界用例自
+3.16.1 合并后就红——editHandler 强制先读后改(缺 readFileState 被映射为「File does not
+exist」)且 win32 路径归一使 POSIX 假路径键失配。已修:workspace 用 win32 形态覆盖记忆根 +
+补 createReadFileState 夹具(复刻 edit-tool-contract 的本地夹具)。同病的 edit-tool-contract
+两条(missing-file/deny-rules)经 stash 对照证实 HEAD 上同样红(疑 Linux 绿/Windows 红),
+登记不修、留待拥有者处置。
+
+**剩余(批三c)**:history/diff 留档与撤销入口。
 
 ## 批四实现状态(2026-10-21)
 
