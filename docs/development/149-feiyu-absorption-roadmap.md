@@ -22,7 +22,7 @@
 | --- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------ |
 | 一  | A 任务互发 steer 化 + B proactive 深度护栏                                    | **完成**(信封/护栏/发送链/可见性/跨机接收侧;仅剩无消费者的跨 host 发起侧 API,待消费场景) | contracts/adapters/core/services/shared/ui |
 | 二  | C 图片生成作业链(provider 抽象首接 Minimax,fal 留扩展位;子代理费用门控默认关) | 未开工                                                                                   | core/tool、services                        |
-| 三  | D 记忆修订保护(游标持久化+写租约+history/diff 撤销)                           | **D1 游标持久化 + D2 写租约已落地**(见批三实现状态);history/diff+撤销未开工              | core/memory、adapters/storage              |
+| 三  | D 记忆修订保护(游标持久化+写租约+history/diff 撤销)                           | **完成**(D1 游标持久化 + D2 写租约 + D3 写入留档;见批三实现状态)                         | core/memory、adapters/storage              |
 | 四  | E 遥测统一总开关                                                              | **完成**(后端四出口门 + 通用设置分区 UI 开关 zh/en + 对抗审查修复)                       | shared、services、desktop、ui              |
 | 五  | F 会话导入泛化(来源枚举+附件保留+导入会话只读边界)                            | 未开工                                                                                   | services、shared                           |
 
@@ -56,7 +56,15 @@ exist」)且 win32 路径归一使 POSIX 假路径键失配。已修:workspace �
 两条(missing-file/deny-rules)经 stash 对照证实 HEAD 上同样红(疑 Linux 绿/Windows 红),
 登记不修、留待拥有者处置。
 
-**剩余(批三c)**:history/diff 留档与撤销入口。
+**D3 写入留档(已落地)**:记忆写成功后把 before/after 全文归档到
+`<memoryRoot>/.history/<relative-path>/<basename>.<时间戳>-<随机>.json`(record:version/
+sessionId/at/filePath/op/before/after)。**撤销 = 约定恢复**:读归档取 before,带租约
+(D2)写回——零专用工具面;留档失败静默返回 null(历史绝不阻塞写入,写结果不受影响)。
+测试 3 用例(update 留档带 op/session/create 留档 before=null/归档后端抛错不影响调用方)。
+文件位置与 `.extraction-cursor.json` 同域:不入记忆 manifest(glob 只认 .md)。
+
+**批三至此完成**:D1(游标持久化)+ D2(写租约)+ D3(写入留档+约定恢复)。
+可选后续(未立项):memoryService UI 侧 history 浏览、跨会话租约看板——待真实需求。
 
 ## 批四实现状态(2026-10-21)
 

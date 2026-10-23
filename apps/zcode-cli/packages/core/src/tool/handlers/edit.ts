@@ -30,6 +30,7 @@ import {
 import { createStructuredPatch } from "../diff.js";
 import {
   acquireMemoryWriteLease,
+  recordMemoryWriteHistory,
   releaseMemoryWriteLease,
   stampMemoryOriginSessionId,
 } from "../../memory/origin-session.js";
@@ -535,6 +536,16 @@ async function writeEditResult(input: {
     await releaseMemoryWriteLease({ fileSystemPort, guard: memoryLease });
   }
   const fsWriteMs = elapsedMsSince(writeStartedAt);
+  // 批三c(spec 149):写入留档(before/after 全文),失败静默不阻塞写结果。
+  await recordMemoryWriteHistory({
+    fileSystemPort,
+    filePath: input.filePath,
+    memoryRoot: input.context.memoryRoot,
+    sessionId: input.context.sessionId,
+    op: "update",
+    before: input.originalFile,
+    after: contentToWrite,
+  });
 
   const readFileStateEntry = updateReadFileStateAfterEdit(
     input.context.readFileState,

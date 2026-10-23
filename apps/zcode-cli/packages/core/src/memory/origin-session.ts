@@ -150,3 +150,66 @@ export async function releaseMemoryWriteLease(input: {
     // TTL 兜底,静默。
   }
 }
+
+// ── 批三 c（spec 149）：记忆写入留档（history/diff） ──
+
+export interface MemoryWriteHistoryPort {
+  writeTextFile(request: {
+    path: string;
+    content: string;
+    createParents?: boolean;
+    atomic?: boolean;
+  }): Promise<unknown>;
+}
+
+export interface MemoryWriteHistoryInput {
+  fileSystemPort: MemoryWriteHistoryPort;
+  filePath: string;
+  memoryRoot: string | undefined;
+  sessionId: string;
+  op: "create" | "update";
+  before: string | null;
+  after: string;
+}
+
+/**
+ * 记忆写入留档：成功写后把 before/after 全文归档到
+ * `<memoryRoot>/.history/<relative-path>/<basename>.<ts>.json`。撤销 = 读归档取
+ * before 带租约写回（约定恢复，不设专用工具面）。
+ * 留档失败静默（返回 null）：历史不能阻塞写入。
+ */
+export async function recordMemoryWriteHistory(
+  input: MemoryWriteHistoryInput,
+): Promise<string | null> {
+  if (!isManagedMemoryMarkdown(input.filePath, input.memoryRoot)) {
+    return null;
+  }
+  const relative = memoryFileRelativePath(input.memoryRoot!, input.filePath);
+  if (!relative) return null;
+  const normalizedRelative = relative.split(/[\/]/u).join("/");
+  const leaf = normalizedRelative.split("/").pop() ?? "memory";
+  const stamp = `${Date.now().toString().padStart(15, "0")}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  const archivePath = `${input.memoryRoot}/.history/${normalizedRelative}/${leaf}.${stamp}.json`;
+  const record = {
+    version: 1,
+    sessionId: input.sessionId,
+    at: new Date().toISOString(),
+    filePath: input.filePath,
+    op: input.op,
+    before: input.before,
+    after: input.after,
+  };
+  try {
+    await input.fileSystemPort.writeTextFile({
+      path: archivePath,
+      content: JSON.stringify(record, null, 2),
+      createParents: true,
+      atomic: true,
+    });
+    return archivePath;
+  } catch {
+    return null;
+  }
+}

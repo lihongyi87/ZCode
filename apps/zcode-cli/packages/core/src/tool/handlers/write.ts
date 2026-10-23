@@ -19,6 +19,7 @@ import {
 import { createStructuredPatch } from "../diff.js";
 import {
   acquireMemoryWriteLease,
+  recordMemoryWriteHistory,
   releaseMemoryWriteLease,
   stampMemoryOriginSessionId,
 } from "../../memory/origin-session.js";
@@ -152,6 +153,16 @@ export const writeHandler: ToolHandler = async (input, context) => {
     await releaseMemoryWriteLease({ fileSystemPort, guard: memoryLease });
   }
   const fsWriteMs = elapsedMsSince(writeStartedAt);
+  // 批三c(spec 149):写入留档(before/after 全文),失败静默不阻塞写结果。
+  await recordMemoryWriteHistory({
+    fileSystemPort,
+    filePath,
+    memoryRoot: context.memoryRoot,
+    sessionId: context.sessionId,
+    op: originalFile ? "update" : "create",
+    before: originalFile,
+    after: contentToWrite,
+  });
 
   const readFileStateEntry = updateReadFileStateAfterWrite(
     context.readFileState,

@@ -9,6 +9,7 @@ import {
 
 import {
   acquireMemoryWriteLease,
+  recordMemoryWriteHistory,
   releaseMemoryWriteLease,
   stampMemoryOriginSessionId,
 } from "../src/memory/origin-session.js";
@@ -17,6 +18,19 @@ import type { ToolExecutionContext } from "../src/tool/types.js";
 import { MemoryFileSystem } from "./memory-test-utils.js";
 
 const MEMORY_ROOT = "/storage/memories/projects/project-0123456789abcdef/memory";
+
+function createLeaseFs(existing: Record<string, string> = {}) {
+  const files = new Map(Object.entries(existing));
+  const fs = new MemoryFileSystem(Object.fromEntries(files));
+  // MemoryFileSystem 的文件账本用 Record;这里补一个可直接断言删除的视图。
+  const removed: string[] = [];
+  const originalRemove = fs.removeFile.bind(fs);
+  fs.removeFile = async (request: { path: string }) => {
+    removed.push(request.path);
+    return originalRemove(request);
+  };
+  return { fs, removed };
+}
 
 describe("Memory file metadata", () => {
   it("adds the fixed node type and creating session to standard Memory frontmatter", () => {
@@ -183,19 +197,6 @@ describe("memory write lease (spec 149 批三b)", () => {
   const LEASE_PATH = `${MEMORY_ROOT}/MEMORY.md.lease`;
   const memoryFile = `${MEMORY_ROOT}/MEMORY.md`;
 
-  function createLeaseFs(existing: Record<string, string> = {}) {
-    const files = new Map(Object.entries(existing));
-    const fs = new MemoryFileSystem(Object.fromEntries(files));
-    // MemoryFileSystem 的文件账本用 Record;这里补一个可直接断言租约存在的视图。
-    const removed: string[] = [];
-    const originalRemove = fs.removeFile.bind(fs);
-    fs.removeFile = async (request: { path: string }) => {
-      removed.push(request.path);
-      return originalRemove(request);
-    };
-    return { fs, removed, hasLease: () => Boolean(fs.files[LEASE_PATH]) };
-  }
-
   it("非记忆 .md 路径全程 no-op", async () => {
     const { fs } = createLeaseFs();
     const guard = await acquireMemoryWriteLease({
@@ -210,7 +211,7 @@ describe("memory write lease (spec 149 批三b)", () => {
   });
 
   it("无租约时获取并写本会话标记,释放即删除", async () => {
-    const { fs, removed, hasLease } = createLeaseFs();
+    const { fs, removed } = createLeaseFs();
     const guard = await acquireMemoryWriteLease({
       fileSystemPort: fs,
       filePath: memoryFile,
@@ -218,10 +219,10 @@ describe("memory write lease (spec 149 批三b)", () => {
       sessionId: "sess_a",
     });
     expect(guard.leasePath).toBe(LEASE_PATH);
-    expect(hasLease()).toBe(true);
+    expect(Boolean(fs.files[LEASE_PATH])).toBe(true);
     await releaseMemoryWriteLease({ fileSystemPort: fs, guard });
     expect(removed).toContain(LEASE_PATH);
-    expect(hasLease()).toBe(false);
+    expect(Boolean(fs.files[LEASE_PATH])).toBe(false);
   });
 
   it("他方新鲜租约拒写并带持有人信息", async () => {
@@ -273,5 +274,86 @@ describe("memory write lease (spec 149 批三b)", () => {
         sessionId: "sess_a",
       }),
     ).resolves.toMatchObject({ leasePath: LEASE_PATH });
+  });
+});
+
+describe("memory write history archive (spec 149 批三c)", () => {
+  const historyLeaf = (memoryRoot: string, name: string) =>
+    `${memoryRoot}/.history/${name}/${name}`;
+  const memoryFile = `${MEMORY_ROOT}/MEMORY.md`;
+
+  it("archives before/after with op and session for memory files", async () => {
+    const { fs } = createLeaseFs();
+    const archivePath = await recordMemoryWriteHistory({
+      fileSystemPort: fs,
+      filePath: memoryFile,
+      memoryRoot: MEMORY_ROOT,
+      sessionId: "sess_hist",
+      op: "update",
+      before: "Old fact.",
+      after: "New fact.",
+    });
+
+    expect(archivePath).toMatch(/^.*\.history\/MEMORY\.md\/MEMORY\.md\.\d{15}-\w+\.json$/);
+    const record = JSON.parse(fs.files[archivePath!]) as {
+      version: number;
+      sessionId: string;
+      filePath: string;
+      op: string;
+      before: string | null;
+      after: string;
+    };
+    expect(record.version).toBe(1);
+    expect(record.sessionId).toBe("sess_hist");
+    expect(record.op).toBe("update");
+    expect(record.before).toBe("Old fact.");
+    expect(record.after).toBe("New fact.");
+  });
+
+  it("archives create ops with null before and skips non-memory paths", async () => {
+    const { fs } = createLeaseFs();
+    const createPath = await recordMemoryWriteHistory({
+      fileSystemPort: fs,
+      filePath: memoryFile,
+      memoryRoot: MEMORY_ROOT,
+      sessionId: "sess_hist",
+      op: "create",
+      before: null,
+      after: "born",
+    });
+    const record = JSON.parse(fs.files[createPath!]) as { op: string; before: string | null };
+    expect(record.op).toBe("create");
+    expect(record.before).toBeNull();
+
+    const skipped = await recordMemoryWriteHistory({
+      fileSystemPort: fs,
+      filePath: "/storage/other/notes.md",
+      memoryRoot: MEMORY_ROOT,
+      sessionId: "sess_hist",
+      op: "update",
+      before: "x",
+      after: "y",
+    });
+    expect(skipped).toBeNull();
+  });
+
+  it("never fails the write when the archive backend throws", async () => {
+    const { fs } = createLeaseFs();
+    fs.writeTextFile = async (request: { path: string }) => {
+      if (request.path.includes(".history/")) {
+        throw new Error("disk full");
+      }
+      throw new Error("unexpected write target");
+    };
+    const archivePath = await recordMemoryWriteHistory({
+      fileSystemPort: fs,
+      filePath: memoryFile,
+      memoryRoot: MEMORY_ROOT,
+      sessionId: "sess_hist",
+      op: "update",
+      before: "a",
+      after: "b",
+    });
+    expect(archivePath).toBeNull();
   });
 });
