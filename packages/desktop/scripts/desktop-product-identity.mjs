@@ -7,10 +7,13 @@ export const ZCODE_PREVIEW_IDENTITY_ENV = "ZCODE_PREVIEW_IDENTITY";
 
 // 社区版（ZCode-CE）使用独立身份：appId / productName / Linux 可执行名与包名
 // 全部加 ce 标记，使 CE 与官方 ZCode 成为两个独立应用，可并存安装、互不覆盖快捷方式。
+// 2026-10-23 品牌调整（spec 150 外的用户裁决）：productName 改 BCode-CE（安装包文件名/
+// 安装目录/快捷方式名随之变化）；appId 刻意不变——NSIS 升级码沿用，安装时原地替换旧
+// ZCode-CE，数据目录（~/.zcode 与 Electron userData）不动，功能零影响。
 const PRODUCTION_IDENTITY = Object.freeze({
   flavor: "production",
   appId: "dev.zcode.app.ce",
-  productName: "ZCode-CE",
+  productName: "BCode-CE",
   linuxExecutableName: "zcode-ce",
   linuxPackageName: "zcode-ce",
   cuaHelperInstallVariant: null,

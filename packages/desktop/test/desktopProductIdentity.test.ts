@@ -81,9 +81,10 @@ describe("desktop product identity", () => {
     );
     expect(desktopProductIdentities.production).toEqual({
       flavor: "production",
-      // CE 品牌身份：与官方 ZCode 并排安装。
+      // CE 品牌身份：与官方 ZCode 并排安装。2026-10-23 显示名改 BCode-CE（spec 150 外
+      // 的用户裁决），appId 刻意不变=安装时原地替换旧 ZCode-CE，数据目录不受影响。
       appId: "dev.zcode.app.ce",
-      productName: "ZCode-CE",
+      productName: "BCode-CE",
       linuxExecutableName: "zcode-ce",
       linuxPackageName: "zcode-ce",
       cuaHelperInstallVariant: null,
