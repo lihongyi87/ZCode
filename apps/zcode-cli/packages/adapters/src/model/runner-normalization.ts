@@ -25,7 +25,12 @@ export function normalizeUsage(usage?: Partial<LanguageModelUsage>): ModelUsage 
     inputTokens: usage?.inputTokens,
     outputTokens: usage?.outputTokens,
     totalTokens: usage?.totalTokens,
-    cacheReadTokens: usage?.inputTokenDetails?.cacheReadTokens,
+    // DeepSeek 原生 OpenAI 端点(spec 150):除标准 prompt_tokens_details.cached_tokens
+    // 外还回顶层 prompt_cache_hit_tokens——details 缺席时以其兜底,缓存命中不显示为 0。
+    // miss(prompt_cache_miss_tokens)语义不等于写缓存,不映射 cacheWriteTokens。
+    cacheReadTokens:
+      usage?.inputTokenDetails?.cacheReadTokens ??
+      numberProperty(rawUsage, "prompt_cache_hit_tokens"),
     cacheWriteTokens: usage?.inputTokenDetails?.cacheWriteTokens,
     reasoningTokens: usage?.outputTokenDetails?.reasoningTokens,
     ...(webSearchRequests !== undefined || webFetchRequests !== undefined
