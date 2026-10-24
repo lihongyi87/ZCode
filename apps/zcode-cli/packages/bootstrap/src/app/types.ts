@@ -50,6 +50,7 @@ import type {
   SessionEventStorePort,
   SessionGoal,
   SessionId,
+  LspPort,
   SessionMailboxPort,
   SessionStorePort,
   SkillLoadOutcome,
@@ -158,6 +159,7 @@ export interface ZCodeAppOptions {
   eventStore?: SessionEventStorePort;
   sessionStore?: SessionStorePort;
   sessionMailboxPort?: SessionMailboxPort;
+  lspPort?: LspPort;
   inputHistoryStore?: InputHistoryStorePort;
   modelAdapter?: AiSdkModelAdapter;
   /** Worker 进程拥有的 Registry；App 只借用，不负责释放。 */
@@ -406,8 +408,10 @@ export interface ZCodeApp {
     displayText?: string;
     status?: GoalStatus;
     tokenBudget?: number | null;
+    timeBudget?: number | null;
     intent?: TurnInputIntentMetadata;
   }): Promise<SessionGoal>;
+  updateTimeBudget(timeBudget: number | null): Promise<SessionGoal | null>;
   updateTargetStatus(status: GoalStatus): Promise<SessionGoal | null>;
   clearTarget(): Promise<boolean>;
   continueActiveTarget(options?: SubmitPromptOptions): Promise<TurnResult | null>;

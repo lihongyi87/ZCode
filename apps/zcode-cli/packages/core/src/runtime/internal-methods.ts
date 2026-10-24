@@ -17,6 +17,7 @@ import type {
   SubagentPort,
   TodoItem,
   SessionGoal,
+  GoalStatus,
   McpConnectionSnapshot,
   TargetChangedPayload,
   DynamicWorkflowRunProgressPayload,
@@ -376,7 +377,7 @@ export interface AgentRuntimeCoreMethods {
     inputID: string;
     endedAtMs: number;
     startedTarget: SessionGoal | null;
-    status?: "paused";
+    status?: GoalStatus;
     traceContext: TraceContext;
   }): Promise<SessionGoal | null>;
   pauseActiveTargetForCancellation(traceContext: TraceContext): Promise<void>;

@@ -98,6 +98,7 @@ type SessionFacade = Pick<
   | "setThoughtLevel"
   | "setLocale"
   | "setTarget"
+  | "updateTimeBudget"
   | "updateTargetStatus"
 >;
 
@@ -193,6 +194,7 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
       displayText?: string;
       status?: GoalStatus;
       tokenBudget?: number | null;
+      timeBudget?: number | null;
       intent?: TurnInputIntentMetadata;
     },
   ) => {
@@ -219,6 +221,7 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
             sessionID: deps.sessionId,
             status: input.status,
             tokenBudget: input.tokenBudget,
+            timeBudget: input.timeBudget,
           })
         : action === "status_updated"
           ? await deps.sessionStore.updateTargetStatus({
@@ -365,6 +368,31 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
       (await setTargetStatus("status_updated", { status })) as Awaited<
         ReturnType<ZCodeApp["updateTargetStatus"]>
       >,
+    updateTimeBudget: async (timeBudget) => {
+      if (!deps.sessionStore.updateTargetTimeBudget) return null;
+      const previousTarget = await deps.sessionStore.readTarget({ sessionID: deps.sessionId });
+      const target = await deps.sessionStore.updateTargetTimeBudget({
+        sessionID: deps.sessionId,
+        timeBudget,
+      });
+      if (!target) return null;
+      // 预算变化是模型必须知道的目标事实（续跑环按它收口），落一条 state reminder。
+      await deps.runtime.recordGoalStateChangeReminder({
+        text:
+          timeBudget === null
+            ? "The session goal time budget has been removed; the goal is no longer time-limited."
+            : `The session goal time budget is now ${timeBudget} seconds (${target.timeUsedSeconds} seconds already used).`,
+        traceContext: deps.traceContext,
+      });
+      await deps.runtime.recordTargetChanged({
+        action: "time_budget_updated",
+        previousTarget,
+        source: "command",
+        target,
+        traceContext: deps.traceContext,
+      });
+      return target;
+    },
     clearTarget: async () => (await setTargetStatus("cleared", {})) as boolean,
     listModels: () => {
       return listRegistryBackedModels(deps.providerRegistry);

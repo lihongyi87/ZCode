@@ -76,6 +76,7 @@ import {
   setSessionTarget,
   startSessionTargetRun,
   updateSessionTargetSummaryTitle,
+  updateSessionTargetTimeBudget,
   updateSessionTargetStatus,
 } from "../session-target.js";
 import { SqliteSessionMigrationError } from "./errors.js";
@@ -739,12 +740,14 @@ export class SqliteSessionStore
     sessionID: SessionId;
     status?: GoalStatus;
     tokenBudget?: number | null;
+    timeBudget?: number | null;
   }): Promise<SessionGoal> {
     return setSessionTarget(this.db, {
       objective: input.objective,
       sessionID: input.sessionID,
       status: input.status ?? "active",
       tokenBudget: input.tokenBudget,
+      timeBudget: input.timeBudget,
     });
   }
 
@@ -765,8 +768,16 @@ export class SqliteSessionStore
     objective: string;
     sessionID: SessionId;
     tokenBudget?: number | null;
+    timeBudget?: number | null;
   }): Promise<SessionGoal | null> {
     return createSessionTarget(this.db, input);
+  }
+
+  async updateTargetTimeBudget(input: {
+    sessionID: SessionId;
+    timeBudget: number | null;
+  }): Promise<SessionGoal | null> {
+    return updateSessionTargetTimeBudget(this.db, input);
   }
 
   async updateTargetStatus(input: {

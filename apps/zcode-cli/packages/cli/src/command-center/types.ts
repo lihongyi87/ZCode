@@ -123,6 +123,7 @@ export type CommandCenterTarget = {
   summaryTitle?: string | null;
   targetID: string;
   tokenBudget?: number | null;
+  timeBudget?: number | null;
   tokensUsed?: number;
   timeUsedSeconds?: number;
   time: {
@@ -204,7 +205,9 @@ export type CommandCenterApp = {
     objective: string;
     status?: CommandCenterTargetStatus;
     tokenBudget?: number | null;
+    timeBudget?: number | null;
   }): Promise<CommandCenterTarget>;
+  updateTimeBudget?(timeBudget: number | null): Promise<CommandCenterTarget | null>;
   updateTargetStatus?(status: CommandCenterTargetStatus): Promise<CommandCenterTarget | null>;
   clearTarget?(): Promise<boolean>;
   continueActiveTarget?(options?: {

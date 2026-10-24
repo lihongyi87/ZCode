@@ -13,6 +13,7 @@ interface TargetRow {
   summary_title: string | null;
   status: string;
   token_budget: number | null;
+  time_budget_seconds: number | null;
   tokens_used: number;
   time_used_seconds: number;
   active_input_id: string | null;
@@ -39,6 +40,7 @@ export function setSessionTarget(
     sessionID: SessionId;
     status: GoalStatus;
     tokenBudget?: number | null;
+    timeBudget?: number | null;
   },
 ): SessionGoal {
   const now = Date.now();
@@ -46,14 +48,15 @@ export function setSessionTarget(
   db.prepare(
     `
     insert into session_target (
-      session_id, target_id, objective, summary_title, status, token_budget, tokens_used, time_used_seconds, time_created, time_updated
-    ) values (?, ?, ?, null, ?, ?, 0, 0, ?, ?)
+      session_id, target_id, objective, summary_title, status, token_budget, time_budget_seconds, tokens_used, time_used_seconds, time_created, time_updated
+    ) values (?, ?, ?, null, ?, ?, ?, 0, 0, ?, ?)
     on conflict(session_id) do update set
       target_id = excluded.target_id,
       objective = excluded.objective,
       summary_title = excluded.summary_title,
       status = excluded.status,
       token_budget = excluded.token_budget,
+      time_budget_seconds = excluded.time_budget_seconds,
       tokens_used = excluded.tokens_used,
       time_used_seconds = excluded.time_used_seconds,
       active_input_id = null,
@@ -68,6 +71,7 @@ export function setSessionTarget(
     input.objective,
     input.status,
     input.tokenBudget ?? null,
+    input.timeBudget ?? null,
     now,
     now,
   );
@@ -97,6 +101,7 @@ export function cloneSessionTargetForFork(
       summary_title,
       status,
       token_budget,
+      time_budget_seconds,
       tokens_used,
       time_used_seconds,
       active_input_id,
@@ -104,13 +109,14 @@ export function cloneSessionTargetForFork(
       active_run_last_seen_at,
       time_created,
       time_updated
-    ) values (?, ?, ?, ?, ?, ?, ?, ?, null, null, null, ?, ?)
+    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, null, null, null, ?, ?)
     on conflict(session_id) do update set
       target_id = excluded.target_id,
       objective = excluded.objective,
       summary_title = excluded.summary_title,
       status = excluded.status,
       token_budget = excluded.token_budget,
+      time_budget_seconds = excluded.time_budget_seconds,
       tokens_used = excluded.tokens_used,
       time_used_seconds = excluded.time_used_seconds,
       active_input_id = null,
@@ -126,6 +132,8 @@ export function cloneSessionTargetForFork(
     source.summaryTitle,
     input.status,
     source.tokenBudget,
+    // 兼容仍构造 SessionGoal 字面量而未带 timeBudget 的调用方/测试夹具。
+    source.timeBudget ?? null,
     source.tokensUsed,
     source.timeUsedSeconds,
     source.time.created,
@@ -137,17 +145,22 @@ export function cloneSessionTargetForFork(
 
 export function createSessionTarget(
   db: DatabaseSync,
-  input: { objective: string; sessionID: SessionId; tokenBudget?: number | null },
+  input: {
+    objective: string;
+    sessionID: SessionId;
+    tokenBudget?: number | null;
+    timeBudget?: number | null;
+  },
 ): SessionGoal | null {
   const now = Date.now();
   const targetID = createStorageTargetId();
   db.prepare(
     `
     insert or ignore into session_target (
-      session_id, target_id, objective, summary_title, status, token_budget, tokens_used, time_used_seconds, time_created, time_updated
-    ) values (?, ?, ?, null, 'active', ?, 0, 0, ?, ?)
+      session_id, target_id, objective, summary_title, status, token_budget, time_budget_seconds, tokens_used, time_used_seconds, time_created, time_updated
+    ) values (?, ?, ?, null, 'active', ?, ?, 0, 0, ?, ?)
     `,
-  ).run(input.sessionID, targetID, input.objective, input.tokenBudget ?? null, now, now);
+  ).run(input.sessionID, targetID, input.objective, input.tokenBudget ?? null, input.timeBudget ?? null, now, now);
 
   const target = readSessionTarget(db, { sessionID: input.sessionID });
   if (target?.targetID !== targetID) return null;
@@ -269,6 +282,7 @@ export function finishSessionTargetRun(
         status = case
           when ? is not null then ?
           when status = 'active' and token_budget is not null and tokens_used + ? >= token_budget then 'budget_limited'
+          when status = 'active' and time_budget_seconds is not null and time_used_seconds + ? >= time_budget_seconds then 'budget_limited'
           else status
         end,
         active_input_id = null,
@@ -287,6 +301,7 @@ export function finishSessionTargetRun(
       input.status ?? null,
       input.status ?? null,
       tokenDelta,
+      timeDelta,
       endedAt,
       input.sessionID,
       input.targetID,
@@ -368,14 +383,48 @@ export function accountSessionTargetUsage(
         time_used_seconds = time_used_seconds + ?,
         status = case
           when status = 'active' and token_budget is not null and tokens_used + ? >= token_budget then 'budget_limited'
+          when status = 'active' and time_budget_seconds is not null and time_used_seconds + ? >= time_budget_seconds then 'budget_limited'
           else status
         end,
         time_updated = ?
       where session_id = ? and target_id = ?
       `,
     )
-    .run(tokenDelta, timeDelta, tokenDelta, now, input.sessionID, input.targetID);
+    .run(tokenDelta, timeDelta, tokenDelta, timeDelta, now, input.sessionID, input.targetID);
   if (result.changes === 0) return readSessionTarget(db, { sessionID: input.sessionID });
+  touchSessionForTarget(db, input.sessionID, now);
+  return mustReadTarget(db, input.sessionID);
+}
+
+export function updateSessionTargetTimeBudget(
+  db: DatabaseSync,
+  input: {
+    sessionID: SessionId;
+    /** null = 清除预算（off）。 */
+    timeBudget: number | null;
+  },
+): SessionGoal | null {
+  const now = Date.now();
+  // 已超额的 active 目标在写入更小（或未清除）预算的同一语句内翻转 budget_limited，
+  // 让「/goal time 1h（已用 3h）」立即呈现受限态，而不是等到下一次记账。
+  const result = db
+    .prepare(
+      `
+      update session_target
+      set
+        time_budget_seconds = ?,
+        status = case
+          when status = 'active'
+            and ? is not null
+            and time_used_seconds >= ? then 'budget_limited'
+          else status
+        end,
+        time_updated = ?
+      where session_id = ?
+      `,
+    )
+    .run(input.timeBudget, input.timeBudget, input.timeBudget, now, input.sessionID);
+  if (result.changes === 0) return null;
   touchSessionForTarget(db, input.sessionID, now);
   return mustReadTarget(db, input.sessionID);
 }
@@ -436,6 +485,7 @@ function decodeTargetRow(row: TargetRow): SessionGoal {
     summaryTitle: row.summary_title,
     status: row.status as GoalStatus,
     tokenBudget: row.token_budget,
+    timeBudget: row.time_budget_seconds,
     tokensUsed: row.tokens_used,
     timeUsedSeconds: row.time_used_seconds,
     activeInputId: row.active_input_id,

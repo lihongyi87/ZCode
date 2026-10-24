@@ -1,3 +1,4 @@
+import { parseGoalTimeBudgetFlag } from "@zcode/contracts";
 import type { TuiSubmitPromptResult } from "@zcode/tui";
 import { attachCurrentSessionMetadata } from "../metadata.js";
 import { buildTargetReplaceSelection } from "../selections.js";
@@ -35,6 +36,55 @@ export async function handleTargetCommand(
   }
 
   const [action] = splitArgs(trimmed);
+  if (action === "time") {
+    // `/goal time` 显示当前预算与剩余；`/goal time <dur>` 更新；`/goal time off` 清除。
+    const rest = trimmed.slice(action.length).trim();
+    if (!rest) {
+      const target = await app.readTarget();
+      if (!target) {
+        return { mode: deps.getMode?.(), response: "No goal is set." };
+      }
+      return {
+        mode: deps.getMode?.(),
+        response: formatTargetChanged("Goal time budget", target),
+      };
+    }
+    if (!app.updateTimeBudget) {
+      return {
+        mode: deps.getMode?.(),
+        response: "Goal time budget management is not available in this client.",
+      };
+    }
+    let seconds: number | null;
+    if (/^(off|none)$/i.test(rest)) {
+      seconds = null;
+    } else {
+      const durationMatch = rest.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
+      const totalSeconds =
+        Number(durationMatch?.[1] ?? 0) * 3600 +
+        Number(durationMatch?.[2] ?? 0) * 60 +
+        Number(durationMatch?.[3] ?? 0);
+      if (!durationMatch || totalSeconds <= 0) {
+        return {
+          mode: deps.getMode?.(),
+          response: "Usage: /goal time <duration|off> with duration like 4h, 90m, 2h30m, 45s.",
+        };
+      }
+      seconds = totalSeconds;
+    }
+    const target = await app.updateTimeBudget(seconds);
+    if (!target) {
+      return {
+        mode: deps.getMode?.(),
+        response: "No goal to configure. Use /goal <objective> first.",
+      };
+    }
+    return {
+      mode: deps.getMode?.(),
+      response: formatTargetChanged("Goal time budget updated", target),
+    };
+  }
+
   if (action === "pause") {
     const target = await app.updateTargetStatus("paused");
     return {
@@ -82,7 +132,25 @@ export async function handleTargetCommand(
     }
   }
 
-  const target = await app.setTarget({ objective, status: "active" });
+  // `/goal <objective> --time 4h` 一步带上时间预算；解析失败给 usage 提示而非静默丢弃。
+  let timeBudget: number | null | undefined;
+  let finalObjective = objective;
+  try {
+    const parsed = parseGoalTimeBudgetFlag(objective);
+    finalObjective = parsed.objective;
+    timeBudget = parsed.timeBudgetSeconds;
+  } catch (error) {
+    return {
+      mode: deps.getMode?.(),
+      response: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const target = await app.setTarget({
+    objective: finalObjective,
+    status: "active",
+    timeBudget,
+  });
   return continueTargetAfterChange("Goal active", target, app, deps, options);
 }
 
@@ -135,8 +203,20 @@ function formatTargetChanged(title: string, target: CommandCenterTarget): string
       : target.tokenBudget.toString();
     lines.push(`Usage: ${target.tokensUsed ?? 0} tokens / ${budget}`);
   }
-  if (target.timeUsedSeconds !== undefined) {
-    lines.push(`Time: ${target.timeUsedSeconds} seconds`);
+  if (target.timeUsedSeconds !== undefined || target.timeBudget !== undefined) {
+    const timeBudget =
+      target.timeBudget === null || target.timeBudget === undefined
+        ? "none"
+        : target.timeBudget.toString();
+    const remaining =
+      target.timeBudget === null || target.timeBudget === undefined
+        ? undefined
+        : Math.max(0, target.timeBudget - (target.timeUsedSeconds ?? 0));
+    lines.push(
+      `Time: ${target.timeUsedSeconds ?? 0} / ${timeBudget} seconds${
+        remaining === undefined ? "" : ` (${remaining} seconds remaining)`
+      }`,
+    );
   }
   return lines.join("\n");
 }

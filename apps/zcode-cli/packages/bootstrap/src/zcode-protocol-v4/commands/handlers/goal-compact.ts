@@ -12,6 +12,7 @@ import type {
   CommandPayloadMap,
   CommandResult,
 } from "@zcode/shared/zcode-protocol-v4";
+import { parseGoalTimeBudgetFlag } from "@zcode/contracts";
 import type { SteerTurnOptions, SubmitPromptOptions } from "../../../app/types.js";
 import { runWithSessionResidencyFinalization } from "../../../session-execution/index.js";
 import { inputIntentMetadata } from "../input-intent.js";
@@ -32,7 +33,8 @@ export class V4GoalCompactRejectedError extends Error {
       | "compactOperationLock"
       | "restoreWarning"
       | "guard.planGoalMutuallyExclusive"
-      | "emptyObjective",
+      | "emptyObjective"
+      | "invalidTimeBudget",
     message: string,
   ) {
     super(message);
@@ -336,10 +338,24 @@ export async function applyGoalCommand(
       record.traceContext,
     );
   }
+  // 与协议 goal 命令同语义：objective 文本里的 `--time <dur>` 解析成预算后落库。
+  let timeBudget: number | null | undefined;
+  let objective = params.objective;
+  try {
+    const parsed = parseGoalTimeBudgetFlag(params.objective);
+    objective = parsed.objective;
+    timeBudget = parsed.timeBudgetSeconds;
+  } catch (error) {
+    throw new V4GoalCompactRejectedError(
+      "invalidTimeBudget",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
   await record.app.setTarget({
     ...(params.displayText ? { displayText: params.displayText } : {}),
-    objective: params.objective,
+    objective,
     status: "active",
+    timeBudget,
     ...(params.intent ? { intent: params.intent } : {}),
   });
   await continueGoalAfterChange(host, record, {

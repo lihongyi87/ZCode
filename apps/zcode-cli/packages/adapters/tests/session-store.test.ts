@@ -43,7 +43,9 @@ interface ConcurrentStartupResult {
 }
 
 const CONCURRENT_STARTUP_ATTEMPTS = 5;
-const CONCURRENT_STARTUP_TEST_TIMEOUT_MS = 10_000;
+// 10 个 tsx 子进程的冷启动在 Windows 上实测 ~12s，10s 会把 legitimate 并发迁移
+// 误判成超时；留出慢机余量，同时不让真实挂死拖太久。
+const CONCURRENT_STARTUP_TEST_TIMEOUT_MS = 60_000;
 
 function openSessionStoreInConcurrentProcesses(dbPath: string): Promise<ConcurrentStartupResult[]> {
   const workerUrl = new URL("./fixtures/session-store-concurrent-process.ts", import.meta.url);
@@ -638,6 +640,7 @@ describe("SQLite session store", () => {
       "0022_backfilled_session_reasoning",
       "0023_session_soft_delete_outcome",
       "0024_session_database_identity",
+      "0025_session_target_time_budget",
     ];
 
     try {
@@ -674,6 +677,7 @@ describe("SQLite session store", () => {
         "0.16.5",
         "0.16.5",
         "0.16.5",
+        "0.16.9",
         "0.16.9",
         "0.16.9",
       ]);
@@ -713,7 +717,7 @@ describe("SQLite session store", () => {
         ]),
       );
       expect(attempts.flat().filter((result) => !result.ok)).toEqual([]);
-      expect(attempts.flat().every((result) => result.migrationIds?.length === 24)).toBe(true);
+      expect(attempts.flat().every((result) => result.migrationIds?.length === 25)).toBe(true);
     },
     CONCURRENT_STARTUP_TEST_TIMEOUT_MS,
   );
@@ -940,6 +944,7 @@ describe("SQLite session store", () => {
         "0022_backfilled_session_reasoning",
         "0023_session_soft_delete_outcome",
         "0024_session_database_identity",
+        "0025_session_target_time_budget",
       ]);
       store.close();
     } finally {
@@ -3262,6 +3267,96 @@ describe("session input ledger (0016)", () => {
         (record) => record.id === "wake-1",
       );
       expect(wake).toMatchObject({ status: "promoted", promotedSequence: 1 });
+    } finally {
+      store.close();
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("session goal time budget", () => {
+  it("run accounting at the time budget flips budget_limited; updateTimeBudget gates and clears", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "zcode-session-time-budget-"));
+    const store = await createSqliteSessionStore({
+      dbPath: join(tempRoot, "session.sqlite"),
+    });
+    const sessionID = createSessionId("time-budget-store");
+    const created = 1_700_000_000_000;
+
+    try {
+      await store.createSession({
+        id: sessionID,
+        projectID: createProjectId("time-budget-store"),
+        slug: "time-budget-store",
+        directory: tempRoot,
+        title: "time budget store",
+        version: "0.1.0",
+        time: {
+          created,
+          updated: created,
+        },
+      });
+
+      const target = await store.setTarget({
+        objective: "Four hour goal",
+        sessionID,
+        timeBudget: 4 * 3600,
+      });
+      expect(target).toMatchObject({
+        status: "active",
+        timeBudget: 14400,
+        timeUsedSeconds: 0,
+      });
+
+      // 未到预算：结算保持 active
+      await store.startTargetRun({
+        inputID: "run-1",
+        sessionID,
+        startedAtMs: created,
+        targetID: target.targetID,
+      });
+      const withinBudget = await store.finishTargetRun({
+        endedAtMs: created + 90_000,
+        inputID: "run-1",
+        sessionID,
+        targetID: target.targetID,
+      });
+      expect(withinBudget).toMatchObject({ status: "active", timeUsedSeconds: 90 });
+
+      // 到预算：结算与翻转发生在同一条 SQL 里
+      await store.startTargetRun({
+        inputID: "run-2",
+        sessionID,
+        startedAtMs: created + 100_000,
+        targetID: target.targetID,
+      });
+      const limited = await store.finishTargetRun({
+        endedAtMs: created + 100_000 + 14_400_000,
+        inputID: "run-2",
+        sessionID,
+        targetID: target.targetID,
+      });
+      expect(limited).toMatchObject({
+        status: "budget_limited",
+        timeUsedSeconds: 14_490,
+      });
+
+      // 提高预算后 resume 恢复 active
+      const raised = await store.updateTargetTimeBudget({
+        sessionID,
+        timeBudget: 8 * 3600,
+      });
+      expect(raised).toMatchObject({ status: "budget_limited", timeBudget: 28_800 });
+      const resumed = await store.updateTargetStatus({ sessionID, status: "active" });
+      expect(resumed).toMatchObject({ status: "active" });
+
+      // 调低到已用时长之下：写入即翻转，不等下一次记账
+      const lowered = await store.updateTargetTimeBudget({ sessionID, timeBudget: 100 });
+      expect(lowered).toMatchObject({ status: "budget_limited", timeBudget: 100 });
+
+      // off 清除预算；受限状态保持，避免清预算把受限目标悄悄复活
+      const cleared = await store.updateTargetTimeBudget({ sessionID, timeBudget: null });
+      expect(cleared).toMatchObject({ status: "budget_limited", timeBudget: null });
     } finally {
       store.close();
       await rm(tempRoot, { force: true, recursive: true });

@@ -34,6 +34,42 @@ export const GoalTokenBudgetSchema = z
   .positive("goal token budget must be positive")
   .nullable();
 
+export const GoalTimeBudgetSchema = z
+  .number()
+  .int()
+  .positive("goal time budget must be positive")
+  .nullable();
+
+/**
+ * 解析 `/goal` 的时间预算时长文本（`4h`、`90m`、`2h30m`、`45s`，至少一段且总和为正）。
+ * `off` / `none` 返回 null（清除预算）；无 `--time` 标记返回 undefined（调用方沿用现状）。
+ * 解析失败抛错，由调用方转成用户可见的 usage 提示——不静默吞掉写不进去的预算。
+ */
+export function parseGoalTimeBudgetFlag(
+  objective: string,
+): { objective: string; timeBudgetSeconds: number | null | undefined } {
+  // `(?:^|\s)`：--time 在文本开头同样成立；标记前面没有 objective 时 stripped 为空，抛 usage 错。
+  const match = objective.match(/(?:^|\s)--time(?:=|\s+)(?:"?([^"\s]+)"?)\s*$/i);
+  if (!match) return { objective, timeBudgetSeconds: undefined };
+  const value = match[1]?.trim() ?? "";
+  const stripped = objective.slice(0, match.index).trim();
+  if (/^(off|none)$/i.test(value)) {
+    if (!stripped) throw new Error("--time off removes the budget but the objective cannot be empty.");
+    return { objective: stripped, timeBudgetSeconds: null };
+  }
+  const durationMatch = value.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
+  const hours = Number(durationMatch?.[1] ?? 0);
+  const minutes = Number(durationMatch?.[2] ?? 0);
+  const seconds = Number(durationMatch?.[3] ?? 0);
+  const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+  if (!durationMatch || totalSeconds <= 0 || !stripped) {
+    throw new Error(
+      "Usage: /goal <objective> --time <duration> with duration like 4h, 90m, 2h30m, 45s.",
+    );
+  }
+  return { objective: stripped, timeBudgetSeconds: totalSeconds };
+}
+
 export const GoalObjectiveSchema = z
   .string()
   .transform((value) => value.trim())
@@ -51,6 +87,8 @@ export interface SessionGoal {
   summaryTitle: string | null;
   status: GoalStatus;
   tokenBudget: number | null;
+  /** 时间预算（秒，正整数；null = 不限时）。只累计 goal run 活跃期间的秒数。 */
+  timeBudget: number | null;
   tokensUsed: number;
   timeUsedSeconds: number;
   activeInputId?: string | null;
@@ -70,6 +108,7 @@ export const SessionGoalSchema = z
     summaryTitle: z.string().min(1).nullable(),
     status: GoalStatusSchema,
     tokenBudget: GoalTokenBudgetSchema,
+    timeBudget: GoalTimeBudgetSchema,
     tokensUsed: z.number().int().nonnegative(),
     timeUsedSeconds: z.number().int().nonnegative(),
     activeInputId: z.string().min(1).nullable().optional(),
@@ -121,12 +160,17 @@ export function formatGoalStateForModel(goal: SessionGoal | null): string {
 
   const budget =
     goal.tokenBudget === null ? "none" : goal.tokenBudget.toString();
+  const timeBudget =
+    goal.timeBudget === null || goal.timeBudget === undefined
+      ? "none"
+      : goal.timeBudget.toString();
   return [
     "Current session goal state (authoritative):",
     `Status: ${goal.status}`,
     `Tokens used: ${goal.tokensUsed}`,
     `Token budget: ${budget}`,
     `Time used: ${goal.timeUsedSeconds} seconds`,
+    `Time budget: ${timeBudget} seconds`,
     "Objective (user-provided):",
     "<untrusted_objective>",
     escapeGoalPromptText(goal.objective),
@@ -147,6 +191,16 @@ export function formatGoalContinuationPrompt(
     goal.tokenBudget === null
       ? "unbounded"
       : Math.max(0, goal.tokenBudget - goal.tokensUsed).toString();
+  // 时间预算让模型能规划最后一轮的收尾，而不是被截断在半个计划上。
+  const timeBudgetSeconds = goal.timeBudget ?? null;
+  const remainingSeconds =
+    timeBudgetSeconds === null
+      ? null
+      : Math.max(0, timeBudgetSeconds - goal.timeUsedSeconds);
+  const timeBudgetLine =
+    timeBudgetSeconds === null
+      ? "- Time budget: none"
+      : `- Time budget: ${timeBudgetSeconds} seconds (about ${remainingSeconds} seconds remaining)`;
   const nextAction = verification?.nextAction?.trim();
   const verificationReason = verification?.reason;
   const verificationLines = nextAction
@@ -172,6 +226,7 @@ export function formatGoalContinuationPrompt(
     "",
     "Budget:",
     `- Time spent pursuing goal: ${goal.timeUsedSeconds} seconds`,
+    timeBudgetLine,
     `- Tokens used: ${goal.tokensUsed}`,
     `- Token budget: ${tokenBudget}`,
     `- Tokens remaining: ${remainingTokens}`,

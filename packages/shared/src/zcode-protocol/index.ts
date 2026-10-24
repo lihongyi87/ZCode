@@ -1231,6 +1231,7 @@ export const zcodeSessionGoalStatsSchema = z
     timeUsedSeconds: z.number().int().nonnegative(),
     tokensUsed: z.number().int().nonnegative(),
     tokenBudget: z.number().int().positive().nullable(),
+    timeBudget: z.number().int().positive().nullable(),
     contextUsed: z.number().int().nonnegative(),
     contextWindow: z.number().int().nonnegative(),
     toolCallCount: z.number().int().nonnegative(),
@@ -2254,6 +2255,7 @@ export const zcodeSessionGoalActionSchema = z.enum([
   "show",
   "set",
   "replace",
+  "time",
   "pause",
   "resume",
   "clear",
@@ -2266,6 +2268,8 @@ export const zcodeSessionGoalParamsSchema = z
     inputId: nonEmptyString.optional(),
     action: zcodeSessionGoalActionSchema,
     objective: z.string().optional(),
+    /** action=time 的新预算（秒）；null = 清除（off）。 */
+    timeBudget: z.number().int().positive().nullable().optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
   .strict();

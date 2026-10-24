@@ -984,4 +984,12 @@ export const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     `,
   },
   { ...SESSION_DATABASE_IDENTITY_MIGRATION, touchedTables: ["zcode_database_identity"] },
+  {
+    appVersion: "0.16.9",
+    id: "0025_session_target_time_budget",
+    touchedTables: ["session_target"],
+    sql: `
+      alter table session_target add column time_budget_seconds integer;
+    `,
+  },
 ];

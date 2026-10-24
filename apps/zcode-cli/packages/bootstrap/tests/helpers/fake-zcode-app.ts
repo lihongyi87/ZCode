@@ -175,6 +175,9 @@ export function createFakeApp(
     setTarget: async () => {
       throw new Error("Targets are not available in fake app");
     },
+    updateTimeBudget: async () => {
+      throw new Error("Targets are not available in fake app");
+    },
     setModel: async (nextModel) => {
       const nextIdentity =
         typeof nextModel === "string" ? nextModel : `${nextModel.providerId}/${nextModel.modelId}`;

@@ -1945,6 +1945,7 @@ function fromZCodeGoal(
     summaryTitle: goal.summaryTitle,
     status: goal.status,
     tokenBudget: goal.tokenBudget,
+    timeBudget: goal.timeBudget,
     tokensUsed: goal.tokensUsed,
     timeUsedSeconds: goal.timeUsedSeconds,
     time: {

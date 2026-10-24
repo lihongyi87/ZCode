@@ -7,7 +7,7 @@ Add a session-local long-running goal that lets the user or model persist one ob
 ## Non-Goals
 
 - Goal is not a cross-session scheduler and does not create worker sessions.
-- Goal continuation is runtime-triggered only when the current session is idle; it is not a wall-clock timer or polling loop.
+- Goal continuation is runtime-triggered only when the current session is idle; it is not a polling loop. The optional time budget bounds an in-flight run with a deadline abort (see Time Budget), but continuation itself is still idle-triggered, never clock-triggered.
 - The first automatic-continuation version does not create worker sessions or fan out work.
 - The runtime does not semantically decide that a goal is complete; completion is model/user driven.
 
@@ -40,10 +40,30 @@ Goal status values are:
 
 - `active`: the goal is available to guide future turns.
 - `paused`: the goal remains persisted but should not drive continuation.
-- `budget_limited`: the goal reached its configured token budget and should not start new substantive continuation work.
+- `budget_limited`: the goal reached its configured token budget or time budget and should not start new substantive continuation work.
 - `complete`: the goal has been achieved and should not drive continuation.
 
-Only user-facing control surfaces can set, pause, resume, replace, or clear a goal. The initial surfaces are TUI `/goal ...` and headless CLI `--target ...` for set/replace. Model tools may read the active goal but cannot create, update, or complete it. Runtime may set `paused` on user cancellation, `budget_limited` when goal accounting reaches the configured budget, and `complete` only after the completion verifier passes.
+Only user-facing control surfaces can set, pause, resume, replace, or clear a goal. The initial surfaces are TUI `/goal ...` and headless CLI `--target ...` for set/replace. Model tools may read the active goal but cannot create, update, or complete it. Runtime may set `paused` on user cancellation, `budget_limited` when goal accounting reaches the configured token or time budget, and `complete` only after the completion verifier passes.
+
+## Time Budget
+
+A goal may carry an optional time budget (`timeBudget`, positive integer seconds, default `null` = unlimited). It bounds how long the goal may keep driving autonomous work in this session. The clock accrues only while a goal run is active: accounting reuses the existing run-boundary records (`active_run_started_at` + heartbeat + crash recovery), so paused goals and offline time never consume budget.
+
+Two enforcement layers:
+
+1. **Turn boundary (always on).** Run-finish and usage accounting flip `active` → `budget_limited` in the same SQL statement that accrues `time_used_seconds` when the accrued total reaches the budget. The next continuation candidate check sees a non-active goal and stops. This alone is not precise: the overshoot is bounded by one turn.
+2. **Deadline abort (goal continuation turns only).** When a goal-driven continuation turn starts with a time budget in place, the runtime schedules an abort timer for the exact remaining time (`timeBudget - timeUsedSeconds`). When it fires, the runtime first closes the active run with status `budget_limited` and emits the target-changed event, then aborts the turn. The standard cancellation path finds the goal already non-active and skips its pause, so the stop reason stays truthful. User-initiated prompts that happen to run while a goal is active are never aborted by the goal clock — the user owns those turns; the boundary gate still flips the status at their completion.
+
+The continuation candidate check also flips and skips immediately when the goal is already over budget at check time (for example after `/goal time` lowers the budget below the accrued usage, or after resume of an over-budget goal). Extending a budget-limited goal is `/goal time <longer duration>` followed by `/goal resume`; raising the budget above accrued usage makes resume stick.
+
+Set surfaces:
+
+- `/goal <objective> --time <duration>` sets the goal with a budget in one step.
+- `/goal time <duration>` updates the budget of the existing goal; `/goal time off` clears it; bare `/goal time` reports accrued time, budget, and remaining.
+- Duration grammar: `<n>h`, `<n>m`, `<n>s`, or a combination like `2h30m`; at least one component and a positive total. `off` / `none` clears.
+- The desktop composer path accepts the same `--time` flag inside `/goal` text and the protocol `goal` params carry `timeBudget` directly. Headless `--target "<objective>"` funnels through the same command-center parse.
+
+The model-visible goal state includes the time budget and remaining time so the model can plan the last iteration instead of being cut mid-plan.
 
 ## Continuation
 

@@ -7,6 +7,7 @@ import {
   traceContextToLogContext,
 } from "../deps.js";
 import type {
+  GoalStatus,
   ModelUsageSummary,
   SessionGoal,
   TargetChangedPayload,
@@ -197,6 +198,28 @@ async function targetContinuationCandidateForCommand(
 
   const target = await this.readSessionTargetForContext(traceContext);
   if (!target || target.status !== "active") return null;
+  // 时间预算在候选阶段先拦一次：/goal time 调低到已用时长之下、或 resume 一个已超额的
+  // 目标时，不等这一轮跑完才在记账里翻转——候选即翻，续跑根本不启动。
+  if (
+    target.timeBudget != null &&
+    target.timeUsedSeconds >= target.timeBudget &&
+    this.sessionStore.updateTargetStatus
+  ) {
+    const limited = await this.sessionStore.updateTargetStatus({
+      sessionID: this.sessionId,
+      status: "budget_limited",
+    });
+    if (limited) {
+      await this.recordTargetChanged({
+        action: "status_updated",
+        previousTarget: target,
+        source: "runtime",
+        target: limited,
+        traceContext,
+      });
+    }
+    return null;
+  }
   return target;
 }
 
@@ -341,7 +364,7 @@ export async function finishTargetTurnAccounting(
     inputID: string;
     endedAtMs: number;
     startedTarget: SessionGoal | null;
-    status?: "paused";
+    status?: GoalStatus;
     traceContext: TraceContext;
   },
 ): Promise<SessionGoal | null> {

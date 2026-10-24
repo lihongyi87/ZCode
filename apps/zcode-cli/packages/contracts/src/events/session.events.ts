@@ -1150,6 +1150,7 @@ export type PermissionDecision = "allow" | "deny" | "escalate" | "modify";
 export type TargetChangedAction =
   | "set"
   | "status_updated"
+  | "time_budget_updated"
   | "cleared"
   | "usage_accounted"
   | "run_started"

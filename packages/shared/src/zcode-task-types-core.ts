@@ -76,6 +76,8 @@ export interface ZCodeTaskGoal {
   summaryTitle: string | null;
   status: ZCodeTaskGoalStatus;
   tokenBudget: number | null;
+  /** 时间预算（秒，正整数；null = 不限时）。只累计 goal run 活跃期间的秒数。 */
+  timeBudget: number | null;
   tokensUsed: number;
   timeUsedSeconds: number;
   activeInputId?: string | null;
@@ -93,6 +95,8 @@ export interface ZCodeTaskGoalStats {
   tokensUsed: number;
   /** 用户显式设置的 goal token budget；为空时 UI 可展示 context window。 */
   tokenBudget: number | null;
+  /** 用户显式设置的 goal 时间预算（秒）；为空 = 不限时。 */
+  timeBudget: number | null;
   /** 当前 session 上下文窗口已使用 token。 */
   contextUsed: number;
   /** 当前 session 上下文窗口容量。 */

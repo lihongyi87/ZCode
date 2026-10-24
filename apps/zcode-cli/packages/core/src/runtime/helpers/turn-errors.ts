@@ -20,6 +20,8 @@ export { projectExecutionErrorPayload } from "../../errors/error-payload.js";
 interface TurnAbortScope {
   dispose: () => void;
   signal: AbortSignal;
+  /** 本轮内部打断（如 goal 时间预算到点）；不影响外部传入的 parentSignal。 */
+  abort: (reason?: unknown) => void;
 }
 
 const EXTERNAL_TURN_FAULT_MARKER = "zcode.externalTurnFault";
@@ -67,7 +69,7 @@ export function createTurnAbortScope(parentSignal?: AbortSignal): TurnAbortScope
 
   if (parentSignal?.aborted) {
     abortTurn();
-    return { dispose: () => {}, signal: controller.signal };
+    return { dispose: () => {}, signal: controller.signal, abort: abortTurn };
   }
 
   parentSignal?.addEventListener("abort", abortTurn, { once: true });
@@ -77,6 +79,7 @@ export function createTurnAbortScope(parentSignal?: AbortSignal): TurnAbortScope
       parentSignal?.removeEventListener("abort", abortTurn);
     },
     signal: controller.signal,
+    abort: abortTurn,
   };
 }
 

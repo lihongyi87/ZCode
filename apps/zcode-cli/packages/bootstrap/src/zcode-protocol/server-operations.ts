@@ -22,6 +22,7 @@ import {
   createPartId,
   createSessionId,
   createCoreError,
+  parseGoalTimeBudgetFlag,
   parseRewindTriggeredPayload,
   RewindScope,
   RewindStrategy,
@@ -2251,6 +2252,23 @@ export async function goalSession(context: ZCodeProtocolAgentServerContext, rawP
     };
   }
 
+  if (params.action === "time") {
+    // 协议层直接给 timeBudget（秒）；缺省按 null（off）处理。
+    const target = await record.app.updateTimeBudget(params.timeBudget ?? null);
+    if (!target) {
+      return {
+        response: "No goal to configure. Use /goal <objective> first.",
+        snapshot: await snapshot(context, record),
+        startedTurn: false,
+      };
+    }
+    return {
+      response: formatGoalChanged("Goal time budget updated", target),
+      snapshot: await snapshot(context, record),
+      startedTurn: false,
+    };
+  }
+
   if (params.action === "pause") {
     const activeAbortController = record.activeAbortController;
     const target = await record.app.updateTargetStatus("paused");
@@ -2317,7 +2335,27 @@ export async function goalSession(context: ZCodeProtocolAgentServerContext, rawP
   const replacesExistingGoal =
     params.action === "replace" || Boolean(await record.app.readTarget());
 
-  const target = await record.app.setTarget({ objective, status: "active" });
+  // 桌面 composer 的 `/goal <objective> --time 4h` 在同一文本里带预算；
+  // 协议层解析后落库，objective 本体不含标记。
+  let setTimeBudget: number | null | undefined = params.timeBudget;
+  let setObjective = objective;
+  try {
+    const parsed = parseGoalTimeBudgetFlag(objective);
+    setObjective = parsed.objective;
+    if (parsed.timeBudgetSeconds !== undefined) setTimeBudget = parsed.timeBudgetSeconds;
+  } catch (error) {
+    return {
+      response: error instanceof Error ? error.message : String(error),
+      snapshot: await snapshot(context, record),
+      startedTurn: false,
+    };
+  }
+
+  const target = await record.app.setTarget({
+    objective: setObjective,
+    status: "active",
+    timeBudget: setTimeBudget,
+  });
   return await continueGoalAfterChange(context, record, {
     inputId: params.inputId,
     reason: replacesExistingGoal ? "goal_replaced" : "goal_set",
@@ -2982,8 +3020,20 @@ function formatGoalChanged(title: string, target: ProtocolGoalTarget): string {
         : target.tokenBudget.toString();
     lines.push(`Usage: ${target.tokensUsed ?? 0} tokens / ${budget}`);
   }
-  if (target.timeUsedSeconds !== undefined) {
-    lines.push(`Time: ${target.timeUsedSeconds} seconds`);
+  if (target.timeUsedSeconds !== undefined || target.timeBudget !== undefined) {
+    const timeBudget =
+      target.timeBudget === null || target.timeBudget === undefined
+        ? "none"
+        : target.timeBudget.toString();
+    const remaining =
+      target.timeBudget === null || target.timeBudget === undefined
+        ? undefined
+        : Math.max(0, target.timeBudget - (target.timeUsedSeconds ?? 0));
+    lines.push(
+      `Time: ${target.timeUsedSeconds ?? 0} / ${timeBudget} seconds${
+        remaining === undefined ? "" : ` (${remaining} seconds remaining)`
+      }`,
+    );
   }
   return lines.join("\n");
 }

@@ -1762,6 +1762,8 @@ export const zcodeTaskGoalSchema = z.object({
   summaryTitle: z.string().min(1).nullable().default(null),
   status: zcodeTaskGoalStatusSchema,
   tokenBudget: z.number().int().positive().nullable(),
+  // 2.15.0 之后的 timeBudget；读取老 task index 数据时补 null，与 summaryTitle 同款容错。
+  timeBudget: z.number().int().positive().nullable().default(null),
   tokensUsed: z.number().int().nonnegative(),
   timeUsedSeconds: z.number().int().nonnegative(),
   activeInputId: nonEmptyStringSchema.nullable().optional(),

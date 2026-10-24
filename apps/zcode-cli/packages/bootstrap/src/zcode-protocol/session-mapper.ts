@@ -1063,6 +1063,7 @@ function mapSessionGoal(goal: SessionGoal | null | undefined): ZCodeSessionGoal 
     targetId: goal.targetID,
     timeUsedSeconds: goal.timeUsedSeconds ?? 0,
     tokenBudget: goal.tokenBudget ?? null,
+    timeBudget: goal.timeBudget ?? null,
     tokensUsed: goal.tokensUsed ?? 0,
     activeInputId: goal.activeInputId ?? null,
     activeRunStartedAtMs: goal.activeRunStartedAtMs ?? null,
@@ -1124,9 +1125,10 @@ function buildGoalStats(
       target.timeUsedSeconds > 0 || target.activeRunStartedAtMs != null
         ? target.timeUsedSeconds
         : derivedTimeUsedSeconds,
-    // 旧 session_target 行可能没有 tokenBudget；协议 schema 需要稳定 JSON 值，
-    // 与 mapSessionGoal 保持一致用 null 表示未设置预算。
+    // 旧 session_target 行可能没有 tokenBudget / timeBudget；协议 schema 需要稳定
+    // JSON 值，与 mapSessionGoal 保持一致用 null 表示未设置预算。
     tokenBudget: target.tokenBudget ?? null,
+    timeBudget: target.timeBudget ?? null,
     tokensUsed: target.tokensUsed > 0 ? target.tokensUsed : derivedTokensUsed,
     toolCallCount: goalIterations.reduce((sum, iteration) => sum + iteration.toolCallCount, 0),
   };

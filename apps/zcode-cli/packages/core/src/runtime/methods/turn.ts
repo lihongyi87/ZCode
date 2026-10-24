@@ -184,6 +184,7 @@ export async function executeTurnCommand(
   let activeTurn: ActiveTurnSteeringState | undefined;
   let startedTarget: SessionGoal | null = null;
   let targetRunHeartbeat: ReturnType<typeof setInterval> | undefined;
+  let targetRunDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let userMessageId: MessageId | undefined;
   let loopState: RegularTurnLoopState | undefined;
   let shouldRetryTitleGenerationAfterTurn = false;
@@ -543,6 +544,40 @@ export async function executeTurnCommand(
         }, TARGET_RUN_HEARTBEAT_MS);
         if (typeof targetRunHeartbeat === "object" && "unref" in targetRunHeartbeat) {
           targetRunHeartbeat.unref();
+        }
+      }
+      // 时间预算（session-target.md「Time Budget」）：goal 续跑轮挂精准到点打断。
+      // 定时器到期先把 active run 以 budget_limited 收口（emit target.changed，随后的
+      // 取消路径看到非 active 会跳过 pause，停止原因保持真实），再打断当前轮。
+      // 用户主动提交的轮次不被 goal 时钟打断，只在轮末记账里过 SQL 软闸。
+      if (
+        options?.inputSource === "goal-continuation" &&
+        startedTarget?.timeBudget != null &&
+        this.sessionStore?.finishTargetRun
+      ) {
+        const remainingMs = Math.max(
+          0,
+          startedTarget.timeBudget * 1000 - startedTarget.timeUsedSeconds * 1000,
+        );
+        targetRunDeadlineTimer = setTimeout(() => {
+          void this.trackResidencyBlockingWork(
+            (async () => {
+              try {
+                await this.finishTargetTurnAccounting({
+                  inputID: targetRunInputID,
+                  endedAtMs: Date.now(),
+                  startedTarget,
+                  status: "budget_limited",
+                  traceContext: turnTraceContext,
+                });
+              } finally {
+                turnAbortScope.abort(new Error("Goal time budget reached"));
+              }
+            })(),
+          );
+        }, remainingMs);
+        if (typeof targetRunDeadlineTimer === "object" && "unref" in targetRunDeadlineTimer) {
+          targetRunDeadlineTimer.unref();
         }
       }
 
@@ -1099,6 +1134,9 @@ export async function executeTurnCommand(
     disposeProjectMemoryRecallPrefetch(this);
     if (targetRunHeartbeat) {
       clearInterval(targetRunHeartbeat);
+    }
+    if (targetRunDeadlineTimer) {
+      clearTimeout(targetRunDeadlineTimer);
     }
     this.releaseTurnStart(turnId);
     clearBrowserTurnState(this.sessionId, turnId);
