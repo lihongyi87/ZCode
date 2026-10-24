@@ -3743,12 +3743,12 @@ R3A-UI-04 / RDUX-11-04 回归（2026-10-12 macOS 真实 SSH 1/1 PASS，仍 pendi
 
 场景、运行批次及未验证边界统一见[case 目录](../conversation-session-case-catalog.md#rdux-13-设置设备卡与更新accepted)；保留原 pending/候选状态，不代表转正或 CI 准入。
 
-| 用例       | [见目录](../conversation-session-case-catalog.md#rdux-13-设置设备卡与更新accepted)                                                    | 证据入口                                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 用例       | [见目录](../conversation-session-case-catalog.md#rdux-13-设置设备卡与更新accepted)                                                                          | 证据入口                                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | RDUX-13-01 | [见目录](../conversation-session-case-catalog.md#rdux-13-设置设备卡与更新accepted)；在线/离线最近项目在草稿缓存缺失或过期时保持项目身份、入口数且无创建弹窗 | `manual-review/pending/conversation-session-remote-device-cards.test.ts`                                        |
-| RDUX-13-02 | [见目录](../conversation-session-case-catalog.md#rdux-13-设置设备卡与更新accepted)                                                    | 同上                                                                                                            |
-| RDUX-13-03 | [见目录](../conversation-session-case-catalog.md#rdux-13-设置设备卡与更新accepted)                                                    | 同上；480px 是桌面窄屏，手机不开放设备管理                                                                      |
-| RDUX-13-04 | [见目录](../conversation-session-case-catalog.md#rdux-13-设置设备卡与更新accepted)                                                    | `sourceServerUpdateNotifications`、`sourceServerUpdatePreferences`、`sourceServerManagementPanel` 组件/单元回归 |
+| RDUX-13-02 | [见目录](../conversation-session-case-catalog.md#rdux-13-设置设备卡与更新accepted)                                                                          | 同上                                                                                                            |
+| RDUX-13-03 | [见目录](../conversation-session-case-catalog.md#rdux-13-设置设备卡与更新accepted)                                                                          | 同上；480px 是桌面窄屏，手机不开放设备管理                                                                      |
+| RDUX-13-04 | [见目录](../conversation-session-case-catalog.md#rdux-13-设置设备卡与更新accepted)                                                                          | `sourceServerUpdateNotifications`、`sourceServerUpdatePreferences`、`sourceServerManagementPanel` 组件/单元回归 |
 
 ### 2026-09-30 评审修复回归证据
 

@@ -126,11 +126,13 @@ describe("desktop tray unread badge", () => {
 
     // 同一 label 只合成一次（缓存的 NativeImage 含 1x/2x 两份表示）
     expect(state.representations).toHaveLength(2);
-    expect(state.representations.map(({ scaleFactor, width, height }) => ({
-      scaleFactor,
-      width,
-      height,
-    }))).toEqual([
+    expect(
+      state.representations.map(({ scaleFactor, width, height }) => ({
+        scaleFactor,
+        width,
+        height,
+      })),
+    ).toEqual([
       { scaleFactor: 1, width: 16, height: 16 },
       { scaleFactor: 2, width: 32, height: 32 },
     ]);

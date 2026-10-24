@@ -26,10 +26,11 @@
 | 上游开源仓库 main                    | 停在 `v3.14.3` = `29628c9`（2026-09-24 起无新提交，fetch 复核）                                                                                                                            | 2026-10-04      |
 | 上游开源仓库 main（2026-10-12 复核） | **已到 `v3.15.1` = `aac4756`**（整版 squash：3.14.3→3.15.1 一次跳版，core 252 文件 +10K 行；见下方 v3.15.1 节）                                                                            | 2026-10-12      |
 | 上游开源仓库 main（2026-10-20 复核） | **已到 `v3.16.1` = `0a1fc56d`**（2026-10-19 整版 sync 提交，Source-Commit `1f4d7f01`；**未打 tag**——tags 仍只有 v3.14.3 / v3.15.1；4502 文件 +356K/-122K，已整版合并，见下方 v3.16.1 节）  | 2026-10-20      |
-| 上游开源仓库最新 tag                 | `v3.14.3` = `29628c9`（**开源仓库只有这一个 tag，2026-10-04 复核**）                                                                                                                       | 2026-10-04      |
+| 上游开源仓库 main（2026-10-24 复核） | **已到 `v3.16.2` = `3c5b227`**（2026-10-20 14:23 sync 提交；**仍未打 tag**——tags 仍只有 v3.14.3 / v3.15.1；263 文件 +10.5K/-4K，已整版合并，见下方 v3.16.2 节）                            | 2026-10-24      |
+| 上游开源仓库最新 tag                 | `v3.15.1` = `aac4756`（开源仓库 tags 共两个：v3.14.3 / v3.15.1，2026-10-24 复核）                                                                                                          | 2026-10-24      |
 | 上游 feature 分支                    | `feat/ui-plugin` = `662c30b`（2026-09-29，UI plugins + Gen UI，426 文件 / +55671 行，**未发版**；新增带 patch 的 `@open-pencil/core@0.14.0`）—— **未跟进**（未发版分支，等进 main 再评估） | 2026-10-04 复核 |
 | 上游闭源发行包                       | `ZCode-3.14.4-linux-x64.deb` —— 逐字节对比 = 3.14.3 + 阿里云验证码健壮性补丁 + 版本号                                                                                                      | 2026-10-03 到手 |
-| 我们领先 / 落后                      | 落后 1 提交（上游把整版压成一个提交；main 无新提交，fetch 复核）；领先数 **未复算**（本机无 upstream 远程，最后一次复算 2026-09-24 得 164，此后本仓库新增提交未计入）                      | 2026-10-04      |
+| 我们领先 / 落后                      | 落后 **0** 提交（v3.16.2 已整版合并，`git rev-list HEAD...official/main` 复核）；领先 **532** 提交（CE 线全部自研与吸收历史计入）                                                          | 2026-10-24      |
 
 > 复算方式：`git fetch upstream --tags && git merge-base HEAD upstream/main && git rev-list --left-right --count HEAD...upstream/main`。
 > **注意**：上游 `v3.14.3` 的**唯一父提交**就是开源提交 `872ad96`，因此"v3.14.3 新增"与"开源基线就有"可以精确切分 —— 比只看一棵树可靠。
@@ -130,6 +131,53 @@
 - licenses 重生成：3.16.1 依赖树移除了 7 个 stale 登记（hash.js/saxes/https/fontkit/brotli/dfa/png-js）
 - CE 接线存活扫描通过：qimen/liuren 围栏、速度药丸、bot 附件三道防护、常时比较、
   cacheHitRatio 保活观测等关键标记均在合并树上
+
+## v3.16.2（来源：开源仓库 main，2026-10-24 整版合并）
+
+> 整版提交 `3c5b2276`（2026-10-20 sync，**未打 tag**——上游 tags 仍只有 v3.14.3 / v3.15.1）。
+> 与 v3.16.1 sync（`0a1fc56d`）相比 263 文件 +10549/-4087 行；**根依赖零变化**
+> （package.json 仅版本号），licenses 无需重生成。merge-base 即 `0a1fc56d`，
+> 21 个冲突逐项裁决：
+
+| 条目                                                                           | 上游形态                                                                                          | 裁决                                                                                                                                                                                                                      | 依据                                                                                               |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| 「在分屏打开」入口下线                                                         | `splitPaneEntryContext` 只留拖拽闸门（2026-10-16 上游产品决定），TaskListItem 菜单项/文档同步收口 | **跟随上游下线**。该功能是上游的而非 CE 自研（文件自开源基线起只由上游提交），CE 无增量可保                                                                                                                               | `docs/v4-split-pane-workbench.md` 已改记「入口已全部下线」；既有拆分布局仍按原文档渲染、不做迁移   |
+| 任务项反馈入口（TaskListItem）                                                 | 直连反馈中心 draft（`openFeedbackSubmit` + 官方工单字段 type/module/severity）                    | **保留 CE 渠道化反馈**（`useFeedbackEntryAction`：GitHub Issues 默认/自定义/关闭三态），在上游新版文件上重植 CE 版 handler                                                                                                | CE README「社区反馈」差异项；官方工单链路对社区版不可达是该改造的动因（hook 头注释）               |
+| composer 工具栏 fit（`useComposerToolbarFit`）                                 | 重写：新增 `iconOnly` 模式 + priority 阶梯                                                        | **跟随上游**。CE 侧无自研差异（COLLAPSE_STEPS 阶梯本就来自官方 3.14.1，82259218）                                                                                                                                         | 上游契约测试 composer-toolbar-layout 全绿                                                          |
+| Bash 执行适配器生命周期                                                        | `node-execution-adapter-run/lifecycle` 关闭/退出语义强化（+147 行，测试 +259）                    | 整体跟进                                                                                                                                                                                                                  | —                                                                                                  |
+| workflow 并发治理 + 协议 transport/plugins                                     | `workflow-concurrency-governor`、`zcode-protocol` plugins/transport 小改                          | 整体跟进（自动合并）                                                                                                                                                                                                      | —                                                                                                  |
+| e2e 性能复现三件套（conversation-session-runtime-communication-performance）   | 上游删除（official/main 全树零痕迹）                                                              | **接受上游删除**（CE 侧仅 fmt 动过）；同批删除失去源文件的上游指针测试 workbenchPointerPositionTracker                                                                                                                    | —                                                                                                  |
+| 台账三件（upstream-snapshot.json / third-party inventory / policy exceptions） | 双侧演化                                                                                          | snapshot 键集并集 + **全部 pin 按合并树重锚**（files/historicalFiles 语义=当前树 blob，5+5 个不在树上的历史 pin 原样保留）；inventory 双侧条目并集；policy 保留 CE v3.16.1 豁免 + 并入上游 side-pane-full-view 快捷键豁免 | 架构检查过（仅剩 spec 151 LSP WIP 未跟踪文件违规，非本合并引入）                                   |
+| README 更新日志                                                                | 加 v3.16.1 / v3.16.2 两行                                                                         | 取 CE 版（CE README 无「更新」节，发版信息走 release-notes；上游版本史由本台账承载）                                                                                                                                      | —                                                                                                  |
+| **补 3.16.1 遗漏：`docs/knip` 第三方登记**                                     | 上游把 knip 文档站镜像（ISC）与内置字体（OFL/MIT）作为 copied components 登记，随 3.16.1 文件进树 | **补登记**：4 个 knip 组件条目移植进 `third-party/copied-components.json`，notices/inventory 重生成（22 组件 / 3312 输入）。3.16.1 合并时该文件取了 CE 侧导致登记丢失，文件裸奔 4 天，本轮 licenses:freshness 暴露后修复  | 搬运必须连许可一起登记（根 AGENTS.md「能力来源与取舍」）；这也是 licenses:freshness 护栏存在的意义 |
+
+### 验证
+
+- typecheck 0 错误（首轮 3 错全部源于 TaskListItem 初次裁决保留了已下线的分屏入口调用，重裁决后清零）
+- lint 0 error；fmt:check 合并文件全绿（8 个失格文件均属未提交的 NSIS WIP，非本合并引入）
+- CE 接线存活扫描：九项重植台账的 zcode-cli 侧接线文件集与合并前逐文件一致（唯一交集
+  `server-operations.ts` 为上游 subagent 会话种类收形，CE adaptiveReasoning 标记 7 处完好）；
+  品牌（BCode-CE / BES 图标）、qimen/liuren 围栏、速度药丸、遥测总开关、workspace-registry
+  护栏全部在位
+- 单测：ui 目标套件（composer-toolbar-layout / savedWorkflowsSection / v4WorkspaceDraftPane）绿；
+  adaptiveReasoningWiring 2 例、dangerousCommandPolicyWiring 1 例为**既有红**（其期望的源码标记
+  `withAutoThoughtLevelOption` / `adaptiveReasoningEnabled` / `dangerousCommandPolicy` 在合并前的
+  ca7c2edc 即已不存在，非本合并引入）；shared 的 zcodeProtocol.test「parses CE side-effect
+  capability keys」同属既有红（`sideEffectScope`/`readOnly` 在合并前后都不在
+  `packages/shared/src` 的 schema 里，与上方台账「captcha-retry 枚举收窄需另开工单」同族）
+- 全量套件（2134 文件 / 17 包，跑在**含未提交 WIP** 的工作树）：41 文件失败，逐项分诊后
+  **合并引入为 0**：环境类（本机 `node_modules/electron` 安装损坏，webRemoteControl/serverRemote
+  等拉起 Electron 的用例全部因此挂，报错自身即要求重装）；WIP 类（nsis-install-section-patch
+  属未提交的 NSIS 工作）；既有红类——品牌提交把 RootStartupLoading 内联 SVG 换成 PNG 预载后
+  rootStartupLoading/toolCallBlocks 仍断言 `<svg`；3.16.1 fmt 提交（99062adb）把
+  conversation-session-docker-automation-plan.md 的表格对齐后，desktopE2EContainerScript 等
+  3 个逐字节断言表格骨架的用例即红（该骨架要求 `| --- | --- |` 原样，与 oxfmt 互斥，
+  待单独工单裁决保哪边）；userActionTraceCatalog 计数护栏 16→17（`settings.telemetry`
+  等键入册时未同步计数）
+- **修复一项 3.16.1 合并遗留**：上游 `0a1fc56d` 为根 package.json 新增的
+  `prepare:remote-assets:linux` 脚本在 3.16.1 合并整取 CE 版时丢失，配套
+  stageRemoteAssetsCli「wires the root Linux command」用例随之红了 4 天；本轮补回脚本，
+  用例 8/8 绿，licenses 链路同步重生成
 
 ## CE 接线重植台账（apps/zcode-cli 九项断线，2026-10-18 处置）
 
