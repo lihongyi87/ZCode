@@ -1064,6 +1064,7 @@ function mapSessionGoal(goal: SessionGoal | null | undefined): ZCodeSessionGoal 
     timeUsedSeconds: goal.timeUsedSeconds ?? 0,
     tokenBudget: goal.tokenBudget ?? null,
     timeBudget: goal.timeBudget ?? null,
+    minTimeSeconds: goal.minTimeSeconds ?? null,
     tokensUsed: goal.tokensUsed ?? 0,
     activeInputId: goal.activeInputId ?? null,
     activeRunStartedAtMs: goal.activeRunStartedAtMs ?? null,
@@ -1129,6 +1130,7 @@ function buildGoalStats(
     // JSON 值，与 mapSessionGoal 保持一致用 null 表示未设置预算。
     tokenBudget: target.tokenBudget ?? null,
     timeBudget: target.timeBudget ?? null,
+    minTimeSeconds: target.minTimeSeconds ?? null,
     tokensUsed: target.tokensUsed > 0 ? target.tokensUsed : derivedTokensUsed,
     toolCallCount: goalIterations.reduce((sum, iteration) => sum + iteration.toolCallCount, 0),
   };

@@ -65,6 +65,21 @@ Set surfaces:
 
 The model-visible goal state includes the time budget and remaining time so the model can plan the last iteration instead of being cut mid-plan.
 
+## Minimum Time
+
+A goal may also carry a minimum duration (`minTimeSeconds`, positive integer seconds, default unset). It is the counterpart of the time budget: where the budget is an upper bound that stops the goal, the minimum is a lower bound that keeps the verifier from declaring completion early. 「至少做满 4 小时」的目标在模型 1 小时就宣称做完时，verifier 的 pass 会被运行时打回。
+
+Enforcement lives at the completion gate only — minimum time never blocks a continuation turn from starting. When the verifier returns `passed` while `timeUsedSeconds < minTimeSeconds`, the runtime keeps the goal `active` and rewrites the result to a fail whose `nextAction` tells the model to harden, verify, or extend the result until the minimum is reached; the loop then continues normally. The inverse case is also covered: when the verifier fails or times out (fail-open, no usable `nextAction`) while the minimum is unmet, the runtime injects a synthetic `nextAction` so the loop keeps running to the minimum instead of halting on a verifier hiccup. The verifier prompt carries the remaining time and states that the runtime enforces the gate regardless of its verdict, so the model can plan substantive work instead of padding.
+
+## Natural Language Durations
+
+`/goal` objective text is scanned for duration phrases so users do not have to learn the `--time` flag. Recognition is **conservative and keyword-gated** — a phrase only counts when an intent keyword sits next to a duration:
+
+- floor → `minTimeSeconds`: 「至少 / 做满 / 不少于 / 最少 / 起码 / 满」+ duration, English `at least / no less than / minimum of`;
+- cap → `timeBudgetSeconds`: 「不超过 / 最多 / 限时 / 以内 / 别超过」+ duration, English `within / at most / no more than / up to / max`.
+
+Duration units: `小时/钟头/分钟/分/秒`, `h/hours/minutes/min/s/seconds`, half-hour forms (「一个半小时」), Arabic digits plus Chinese numerals 一~十/两. Deliberate limits, each erring toward *missing* a duration rather than mis-setting one: bare durations without an intent keyword are ignored (「跑一个 4 小时的压测」 sets nothing — a bare duration is as likely to be a minimum as a maximum); Chinese numerals above 十 are not parsed; a recognized duration never removes or rewrites objective text — the objective stays verbatim as the model's authoritative task, budgets ride alongside as metadata. When a phrase is missed, the user falls back to `--time <duration>`. Both bounds can coexist (「至少运行 2 小时，不超过 6 小时」); `--time` overrides a recognized cap, and recognized durations are parsed in one place (the session facade) so the TUI, protocol, and v4 goal commands share identical semantics. Model-driven recognition (the model setting budgets from free-form conversation) is deliberately out of scope: the goal ownership contract (model tools read but never create, update, or complete goals) stays closed until a real need justifies reopening it.
+
 ## Continuation
 
 Goal continuation uses normal turns for work and a separate no-tool verifier request for completion decisions. Active target post-turn continuation is owned by the runtime. Bootstrap can request the runtime to enqueue the active target loop for manual `/goal` continuation, but bootstrap does not own the loop. Accepted user prompts and background notifications run the same loop from inside the runtime command executor after their command finishes. When an active goal exists and the runtime is idle, the runtime first decides whether it should verify the just-finished turn. If verification is not requested (for example, immediately after `/goal` starts the first iteration), the runtime injects the normal continuation prompt. If verification is requested, the runtime sends a no-tool verifier request with `querySource: "target_completion_verification"` before starting another continuation turn.

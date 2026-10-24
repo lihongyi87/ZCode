@@ -1,6 +1,7 @@
 import { updateUiLocaleInFileConfig, type ConfigResult } from "@zcode/adapters/config";
 import {
   McpResourceSubscribeUnsupportedError,
+  parseGoalDurationPhrases,
   resolveMcpToolVisibility,
   SESSION_ENTRY_MODEL_SELECTION,
   traceContextToLogContext,
@@ -195,6 +196,7 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
       status?: GoalStatus;
       tokenBudget?: number | null;
       timeBudget?: number | null;
+      minTimeSeconds?: number | null;
       intent?: TurnInputIntentMetadata;
     },
   ) => {
@@ -222,6 +224,9 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
             status: input.status,
             tokenBudget: input.tokenBudget,
             timeBudget: input.timeBudget,
+            // 自然语言时长识别（session-target.md）：/goal 文本里「至少做满4小时」→下限、
+            // 「不超过2小时」→上限；单点解析覆盖 TUI/协议/v4 三条设置路径，目标文本保持原样。
+            minTimeSeconds: input.minTimeSeconds ?? parseGoalDurationPhrases(visibleObjective ?? "").minTimeSeconds,
           })
         : action === "status_updated"
           ? await deps.sessionStore.updateTargetStatus({

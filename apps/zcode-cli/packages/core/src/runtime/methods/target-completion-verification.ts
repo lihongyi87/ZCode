@@ -5,6 +5,7 @@ import {
   failOpenGoalCompletionVerification,
   failedGoalCompletionVerification,
   formatGoalCompletionVerificationPrompt,
+  goalMinimumTimeRemaining,
   parseGoalCompletionVerificationText,
   runWithModelInvocationContext,
   traceContextToLogContext,
@@ -58,14 +59,73 @@ export async function verifyActiveTargetCompletionForContinuation(
       traceContext: input.traceContext,
     });
 
-    if (!verification.passed) {
+    // 重读目标：verifier 请求期间用户可能 replace/clear/pause；下限判定也必须用最新记账。
+    const latestTarget = await this.readSessionTargetForContext(input.traceContext);
+
+    if (!verification.passed && latestTarget?.status === "active") {
+      // 下限时长（session-target.md「Minimum time」）：verifier 失败/超时（fail-open，
+      // 无可用 nextAction）会正常终止续跑；但用户显式要求「至少 N」时，没到下限就停
+      // 违背目标本意。此时注入合成 nextAction 让续跑继续到下限。
+      const remaining = goalMinimumTimeRemaining(latestTarget);
+      if (remaining !== null && !verification.nextAction?.trim()) {
+        this.logger?.info("Goal continuation kept alive by minimum-time requirement", {
+          ...traceContextToLogContext(input.traceContext),
+          event: "target.continuation.minimum_time_keepalive",
+          minTimeSeconds: latestTarget.minTimeSeconds,
+          module: "core.runtime",
+          remainingSeconds: remaining,
+          status: "waiting",
+          targetId: latestTarget.targetID,
+          timeUsedSeconds: latestTarget.timeUsedSeconds,
+        });
+        return {
+          target: latestTarget,
+          verification: {
+            ...verification,
+            nextAction: `目标要求至少执行 ${latestTarget.minTimeSeconds} 秒（当前 ${latestTarget.timeUsedSeconds} 秒）。继续推进目标；若工作已实质完成，做收尾加固与验证，不要结束。`,
+          },
+        };
+      }
       return {
-        target: input.target,
+        target: latestTarget,
         verification,
       };
     }
 
-    const previousTarget = await this.readSessionTargetForContext(input.traceContext);
+    if (verification.passed && latestTarget?.status === "active") {
+      // 硬闸：verifier 判 pass 但未到最少执行时长，按未完成打回（不写 complete）。
+      const remaining = goalMinimumTimeRemaining(latestTarget);
+      if (remaining !== null) {
+        this.logger?.info("Goal completion gated by minimum-time requirement", {
+          ...traceContextToLogContext(input.traceContext),
+          event: "target.continuation.gated_minimum_time",
+          minTimeSeconds: latestTarget.minTimeSeconds,
+          module: "core.runtime",
+          remainingSeconds: remaining,
+          status: "waiting",
+          targetId: latestTarget.targetID,
+          timeUsedSeconds: latestTarget.timeUsedSeconds,
+        });
+        return {
+          target: latestTarget,
+          verification: {
+            ...verification,
+            passed: false,
+            reason: `minimum time not reached: ${latestTarget.timeUsedSeconds}/${latestTarget.minTimeSeconds} seconds`,
+            nextAction: `目标要求至少执行 ${latestTarget.minTimeSeconds} 秒（当前 ${latestTarget.timeUsedSeconds} 秒）。继续推进目标；若工作已实质完成，做收尾加固与验证，不要结束。`,
+          },
+        };
+      }
+    }
+
+    if (!verification.passed) {
+      return {
+        target: latestTarget ?? input.target,
+        verification,
+      };
+    }
+
+    const previousTarget = latestTarget ?? (await this.readSessionTargetForContext(input.traceContext));
     const completedTarget =
       (await this.sessionStore!.updateTargetStatus({
         sessionID: this.sessionId,

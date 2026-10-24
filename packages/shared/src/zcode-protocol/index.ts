@@ -1232,6 +1232,7 @@ export const zcodeSessionGoalStatsSchema = z
     tokensUsed: z.number().int().nonnegative(),
     tokenBudget: z.number().int().positive().nullable(),
     timeBudget: z.number().int().positive().nullable(),
+    minTimeSeconds: z.number().int().nonnegative().nullable(),
     contextUsed: z.number().int().nonnegative(),
     contextWindow: z.number().int().nonnegative(),
     toolCallCount: z.number().int().nonnegative(),

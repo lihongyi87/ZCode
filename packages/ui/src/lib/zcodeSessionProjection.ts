@@ -3350,6 +3350,7 @@ function fromZCodeGoal(goal: unknown): ZCodeTaskGoal {
     status: isZCodeTaskGoalStatus(status) ? status : "active",
     tokenBudget: typeof record.tokenBudget === "number" ? record.tokenBudget : null,
     timeBudget: typeof record.timeBudget === "number" ? record.timeBudget : null,
+    minTimeSeconds: typeof record.minTimeSeconds === "number" ? record.minTimeSeconds : null,
     tokensUsed: numberValue(record.tokensUsed) ?? 0,
     timeUsedSeconds: numberValue(record.timeUsedSeconds) ?? 0,
     activeInputId: stringValue(record.activeInputId) ?? null,

@@ -112,8 +112,9 @@ export const zcodeSessionGoalSchema = z
     summaryTitle: z.string().min(1).nullable().default(null),
     status: z.enum(["active", "paused", "budget_limited", "complete"]),
     tokenBudget: z.number().int().positive().nullable(),
-    // 旧版持久化 session target 不包含 timeBudget；读取历史 snapshot 时补 null。
+    // 旧版持久化 session target 不包含 timeBudget / minTimeSeconds；读取历史 snapshot 时补 null。
     timeBudget: z.number().int().positive().nullable().default(null),
+    minTimeSeconds: z.number().int().nonnegative().nullable().default(null),
     tokensUsed: z.number().int().nonnegative(),
     timeUsedSeconds: z.number().int().nonnegative(),
     activeInputId: nonEmptyString.nullable().optional(),

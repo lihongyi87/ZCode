@@ -124,6 +124,7 @@ export type CommandCenterTarget = {
   targetID: string;
   tokenBudget?: number | null;
   timeBudget?: number | null;
+  minTimeSeconds?: number | null;
   tokensUsed?: number;
   timeUsedSeconds?: number;
   time: {

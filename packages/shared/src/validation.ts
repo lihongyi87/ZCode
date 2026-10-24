@@ -1762,8 +1762,10 @@ export const zcodeTaskGoalSchema = z.object({
   summaryTitle: z.string().min(1).nullable().default(null),
   status: zcodeTaskGoalStatusSchema,
   tokenBudget: z.number().int().positive().nullable(),
-  // 2.15.0 之后的 timeBudget；读取老 task index 数据时补 null，与 summaryTitle 同款容错。
+  // 2.15.0 之后的 timeBudget / minTimeSeconds；读取老 task index 数据时补 null，与 summaryTitle 同款容错。
   timeBudget: z.number().int().positive().nullable().default(null),
+  // 与手写 ZCodeTaskGoal（minTimeSeconds 可选）对齐：老数据缺键解析为 undefined。
+  minTimeSeconds: z.number().int().nonnegative().nullable().optional(),
   tokensUsed: z.number().int().nonnegative(),
   timeUsedSeconds: z.number().int().nonnegative(),
   activeInputId: nonEmptyStringSchema.nullable().optional(),

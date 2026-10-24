@@ -741,6 +741,7 @@ export class SqliteSessionStore
     status?: GoalStatus;
     tokenBudget?: number | null;
     timeBudget?: number | null;
+    minTimeSeconds?: number | null;
   }): Promise<SessionGoal> {
     return setSessionTarget(this.db, {
       objective: input.objective,
@@ -748,6 +749,7 @@ export class SqliteSessionStore
       status: input.status ?? "active",
       tokenBudget: input.tokenBudget,
       timeBudget: input.timeBudget,
+      minTimeSeconds: input.minTimeSeconds,
     });
   }
 
@@ -769,6 +771,7 @@ export class SqliteSessionStore
     sessionID: SessionId;
     tokenBudget?: number | null;
     timeBudget?: number | null;
+    minTimeSeconds?: number | null;
   }): Promise<SessionGoal | null> {
     return createSessionTarget(this.db, input);
   }

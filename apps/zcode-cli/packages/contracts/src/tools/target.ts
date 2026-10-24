@@ -70,6 +70,109 @@ export function parseGoalTimeBudgetFlag(
   return { objective: stripped, timeBudgetSeconds: totalSeconds };
 }
 
+const GOAL_DURATION_PHRASE =
+  "(?:半(?:个)?(?:小时|钟头)|[0-9一二两三四五六七八九十]+(?:个\\s*)?半\\s*(?:小时|钟头)|[0-9一二两三四五六七八九十]+\\s*(?:个\\s*)?(?:小时|钟头|分钟|分|秒)|\\d+(?:\\.\\d+)?\\s*(?:h\\b|hours?\\b|hrs?\\b|minutes?\\b|mins?\\b|min\\b|s\\b|seconds?\\b|sec\\b))";
+
+// 意图关键词与时长之间允许 ≤4 个非标点/非数字的连接字（连续/坚持运行/干 等）。
+const GOAL_KEYWORD_GAP = "[^，。；！？,.;!?0-9一二两三四五六七八九十半\\s]{0,4}\\s*";
+
+const GOAL_MIN_TIME_PHRASE = new RegExp(
+  `(?:至少|做满|不少于|最少|起码|满)${GOAL_KEYWORD_GAP}${GOAL_DURATION_PHRASE}|(?:at least|no less than|minimum(?: of)?|at minimum)\\s+${GOAL_DURATION_PHRASE}`,
+  "i",
+);
+const GOAL_MAX_TIME_PHRASE = new RegExp(
+  `(?:(?:不超过|不得超过|最多只?|最多(?:花|用|做|运行|执行)|限时|别超过|不要超过)${GOAL_KEYWORD_GAP}${GOAL_DURATION_PHRASE})|(?:${GOAL_DURATION_PHRASE}\\s*以内)|(?:(?:at most|no more than|up to|max(?:imum)?(?: of)?|less than)\\s+|(?:within)\\s+)${GOAL_DURATION_PHRASE}`,
+  "i",
+);
+
+function goalDurationPhraseSeconds(phrase: string): number | null {
+  const normalized = phrase.toLowerCase();
+  let seconds = 0;
+  const halfHour = normalized.match(/(?:^|[^0-9.])(?:([0-9一二两三四五六七八九十]+)\s*个\s*)?半\s*(?:小时|钟头)/);
+  if (halfHour) {
+    const leading = halfHour[1] ? goalChineseNumeral(halfHour[1]) : 0;
+    if (leading === null) return null;
+    seconds += (leading + 0.5) * 3600;
+  }
+  const unit = normalized.match(
+    /([0-9一二两三四五六七八九十]+|\d+(?:\.\d+)?)\s*(?:个\s*)?(小时|钟头|分钟|分|秒|h\b|hours?\b|hrs?\b|minutes?\b|mins?\b|min\b|s\b|seconds?\b|sec\b)/,
+  );
+  if (unit) {
+    const amount = goalDurationAmount(unit[1]);
+    if (amount === null) return null;
+    const unitName = unit[2];
+    seconds +=
+      amount *
+      (/^(小时|钟头|h\b|hours?\b|hrs?\b)/.test(unitName)
+        ? 3600
+        : /^(分钟|分|min)/.test(unitName)
+          ? 60
+          : 1);
+  }
+  return seconds > 0 ? Math.round(seconds) : null;
+}
+
+/** 一~十/两 的中文数词；超出保守范围（十一以上组合）返回 null 走漏识别。 */
+function goalChineseNumeral(text: string): number | null {
+  const table: Record<string, number> = {
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  };
+  if (/^[0-9]+$/.test(text)) return Number(text);
+  return table[text] ?? null;
+}
+
+function goalDurationAmount(text: string): number | null {
+  if (/^[0-9]+(?:\.[0-9]+)?$/.test(text)) return Number(text);
+  return goalChineseNumeral(text);
+}
+
+/**
+ * 从目标文本里识别自然语言时长要求（目标文本保持原样，预算只是并行元数据）。
+ *
+ * 保守正则：**必须**同时命中意图关键词与时长短语才算——
+ * - 上限：不超过/最多/限时/以内/别超过、within/at most/no more than/up to → timeBudgetSeconds；
+ * - 下限：至少/做满/不少于/最少/起码、at least/no less than → minTimeSeconds。
+ * 漏识别是安全的（没设限，用户可退回 --time）；错识别会把「至少」当上限反着停，
+ * 因此裸时长（无关键词）一律忽略，中文数词只支持一~十/两/半。
+ */
+export function parseGoalDurationPhrases(objective: string): {
+  timeBudgetSeconds?: number;
+  minTimeSeconds?: number;
+} {
+  const result: { timeBudgetSeconds?: number; minTimeSeconds?: number } = {};
+  const minMatch = objective.match(GOAL_MIN_TIME_PHRASE);
+  if (minMatch) {
+    const seconds = goalDurationPhraseSeconds(minMatch[0]);
+    if (seconds != null) result.minTimeSeconds = seconds;
+  }
+  const maxMatch = objective.match(GOAL_MAX_TIME_PHRASE);
+  if (maxMatch) {
+    const seconds = goalDurationPhraseSeconds(maxMatch[0]);
+    if (seconds != null) result.timeBudgetSeconds = seconds;
+  }
+  return result;
+}
+
+/** 下限未到时返回剩余秒数；无下限或已达标返回 null。verifier 硬闸与提示词共用这一个判定。 */
+export function goalMinimumTimeRemaining(
+  goal: Pick<SessionGoal, "minTimeSeconds" | "timeUsedSeconds">,
+): number | null {
+  const minimum = goal.minTimeSeconds;
+  if (minimum === null || minimum === undefined || minimum <= 0) return null;
+  const remaining = minimum - goal.timeUsedSeconds;
+  return remaining > 0 ? remaining : null;
+}
+
 export const GoalObjectiveSchema = z
   .string()
   .transform((value) => value.trim())
@@ -89,6 +192,8 @@ export interface SessionGoal {
   tokenBudget: number | null;
   /** 时间预算（秒，正整数；null = 不限时）。只累计 goal run 活跃期间的秒数。 */
   timeBudget: number | null;
+  /** 最少执行时长（秒；undefined/null = 无下限）。verifier 未到下限不打完成。 */
+  minTimeSeconds?: number | null;
   tokensUsed: number;
   timeUsedSeconds: number;
   activeInputId?: string | null;
@@ -109,6 +214,7 @@ export const SessionGoalSchema = z
     status: GoalStatusSchema,
     tokenBudget: GoalTokenBudgetSchema,
     timeBudget: GoalTimeBudgetSchema,
+    minTimeSeconds: z.number().int().nonnegative().nullable().optional(),
     tokensUsed: z.number().int().nonnegative(),
     timeUsedSeconds: z.number().int().nonnegative(),
     activeInputId: z.string().min(1).nullable().optional(),
@@ -171,6 +277,11 @@ export function formatGoalStateForModel(goal: SessionGoal | null): string {
     `Token budget: ${budget}`,
     `Time used: ${goal.timeUsedSeconds} seconds`,
     `Time budget: ${timeBudget} seconds`,
+    ...(goalMinimumTimeRemaining(goal) !== null
+      ? [
+          `Minimum time: ${goal.minTimeSeconds} seconds (not yet reached; the goal must not be completed before it)`,
+        ]
+      : []),
     "Objective (user-provided):",
     "<untrusted_objective>",
     escapeGoalPromptText(goal.objective),
@@ -201,6 +312,11 @@ export function formatGoalContinuationPrompt(
     timeBudgetSeconds === null
       ? "- Time budget: none"
       : `- Time budget: ${timeBudgetSeconds} seconds (about ${remainingSeconds} seconds remaining)`;
+  const minRemaining = goalMinimumTimeRemaining(goal);
+  const minTimeLine =
+    minRemaining === null
+      ? null
+      : `- Minimum time: ${goal.minTimeSeconds} seconds (about ${minRemaining} seconds remaining); do not finish before it, use the time to harden and verify the result`;
   const nextAction = verification?.nextAction?.trim();
   const verificationReason = verification?.reason;
   const verificationLines = nextAction
@@ -227,6 +343,7 @@ export function formatGoalContinuationPrompt(
     "Budget:",
     `- Time spent pursuing goal: ${goal.timeUsedSeconds} seconds`,
     timeBudgetLine,
+    ...(minTimeLine ? [minTimeLine] : []),
     `- Tokens used: ${goal.tokensUsed}`,
     `- Token budget: ${tokenBudget}`,
     `- Tokens remaining: ${remainingTokens}`,
@@ -289,6 +406,13 @@ export function formatGoalCompletionVerificationPrompt(
     `- Tokens used: ${goal.tokensUsed}`,
     `- Token budget: ${tokenBudget}`,
     `- Time used: ${goal.timeUsedSeconds} seconds`,
+    ...(goalMinimumTimeRemaining(goal) !== null
+      ? [
+          `- Minimum time: ${goal.minTimeSeconds} seconds (about ${goalMinimumTimeRemaining(goal)} seconds remaining)`,
+          "",
+          `The goal carries a minimum-duration requirement. Even if every requirement looks complete, return passed=false while the elapsed time is below the minimum, with a nextAction that hardens, verifies, or extends the result until the minimum is reached. The runtime enforces this gate regardless of your verdict.`,
+        ]
+      : []),
     "",
     "Use the conversation context before this verification request as the evidence source.",
     "Pass only if the conversation and current known state show that every explicit requirement, named file, command, test, gate, and deliverable in the objective is complete.",

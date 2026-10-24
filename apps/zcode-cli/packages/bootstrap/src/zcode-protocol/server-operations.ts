@@ -3035,6 +3035,9 @@ function formatGoalChanged(title: string, target: ProtocolGoalTarget): string {
       }`,
     );
   }
+  if (target.minTimeSeconds) {
+    lines.push(`Minimum: ${target.minTimeSeconds} seconds`);
+  }
   return lines.join("\n");
 }
 

@@ -1212,6 +1212,7 @@ export interface SessionStorePort {
     status?: GoalStatus;
     tokenBudget?: number | null;
     timeBudget?: number | null;
+    minTimeSeconds?: number | null;
   }): Promise<SessionGoal>;
   cloneTargetForFork?(input: {
     source: SessionGoal;
@@ -1223,6 +1224,7 @@ export interface SessionStorePort {
     sessionID: SessionId;
     tokenBudget?: number | null;
     timeBudget?: number | null;
+    minTimeSeconds?: number | null;
   }): Promise<SessionGoal | null>;
   updateTargetTimeBudget(input: {
     sessionID: SessionId;

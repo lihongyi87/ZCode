@@ -992,4 +992,12 @@ export const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
       alter table session_target add column time_budget_seconds integer;
     `,
   },
+  {
+    appVersion: "0.16.9",
+    id: "0026_session_target_min_time",
+    touchedTables: ["session_target"],
+    sql: `
+      alter table session_target add column min_time_seconds integer;
+    `,
+  },
 ];

@@ -409,6 +409,7 @@ export interface ZCodeApp {
     status?: GoalStatus;
     tokenBudget?: number | null;
     timeBudget?: number | null;
+    minTimeSeconds?: number | null;
     intent?: TurnInputIntentMetadata;
   }): Promise<SessionGoal>;
   updateTimeBudget(timeBudget: number | null): Promise<SessionGoal | null>;

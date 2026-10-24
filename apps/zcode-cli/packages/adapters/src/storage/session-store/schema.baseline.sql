@@ -214,6 +214,7 @@ CREATE TABLE "session_target" (
         status text not null check(status in ('active', 'paused', 'budget_limited', 'complete')),
         token_budget integer,
         time_budget_seconds integer,
+        min_time_seconds integer,
         tokens_used integer not null default 0,
         time_used_seconds integer not null default 0,
         time_created integer not null,

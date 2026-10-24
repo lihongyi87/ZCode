@@ -78,6 +78,8 @@ export interface ZCodeTaskGoal {
   tokenBudget: number | null;
   /** 时间预算（秒，正整数；null = 不限时）。只累计 goal run 活跃期间的秒数。 */
   timeBudget: number | null;
+  /** 最少执行时长（秒；undefined/null = 无下限）。verifier 未到下限不打完成。 */
+  minTimeSeconds?: number | null;
   tokensUsed: number;
   timeUsedSeconds: number;
   activeInputId?: string | null;
@@ -97,6 +99,8 @@ export interface ZCodeTaskGoalStats {
   tokenBudget: number | null;
   /** 用户显式设置的 goal 时间预算（秒）；为空 = 不限时。 */
   timeBudget: number | null;
+  /** goal 最少执行时长（秒）；为空 = 无下限。 */
+  minTimeSeconds?: number | null;
   /** 当前 session 上下文窗口已使用 token。 */
   contextUsed: number;
   /** 当前 session 上下文窗口容量。 */

@@ -641,6 +641,7 @@ describe("SQLite session store", () => {
       "0023_session_soft_delete_outcome",
       "0024_session_database_identity",
       "0025_session_target_time_budget",
+      "0026_session_target_min_time",
     ];
 
     try {
@@ -677,6 +678,7 @@ describe("SQLite session store", () => {
         "0.16.5",
         "0.16.5",
         "0.16.5",
+        "0.16.9",
         "0.16.9",
         "0.16.9",
         "0.16.9",
@@ -717,7 +719,7 @@ describe("SQLite session store", () => {
         ]),
       );
       expect(attempts.flat().filter((result) => !result.ok)).toEqual([]);
-      expect(attempts.flat().every((result) => result.migrationIds?.length === 25)).toBe(true);
+      expect(attempts.flat().every((result) => result.migrationIds?.length === 26)).toBe(true);
     },
     CONCURRENT_STARTUP_TEST_TIMEOUT_MS,
   );
@@ -945,6 +947,7 @@ describe("SQLite session store", () => {
         "0023_session_soft_delete_outcome",
         "0024_session_database_identity",
         "0025_session_target_time_budget",
+        "0026_session_target_min_time",
       ]);
       store.close();
     } finally {
@@ -3357,6 +3360,66 @@ describe("session goal time budget", () => {
       // off 清除预算；受限状态保持，避免清预算把受限目标悄悄复活
       const cleared = await store.updateTargetTimeBudget({ sessionID, timeBudget: null });
       expect(cleared).toMatchObject({ status: "budget_limited", timeBudget: null });
+    } finally {
+      store.close();
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("persists minTimeSeconds through set/clone and round-trips the column", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "zcode-session-min-time-"));
+    const store = await createSqliteSessionStore({
+      dbPath: join(tempRoot, "session.sqlite"),
+    });
+    const sessionID = createSessionId("min-time-store");
+    const created = 1_700_000_000_000;
+
+    try {
+      await store.createSession({
+        id: sessionID,
+        projectID: createProjectId("min-time-store"),
+        slug: "min-time-store",
+        directory: tempRoot,
+        title: "min time store",
+        version: "0.1.0",
+        time: {
+          created,
+          updated: created,
+        },
+      });
+
+      const target = await store.setTarget({
+        objective: "至少做满4个小时",
+        sessionID,
+        minTimeSeconds: 14400,
+      });
+      expect(target).toMatchObject({
+        status: "active",
+        minTimeSeconds: 14400,
+        timeBudget: null,
+      });
+
+      // fork 继承下限；clone 对未带 minTimeSeconds 的旧字面量按 null 绑参
+      const forkedSessionID = createSessionId("min-time-fork");
+      await store.createSession({
+        id: forkedSessionID,
+        parentID: sessionID,
+        projectID: createProjectId("min-time-store"),
+        slug: "min-time-fork",
+        directory: tempRoot,
+        title: "min time fork",
+        version: "0.1.0",
+        time: {
+          created,
+          updated: created,
+        },
+      });
+      const forked = await store.cloneTargetForFork({
+        source: target,
+        sessionID: forkedSessionID,
+        status: "active",
+      });
+      expect(forked).toMatchObject({ minTimeSeconds: 14400, targetID: target.targetID });
     } finally {
       store.close();
       await rm(tempRoot, { force: true, recursive: true });

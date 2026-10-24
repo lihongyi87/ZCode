@@ -218,5 +218,8 @@ function formatTargetChanged(title: string, target: CommandCenterTarget): string
       }`,
     );
   }
+  if (target.minTimeSeconds) {
+    lines.push(`Minimum: ${target.minTimeSeconds} seconds`);
+  }
   return lines.join("\n");
 }
