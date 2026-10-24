@@ -3013,6 +3013,11 @@ function formatGoalSummary(target: ProtocolGoalTarget | null): string {
 
 function formatGoalChanged(title: string, target: ProtocolGoalTarget): string {
   const lines = [title, `Objective: ${target.objective}`];
+  // 时长控制生效的显式确认：自然语言识别是保守正则，必须让用户看见实际落下的边界，
+  // 漏识别（Time/Minimum 显示 none/缺失）才能被当场发现并用 --time 补设。
+  if (target.timeBudget != null || target.minTimeSeconds != null) {
+    lines.push("Time control engaged.");
+  }
   if (target.tokensUsed !== undefined || target.tokenBudget !== undefined) {
     const budget =
       target.tokenBudget === null || target.tokenBudget === undefined

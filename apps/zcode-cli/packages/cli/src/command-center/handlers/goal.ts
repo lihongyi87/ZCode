@@ -173,12 +173,19 @@ async function continueTargetAfterChange(
     onEvent: options.onEvent,
   });
   const response = formatTargetChanged(title, target);
-  return continuation
-    ? attachCurrentSessionMetadata(continuation, deps, app)
-    : {
-        mode: deps.getMode?.(),
-        response: appendPlanModeGoalContinuationNote(response, deps.getMode?.()),
-      };
+  if (!continuation) {
+    return {
+      mode: deps.getMode?.(),
+      response: appendPlanModeGoalContinuationNote(response, deps.getMode?.()),
+    };
+  }
+  // 生效确认必须随结果可见（含时长识别实际落下的 Time/Minimum 行）：
+  // 续跑首轮流式输出会盖掉纯文案，拼在 assistant 首轮响应之前用户才看得到。
+  return attachCurrentSessionMetadata(
+    { ...continuation, response: `${response}\n\n${continuation.response}` },
+    deps,
+    app,
+  );
 }
 
 function appendPlanModeGoalContinuationNote(response: string, mode: string | undefined): string {
@@ -197,6 +204,11 @@ function formatTargetSummary(target: CommandCenterTarget | null): string {
 
 function formatTargetChanged(title: string, target: CommandCenterTarget): string {
   const lines = [title, `Objective: ${target.objective}`];
+  // 时长控制生效的显式确认：自然语言识别是保守正则，必须让用户看见实际落下的边界，
+  // 漏识别（Time/Minimum 显示 none/缺失）才能被当场发现并用 --time 补设。
+  if (target.timeBudget != null || target.minTimeSeconds) {
+    lines.push("Time control engaged.");
+  }
   if (target.tokensUsed !== undefined || target.tokenBudget !== undefined) {
     const budget = target.tokenBudget === null || target.tokenBudget === undefined
       ? "none"
