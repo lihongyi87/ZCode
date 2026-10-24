@@ -753,7 +753,10 @@ async function main() {
   }
 
   if (!skipBuild) {
-    run(pnpmCommand, ["build"], buildEnv);
+    // 不能调 "build"：它自带 prepare:runtime-assets，会让 agent bundle 每次构建两遍，
+    // 且 ZCODE_SKIP_PREPARE=1 形同虚设（这里跳过、build 里又跑回来）。
+    // build:no-runtime-assets = build-meta + 生产构建，运行时资产只由上面这一步负责。
+    run(pnpmCommand, ["build:no-runtime-assets"], buildEnv);
   }
 
   await runTimedAsync("bundle:electron-builder", () =>

@@ -132,37 +132,40 @@ export async function wrapNsisInstallerWithPrivateTemp(installerPath, options = 
     };
   }
 
+  // 载荷区间：裸 NSIS=整个文件；已包装(force 重包)=跳过旧启动器只取载荷段。
+  // 两个来源统一成「源文件上的一个字节区间」，流式搬到目标临时文件，全程不落第二份 145MB 副本。
+  const sourceStat = statSync(targetPath);
+  const payloadSize = existingTrailer ? existingTrailer.payloadSize : sourceStat.size;
+  const payloadStart = existingTrailer
+    ? existingTrailer.totalSize - NSIS_PRIVATE_TEMP_MAGIC.length - 8 - existingTrailer.payloadSize
+    : 0;
+
   const stagingRoot = mkdtempSync(join(tmpdir(), "zcode-nsis-wrap-"));
   const bootstrapPath = join(stagingRoot, "bootstrap.exe");
-  const wrappedPath = join(stagingRoot, "wrapped.exe");
-  const originalBackupPath = join(stagingRoot, "original.exe");
+  const replaceTempPath = `${targetPath}.zcode-wrap-tmp`;
 
   try {
     compileNsisPrivateTempBootstrap(bootstrapPath, { cscPath: options.cscPath });
-    if (existingTrailer && options.force) {
-      // 用新启动器重包：先抽出原 NSIS 载荷，再重新拼接。
-      await extractNsisPrivateTempPayload(targetPath, originalBackupPath, existingTrailer);
-    } else {
-      copyFileSync(targetPath, originalBackupPath);
-    }
 
-    const payloadSize = statSync(originalBackupPath).size;
     const magicBuffer = Buffer.from(NSIS_PRIVATE_TEMP_MAGIC, "ascii");
     const lengthBuffer = Buffer.alloc(8);
     lengthBuffer.writeBigInt64LE(BigInt(payloadSize), 0);
 
-    // bootstrap + payload + trailer。流式拼接避免把 170MB+ 安装包整文件读进内存。
-    copyFileSync(bootstrapPath, wrappedPath);
+    // bootstrap + payload + trailer，直接写 dist 同目录临时文件（原子替换的前半）。
+    // 旧实现是 备份→拼接 staging→整文件复制回 dist，三次 145MB 磁盘写；现在只有
+    // 「读源区间 + 写临时文件」一次 IO，rename 收尾。
+    copyFileSync(bootstrapPath, replaceTempPath);
     await pipeline(
-      createReadStream(originalBackupPath),
-      createWriteStream(wrappedPath, { flags: "a" }),
+      createReadStream(targetPath, {
+        start: payloadStart,
+        end: payloadStart + payloadSize - 1,
+      }),
+      createWriteStream(replaceTempPath, { flags: "a" }),
     );
-    appendFileSync(wrappedPath, magicBuffer);
-    appendFileSync(wrappedPath, lengthBuffer);
+    appendFileSync(replaceTempPath, magicBuffer);
+    appendFileSync(replaceTempPath, lengthBuffer);
 
-    // 原子替换：先写同目录临时文件再 rename，避免半截产物留在 dist。
-    const replaceTempPath = `${targetPath}.zcode-wrap-tmp`;
-    copyFileSync(wrappedPath, replaceTempPath);
+    // 原子替换：临时文件就位后一次 rename，半截产物不会留在 dist。
     renameSync(replaceTempPath, targetPath);
     ensureMediumIntegrityLevel(targetPath);
 
@@ -173,6 +176,7 @@ export async function wrapNsisInstallerWithPrivateTemp(installerPath, options = 
     };
   } finally {
     rmSync(stagingRoot, { recursive: true, force: true });
+    rmSync(replaceTempPath, { force: true });
   }
 }
 

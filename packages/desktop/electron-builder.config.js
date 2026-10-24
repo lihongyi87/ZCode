@@ -659,6 +659,12 @@ export default {
   // 默认全量语言会产生大量 locale.pak 签名调用，显著拉长打包时长。
   // 这里仅保留当前产品必需语言，减少签名文件数并缩短 CI 总耗时。
   electronLanguages: ["en-US", "zh-CN"],
+  // NSIS LZMA 固实压缩是出包阶段最大的单线程 CPU 项（本机实测数分钟）。
+  // ZCODE_NSIS_COMPRESSION=store 可在本地迭代时换速度（包体 +~100MB）；
+  // 不设保持 electron-builder 默认档，发版介质一律走默认。
+  ...(process.env.ZCODE_NSIS_COMPRESSION
+    ? { compression: process.env.ZCODE_NSIS_COMPRESSION }
+    : {}),
   // pnpm workspace + semver range（如 ^41.0.3）下，electron-builder
   // 有时无法从依赖树里稳定推导出 Electron 版本，导致 bundle 直接中断。
   // 显式写死当前桌面端使用的 Electron 版本，避免打包阶段再做不可靠的猜测。
