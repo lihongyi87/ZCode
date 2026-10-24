@@ -1,5 +1,7 @@
 import { useToolPresentationHostCapabilities } from "@/hooks/useToolPresentationHostCapabilities.js";
 import { ToolPresentationCapabilitiesProvider } from "@/ToolCallBlocks/presentationCapabilities.js";
+import { readToolCallProgress } from "@/ToolCallBlocks/ToolCallProgressIndicator.js";
+import { ToolRunningProgressProvider } from "@/ToolCallBlocks/ToolRunningProgressContext.js";
 import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
 import { TID_CHAT_TOOL_CALL_BLOCK, testId } from "@zcode/shared/test-ids";
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
@@ -378,6 +380,15 @@ function ToolCallBlockComponent({
     // 没有合法插件声明时仍保持共同注册表的专用工具优先级。
     return PluginUi.shouldRenderPluginUi(renderContext) ? PluginUi.PluginUiToolCallBlock : Renderer;
   }, [renderContext]);
+  // 运行中进度统一由 ToolLayout 消费（141）：服务端 progress 优先，缺席时退回 startedAt 计时。
+  const runningProgressState = useMemo(
+    () => ({
+      ...(toolCall.startedAt === undefined ? {} : { startedAt: toolCall.startedAt }),
+      progress: isRunning ? readToolCallProgress(toolCall.raw) : null,
+      executing: toolCall.status === "in_progress",
+    }),
+    [isRunning, toolCall.raw, toolCall.startedAt, toolCall.status],
+  );
   // early return 必须在所有 hook 之后（见上方注释说明的崩溃原因）
   if (!showTodoToolCalls && identity.family === "todo") {
     return null;
@@ -392,16 +403,18 @@ function ToolCallBlockComponent({
         data-status={toolCall.status}
         data-zcode-tool-stream-animate={shouldPlayEntranceAnimation ? "true" : undefined}
       >
-        {toolCall.kind === "cuaGroup" ? (
-          <CuaGroupToolCallBlock
-            {...renderContext}
-            events={cuaGroupEvents}
-            renderAssistantMessage={renderCuaAssistantMessage}
-            renderReasoning={renderCuaReasoning}
-          />
-        ) : (
-          <ToolCallRenderer {...renderContext} />
-        )}
+        <ToolRunningProgressProvider value={runningProgressState}>
+          {toolCall.kind === "cuaGroup" ? (
+            <CuaGroupToolCallBlock
+              {...renderContext}
+              events={cuaGroupEvents}
+              renderAssistantMessage={renderCuaAssistantMessage}
+              renderReasoning={renderCuaReasoning}
+            />
+          ) : (
+            <ToolCallRenderer {...renderContext} />
+          )}
+        </ToolRunningProgressProvider>
       </div>
     </ToolPresentationCapabilitiesProvider>
   );

@@ -165,15 +165,20 @@
   ca7c2edc 即已不存在，非本合并引入）；shared 的 zcodeProtocol.test「parses CE side-effect
   capability keys」同属既有红（`sideEffectScope`/`readOnly` 在合并前后都不在
   `packages/shared/src` 的 schema 里，与上方台账「captcha-retry 枚举收窄需另开工单」同族）
-- 全量套件（2134 文件 / 17 包，跑在**含未提交 WIP** 的工作树）：41 文件失败，逐项分诊后
-  **合并引入为 0**：环境类（本机 `node_modules/electron` 安装损坏，webRemoteControl/serverRemote
-  等拉起 Electron 的用例全部因此挂，报错自身即要求重装）；WIP 类（nsis-install-section-patch
-  属未提交的 NSIS 工作）；既有红类——品牌提交把 RootStartupLoading 内联 SVG 换成 PNG 预载后
-  rootStartupLoading/toolCallBlocks 仍断言 `<svg`；3.16.1 fmt 提交（99062adb）把
-  conversation-session-docker-automation-plan.md 的表格对齐后，desktopE2EContainerScript 等
-  3 个逐字节断言表格骨架的用例即红（该骨架要求 `| --- | --- |` 原样，与 oxfmt 互斥，
-  待单独工单裁决保哪边）；userActionTraceCatalog 计数护栏 16→17（`settings.telemetry`
-  等键入册时未同步计数）
+- 全量套件（2134 文件 / 17 包，跑在**含未提交 WIP** 的工作树）：41 文件失败，逐项分诊：
+  环境类（本机 `node_modules/electron` 安装损坏，webRemoteControl/serverRemote 等拉起
+  Electron 的用例全部因此挂，报错自身即要求重装；依赖重装后需复验）；WIP 类
+  （nsis-install-section-patch 属未提交的 NSIS 工作）；**3.16.1 合并二次冲掉的 CE 接线**
+  （adaptiveReasoningWiring / dangerousCommandPolicyWiring / toolCallBlocks 的
+  ToolRunningProgressProvider 挂载——护栏红即是断线信号，已按下方 2026-10-24 节重植）；
+  既有红类——品牌提交把 RootStartupLoading 内联 SVG 换成 BCode 位图后测试仍断言 `<svg`；
+  3.16.1 fmt 提交（99062adb）把 conversation-session-docker-automation-plan.md 表格对齐后
+  打断骨架逐字节断言（该骨架是 E2E 登记脚本的运行时消费点，已恢复骨架并豁免 oxfmt）；
+  userActionTraceCatalog 计数护栏 16→17（149 批四b `settings.telemetry` 入册未同步计数）；
+  **待专项复诊**——上游「新代码+新测试」对在本机红（serviceManager 管道超时探针、
+  zcodeTaskIndexSyncer 索引清理、remoteAssetRelease 归档拷贝数）与 bots×project 绑定的
+  上游测试（该功能台账登记为未跟进，测试随 3.16.1 进树即红：吸收功能或隔离测试待裁决）；
+  serverInfoHttp / staticRoutePathContainment 为既有红（http.ts 合并前后仅 fmt 差异）
 - **修复一项 3.16.1 合并遗留**：上游 `0a1fc56d` 为根 package.json 新增的
   `prepare:remote-assets:linux` 脚本在 3.16.1 合并整取 CE 版时丢失，配套
   stageRemoteAssetsCli「wires the root Linux command」用例随之红了 4 天；本轮补回脚本，
@@ -218,3 +223,20 @@ proxy。运行日志实测 `Unknown channel: workspace-registry` → 侧栏
 「工作区列表读取失败：Channel name 'workspace-registry' timed out after 1000ms」。
 已恢复服务注册与客户端出口，`workspaceRegistryWiring.test.ts` 增加两段源码护栏；
 接线说明同步到 `docs/development/workspace-registry.md`。
+
+### UI/设置三链路二次断线重植（2026-10-24 处置）
+
+> 3.16.1 merge（65a77561）把 spec 141/142/143 已回植的三条 packages/ui、shared、services 侧
+> 链路**再次**冲掉（apps/zcode-cli 侧的协议/bootstrap/core 段幸存，所以 typecheck 全绿、
+> 只有护栏测试红——这正是护栏存在的意义）。三条同根因：整文件取上游版时，
+> 「CE 功能在既有文件里的接线」无冲突标记地丢失。
+
+| 链路                                              | 用户侧表现                                                | 重植内容                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 141 运行中工具进度（ToolRunningProgressProvider） | 「已等待 Ns」消失、pending 工具也画进度条                 | `ToolCallBlocks.tsx` 重挂 provider（上游覆盖该文件时挂载丢失；context/Layout/Indicator 本体幸存）                                                                                                                                                                                          |
+| 142 自适应思考档（adaptiveReasoningEnabled）      | 思考档选择器「自动」档消失；App 设置不再到达 session 偏好 | `thoughtLevelOptions.ts` 重加 withAutoThoughtLevelOption 三导出 + `thoughtLevelLabels.ts` 补 auto 词条 + `V4ComposerToolbar.tsx` 接线（适配上游重构后的 thought picker）+ `validationAppSettings.ts` 双段 schema + `protocol.ts` AppSettings 类型 + `services/node.ts` 读取行；i18n 键幸存 |
+| 143 危险命令策略（dangerousCommandPolicy）        | 设置页保存的策略不再进入 Bash 审批链                      | `services/node.ts` 读取行 + `protocol.ts` AppSettings 类型（协议/bootstrap/core 段幸存）                                                                                                                                                                                                   |
+
+验收：三道护栏 + thoughtLevelOptions + composer-toolbar-layout + toolCallBlocks 共 148 项全绿；
+typecheck 0 错。教训入册：**每次整版合并后必须跑全部 wiring 护栏**（三道护栏当时都红，
+但被误读为「标记从未存在」——用 `git log -S` 追添加/丢失历史即可避免误判）。

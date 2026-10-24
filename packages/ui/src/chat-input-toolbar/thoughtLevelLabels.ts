@@ -21,6 +21,8 @@ const THOUGHT_LEVEL_LABEL_IDS: Record<string, string> = {
   xhigh: "chat.toolbar.thoughtLevel.value.xhigh",
   max: "chat.toolbar.thoughtLevel.value.max",
   ultra: "chat.toolbar.thoughtLevel.value.ultra",
+  // CE 线增量：「自动」预设（withAutoThoughtLevelOption 注入，非模型目录档位）。
+  auto: "chat.toolbar.thoughtLevel.value.auto",
 };
 
 /**

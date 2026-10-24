@@ -7,6 +7,7 @@ import type { WorkspacePurpose } from "./workspacePurpose.js";
 import type { DynamicWorkflowMode } from "./dynamic-workflow-feature.js";
 import type { EmbeddedBrowserViewportPreference } from "./browser-use/command-metadata.js";
 import type { AppToolSearchMode } from "./app-runtime-preferences.js";
+import type { DangerousCommandPolicy } from "./dangerousCommands.js";
 
 // ── Domain types ──
 
@@ -358,6 +359,10 @@ export interface AppSettings {
   providerFamilyDomainMigrated?: boolean;
   /** 新建或冷恢复 Session 是否为 Bash 注入 bfs/ugrep 增强；默认启用。 */
   nativeSearchEnhancementsEnabled?: boolean;
+  /** 自适应思考档（experimental，默认关）：工具续跑步降一档；「自动」预设写入。 */
+  adaptiveReasoningEnabled?: boolean;
+  /** 危险命令策略（缺省即严格）：缺省时按 allowPersistentAuthorization=false + 默认项全开解释。 */
+  dangerousCommandPolicy?: DangerousCommandPolicy;
   /** 新建或冷恢复时读取；已有 Runtime 保持原策略。 */
   toolSearchMode?: AppToolSearchMode;
   /** 新建或冷恢复 Session 是否启用 Memory；默认关闭。 */

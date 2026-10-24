@@ -5,6 +5,7 @@
     ".reverse/**",
     "apps/zcode-cli/tests/gb2312.js",
     "docs/electron/docs/fiddles/**/*.html",
+    "docs/testing/conversation-session-docker-automation-plan.md",
     "packages/zcode-cua/**",
     "packages/desktop/src/renderer/src/plugin-sandbox/genUiTweakRuntime.js",
     "apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/**",

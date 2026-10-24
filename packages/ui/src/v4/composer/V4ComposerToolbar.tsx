@@ -54,8 +54,11 @@ import {
 } from "@/chat-input-toolbar/StartPlanContextBalance.js";
 import { ThoughtLevelCycleControl } from "@/chat-input-toolbar/ThoughtLevelCycleControl.js";
 import {
+  AUTO_THOUGHT_LEVEL_DESCRIPTION_ID,
+  AUTO_THOUGHT_LEVEL_VALUE,
   getNextThoughtLevelValue,
   getThoughtLevelLabel,
+  withAutoThoughtLevelOption,
 } from "@/chat-input-toolbar/thoughtLevelOptions.js";
 import type { V4ComposerConfigPicker } from "@/v4/composer/configPickerState.js";
 import { useToolbarShortcutBindings } from "@/v4/composer/toolbarShortcuts.js";
@@ -481,7 +484,11 @@ function V4ComposerModelControlsImpl({
   const providerSourcesLoading = providerSettingsRead.state.status !== "ready";
   // 配置面存活服务读（过渡归宿 = 配置面 v4 化）：连接方式选中键喂 BigModel Team Plan 门控豁免。
   const baseServices = useBaseWorkspaceServices();
-  const { settings: sharedSettings } = useSettings({ services: baseServices });
+  const { settings: sharedSettings, update: updateSharedSettings } = useSettings({
+    services: baseServices,
+  });
+  // 自适应思考档（CE）：选中「自动」预设时登记在 App 设置，随勾选联动（新会话生效）。
+  const adaptiveReasoningOn = sharedSettings?.adaptiveReasoningEnabled === true;
   const {
     entitlements,
     enabledStartPlanProviderIds,
@@ -1084,14 +1091,61 @@ function V4ComposerModelControlsImpl({
   const thoughtOption = useMemo<ZCodeConfigOption | null>(() => {
     if (!effectiveConfig) return null;
     if (!draftModelThoughtOption) return null;
+    const resolved = resolveDraftThoughtCurrentValue({
+      thought: effectiveConfig.thought,
+      thoughtLevels: draftModelThoughtOption.options?.map((option) => option.value) ?? [],
+    });
+    const options = withAutoThoughtLevelOption(
+      draftModelThoughtOption,
+      intl.formatMessage({ id: AUTO_THOUGHT_LEVEL_DESCRIPTION_ID }),
+    );
+    // 只有一个真实档位时没有「自动」可选项：设置仍可保留，但不能把 currentValue
+    // 设成列表里不存在的 auto，否则受控 Select 会显示空白。
+    const autoAvailable = options.some((entry) => entry.value === AUTO_THOUGHT_LEVEL_VALUE);
     return {
       ...draftModelThoughtOption,
-      currentValue: resolveDraftThoughtCurrentValue({
-        thought: effectiveConfig.thought,
-        thoughtLevels: draftModelThoughtOption.options?.map((option) => option.value) ?? [],
-      }),
+      // 「自动」预设：选中时档位字段仍是顶档（具体值，下游校验安全），显示值
+      // 改为 auto——自适应开关登记在 App 设置里，随勾选联动（新会话生效）。
+      options,
+      currentValue: adaptiveReasoningOn && autoAvailable ? AUTO_THOUGHT_LEVEL_VALUE : resolved,
     };
-  }, [draftModelThoughtOption, effectiveConfig]);
+  }, [draftModelThoughtOption, effectiveConfig, adaptiveReasoningOn, intl]);
+
+  // 统一的选择入口：auto = 档位顶格 + 开启自适应；具体档 = 关闭自适应后照常上抛。
+  const selectThoughtLevel = useCallback(
+    (value: string) => {
+      if (!effectiveConfig) return;
+      if (value === AUTO_THOUGHT_LEVEL_VALUE) {
+        // 自动 = 档位顶格 + 开启自适应（工具续跑步由 core 降一档）。
+        const concrete = thoughtOption?.options?.filter(
+          (entry) => entry.value !== AUTO_THOUGHT_LEVEL_VALUE,
+        );
+        const topValue = concrete?.at(-1)?.value;
+        void updateSharedSettings({ adaptiveReasoningEnabled: true });
+        if (topValue) {
+          onSelectThought(topValue, {
+            provider: effectiveConfig.provider,
+            model: effectiveConfig.model,
+          });
+        }
+        return;
+      }
+      if (sharedSettings?.adaptiveReasoningEnabled === true) {
+        void updateSharedSettings({ adaptiveReasoningEnabled: false });
+      }
+      onSelectThought(value, {
+        provider: effectiveConfig.provider,
+        model: effectiveConfig.model,
+      });
+    },
+    [
+      effectiveConfig,
+      onSelectThought,
+      sharedSettings?.adaptiveReasoningEnabled,
+      thoughtOption,
+      updateSharedSettings,
+    ],
+  );
 
   const handleThoughtValueChange = useCallback(
     (value: string) => {
@@ -1105,12 +1159,9 @@ function V4ComposerModelControlsImpl({
         });
         return;
       }
-      onSelectThought(value, {
-        provider: effectiveConfig.provider,
-        model: effectiveConfig.model,
-      });
+      selectThoughtLevel(value);
     },
-    [effectiveConfig, onSelectThought],
+    [effectiveConfig, selectThoughtLevel],
   );
 
   // Ctrl+T 热键：按目录顺序循环下一次 Submission 的思考深度。
@@ -1122,12 +1173,8 @@ function V4ComposerModelControlsImpl({
     if (nextValue == null) {
       return;
     }
-    if (!effectiveConfig) return;
-    onSelectThought(nextValue, {
-      provider: effectiveConfig.provider,
-      model: effectiveConfig.model,
-    });
-  }, [effectiveConfig, onSelectThought, thoughtOption]);
+    selectThoughtLevel(nextValue);
+  }, [selectThoughtLevel, thoughtOption]);
 
   const taskUsage = useMemo(() => {
     const contextWindow = usage?.contextWindow;

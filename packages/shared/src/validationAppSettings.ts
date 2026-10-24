@@ -617,6 +617,8 @@ const appSettingsObjectSchema = z.object({
   providerFamilyDomainUpdatedAt: z.number().int().nonnegative().optional(),
   providerFamilyDomainMigrated: z.boolean().default(false),
   nativeSearchEnhancementsEnabled: z.boolean().default(true),
+  // 自适应思考档（experimental，默认关）：工具续跑步降一档。缺省即关，不写显式默认值。
+  adaptiveReasoningEnabled: z.boolean().optional(),
   toolSearchMode: appToolSearchModeSchema.default("off"),
   onboardingOccupation: appSettingsOccupationSchema.nullish(),
   proactiveSuggestionsEnabled: z.boolean().optional(),
@@ -737,6 +739,7 @@ export const appSettingsPatchSchema = z.object({
   providerFamilyDomainUpdatedAt: z.number().int().nonnegative().optional(),
   providerFamilyDomainMigrated: z.boolean().optional(),
   nativeSearchEnhancementsEnabled: z.boolean().optional(),
+  adaptiveReasoningEnabled: z.boolean().optional(),
   toolSearchMode: appToolSearchModeSchema.optional(),
   onboardingOccupation: z
     .enum([
