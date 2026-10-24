@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -246,6 +247,14 @@ const REQUIRED_ASAR_RUNTIME_MODULES = [
   "@opentelemetry/sdk-metrics",
   "@opentelemetry/sdk-trace-base",
   "electron-updater",
+  // node-pty 是桌面终端的原生依赖，正常链路由 electron-builder 自己的 copy list +
+  // asarUnpack 落进 app.asar(.unpacked)。但 pnpm collector 解析它时按包内 "files" 声明
+  // 去找 build/Release/pty.node（node-pty 官方包不发布该文件），"file source doesn't
+  // exist" 之后整个模块被跳过——asar 里 node-pty 0 条目、app.asar.unpacked 也不产，
+  // afterPack 重打包的 --unpack-dir 匹配不到任何文件而失败。这里以它为闭包根强制注入：
+  // root node_modules 的 node-pty 带 prebuilds/<platform>（beforePack 已恢复目标平台），
+  // 拷入 staging 后由下方按平台裁剪保留目标 prebuild，再交给重打包产出 unpacked sidecar。
+  "node-pty",
 ];
 // pacman 依赖必须使用 Arch 官方仓库中的包名。electron-builder 的历史默认集合包含
 // 已移除的 libappindicator-gtk3/http-parser，且缺少 Electron 实际需要的运行库；显式
@@ -497,6 +506,26 @@ async function injectHoistedRuntimeModulesIntoAsar(context) {
         mkdirSync(dirname(targetModulePath), { recursive: true });
         rmSync(targetModulePath, { force: true, recursive: true });
         cpSync(sourceModulePath, targetModulePath, { recursive: true });
+      }
+    });
+
+    // 注入的 node-pty 从 root node_modules 整包拷来，带着两类不允许进产物的东西：
+    // ① prebuilds 下的非目标平台 native（安装包只能携带目标平台资源）；
+    // ② build/Release（root 下历史 native rebuild 的残留——node-pty 加载顺序
+    //    build/Release 优先于 prebuilds，带着它就会静默加载未验证的原生模块，
+    //    node-pty-package-assets 断言① 同样禁止）。
+    // electron-builder 自己的 copy list 走 PACKAGING_PRUNE_PATTERNS，这里的手工拷贝
+    // 必须自己执行同款裁剪。
+    runTimedSync("afterPack:prune-injected-native-prebuilds", () => {
+      const nodePtyStagingRoot = resolve(stagingNodeModulesDir, "node-pty");
+      if (!existsSync(nodePtyStagingRoot)) return;
+      rmSync(resolve(nodePtyStagingRoot, "build"), { force: true, recursive: true });
+      const nodePtyPrebuildsDir = resolve(nodePtyStagingRoot, "prebuilds");
+      if (!existsSync(nodePtyPrebuildsDir)) return;
+      for (const entry of readdirSync(nodePtyPrebuildsDir)) {
+        if (entry !== targetPlatform.key) {
+          rmSync(resolve(nodePtyPrebuildsDir, entry), { force: true, recursive: true });
+        }
       }
     });
 
@@ -988,7 +1017,31 @@ export default {
           );
           // NSIS 双引号字符串里反斜杠不是转义符，路径原样写入即可。
           mkdirSync(dirname(shimPath), { recursive: true });
-          writeFileSync(shimPath, `!include "${templatePath}"\r\n`, "utf8");
+          // 自定义脚本会让 electron-builder 跳过卸载器预编译，NsisTarget 因此**不再定义
+          // UNINSTALLER_OUT_FILE**（computeScriptAndSignUninstaller 提前返回，但 defines 键仍以
+          // 空值传给 makensis——日志里能看到 "Command line defined: UNINSTALLER_OUT_FILE"）；
+          // installer.nsh 补丁里的 File "${UNINSTALLER_OUT_FILE}" 会拿到空源，makensis 直接报
+          // File usage 错。这里在 shim 里兜底：define 缺席或为空串时，指向已暂存的预编译卸载器。
+          const prebuiltStaged = resolve(
+            desktopPackageRoot,
+            desktopDistDir,
+            "win-unpacked",
+            `Uninstall ${desktopProductIdentity.productName}.exe`,
+          );
+          let fallbackDefine = "";
+          if (existsSync(prebuiltStaged)) {
+            const stagedPath = prebuiltStaged.replaceAll("/", "\\");
+            fallbackDefine =
+              "!ifdef UNINSTALLER_OUT_FILE\r\n" +
+              '!if "${UNINSTALLER_OUT_FILE}" == ""\r\n' +
+              "!undef UNINSTALLER_OUT_FILE\r\n" +
+              `!define UNINSTALLER_OUT_FILE "${stagedPath}"\r\n` +
+              "!endif\r\n" +
+              "!else\r\n" +
+              `!define UNINSTALLER_OUT_FILE "${stagedPath}"\r\n` +
+              "!endif\r\n";
+          }
+          writeFileSync(shimPath, `${fallbackDefine}!include "${templatePath}"\r\n`, "utf8");
           return { script: shimPath };
         })()
       : {}),

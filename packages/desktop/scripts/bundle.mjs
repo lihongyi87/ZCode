@@ -17,16 +17,32 @@ import {
   findDesktopNativePackageViolations,
   parseAsarListWithPackState,
 } from "./desktop-native-package-policy.mjs";
-import {
-  resolveSpawnRuntimeOptions,
-  runCommand,
-  runCommandAndReadStdout,
-} from "../../../scripts/spawn-command.mjs";
+import { runCommand, runCommandAndReadStdout } from "../../../scripts/spawn-command.mjs";
 import { resolveIntranetDepsBaseUrl } from "../../../scripts/intranetDefaults.mjs";
 
 const desktopRoot = resolve(import.meta.dirname, "..");
 const workspaceRoot = resolve(desktopRoot, "../..");
 const requireFromBundle = createRequire(import.meta.url);
+// 直调 electron-builder 的 cli.js（不经 pnpm exec 包装）。
+// 实测：pnpm exec → cmd → electron-builder → (spawn pnpm list) 的嵌套链在 Windows 上
+// 会让 electron-builder 的依赖收集阶段满核空转（进程树里没有任何 pnpm 子进程，纯 JS 死循环）；
+// 同参数直接 node cli.js 则正常完成。二者环境差异只有 pnpm exec 注入的 npm_* 变量。
+function resolveElectronBuilderCliPath() {
+  try {
+    return resolve(dirname(requireFromBundle.resolve("electron-builder/package.json")), "cli.js");
+  } catch {
+    // exports 面禁止 ./package.json 时退回主入口所在包根。
+    const mainEntry = requireFromBundle.resolve("electron-builder");
+    for (let dir = dirname(mainEntry); ; dir = dirname(dir)) {
+      const candidate = resolve(dir, "cli.js");
+      if (existsSync(candidate)) return candidate;
+      const parent = dirname(dir);
+      if (parent === dir) break;
+    }
+    return mainEntry;
+  }
+}
+const electronBuilderCliPath = resolveElectronBuilderCliPath();
 const asarCliPath = resolve(
   dirname(requireFromBundle.resolve("@electron/asar/package.json")),
   "bin",
@@ -489,7 +505,7 @@ async function runElectronBuilderWithRetry(args, envPatch) {
 
   for (let attempt = 1; attempt <= electronBuilderRetryCount; attempt += 1) {
     console.log(
-      `[bundle] > ${pnpmCommand} ${args.join(" ")} ${attempt > 1 ? `(retry ${attempt}/${electronBuilderRetryCount})` : ""}`.trim(),
+      `[bundle] > node ${args.join(" ")} ${attempt > 1 ? `(retry ${attempt}/${electronBuilderRetryCount})` : ""}`.trim(),
     );
 
     const mergedEnv = {
@@ -497,13 +513,12 @@ async function runElectronBuilderWithRetry(args, envPatch) {
       ...retryEnvPatch,
     };
     const result = await new Promise((resolvePromise) => {
-      const child = spawn(pnpmCommand, args, {
+      // args 已是 electron-builder 参数（不含 exec 前缀）；node 直调不走 shell，
+      // 参数不经 cmd 拼接，也不再受 pnpm exec 注入环境的影响（见上方 cli.js 注释）。
+      const child = spawn(process.execPath, [electronBuilderCliPath, ...args], {
         cwd: desktopRoot,
         env: mergedEnv,
         stdio: ["inherit", "pipe", "pipe"],
-        // spawn-command 已经不再导出 resolveSpawnCommand，也不希望这里把 pnpm 再改写成 *.cmd。
-        // 直接复用同一套 runtime 选项，让 Windows 仍通过 shell 解析 shim，避免 CI dry-run / 真打包在模块加载阶段崩掉。
-        ...resolveSpawnRuntimeOptions(pnpmCommand),
       });
 
       let outputBuffer = "";
@@ -558,7 +573,7 @@ async function runElectronBuilderWithRetry(args, envPatch) {
       result.combinedOutput,
       result.error?.message,
       typeof result.status === "number"
-        ? `${pnpmCommand} ${args.join(" ")} failed with code ${result.status}`
+        ? `node ${args.join(" ")} failed with code ${result.status}`
         : null,
     ]
       .filter(Boolean)
@@ -597,9 +612,7 @@ async function runElectronBuilderWithRetry(args, envPatch) {
         throw result.error;
       }
 
-      throw new Error(
-        `${pnpmCommand} ${args.join(" ")} failed with code ${result.status ?? "unknown"}`,
-      );
+      throw new Error(`node ${args.join(" ")} failed with code ${result.status ?? "unknown"}`);
     }
 
     // Windows 打包机偶发在下载 NSIS 资源时被 GitHub 连接中断，electron-builder 会把这类瞬时网络错误
@@ -714,8 +727,6 @@ function verifyPackagedRuntimeDependencies(os, arch) {
 async function main() {
   const { os, arch, skipPrepare, skipBuild, dryRun } = parseArgs(process.argv.slice(2));
   const buildArgs = [
-    "exec",
-    "electron-builder",
     "--config",
     "electron-builder.config.js",
     osBuilderFlagMap[os],
@@ -733,7 +744,7 @@ async function main() {
   };
 
   if (dryRun) {
-    console.log(`[bundle] dry-run: ${pnpmCommand} ${buildArgs.join(" ")}`);
+    console.log(`[bundle] dry-run: node electron-builder ${buildArgs.join(" ")}`);
     process.exit(0);
   }
 
