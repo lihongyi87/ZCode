@@ -30,6 +30,8 @@ export interface RemoteProjectEntry {
   roots: ProjectRoot[];
   legacyWorkspace: RemoteWorkspaceSessionEntry | null;
   lastSyncedAt: number | null;
+  /** 从 3.15 首次升级的混排位置；仅用作控制端排序初值。 */
+  initialPosition?: number;
 }
 export interface RemoteProjectDirectory {
   hosts: RemoteProjectHost[];

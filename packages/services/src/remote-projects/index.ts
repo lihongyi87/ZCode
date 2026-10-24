@@ -57,6 +57,7 @@ function entry(row: Record<string, unknown>): RemoteProjectEntry {
     legacyWorkspace:
       row.legacy_workspace_json == null ? null : JSON.parse(String(row.legacy_workspace_json)),
     lastSyncedAt: row.last_synced_at == null ? null : Number(row.last_synced_at),
+    ...(row.initial_position == null ? {} : { initialPosition: Number(row.initial_position) }),
   };
 }
 /** 不含连接运行态的本机目录；调用方负责 SQLite 读事务。 */
