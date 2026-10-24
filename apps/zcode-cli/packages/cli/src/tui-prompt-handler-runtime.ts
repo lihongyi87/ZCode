@@ -31,6 +31,7 @@ export async function prepareTuiAppRuntime(
   deps: RunDependencies,
   request: CliResumeRequest,
   state: TuiProcessRuntimeState,
+  version: string,
 ) {
   const env = deps.env ?? process.env;
   const workingDirectory = (deps.cwd ?? process.cwd)();

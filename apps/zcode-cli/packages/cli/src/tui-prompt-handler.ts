@@ -142,7 +142,7 @@ export function createTuiSubmitPrompt(
       providerRegistryRuntime,
       sessionId,
       workingDirectory,
-    } = await prepareTuiAppRuntime(deps, request, processRuntime);
+    } = await prepareTuiAppRuntime(deps, request, processRuntime, version);
     const browserRuntime = createCliHeadlessBrowserRuntime({ browserExecutable, browserUse }, deps);
     let createdApp: Awaited<ReturnType<NonNullable<RunDependencies["createZCodeApp"]>>>;
     try {

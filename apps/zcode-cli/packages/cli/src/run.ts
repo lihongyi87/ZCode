@@ -516,6 +516,9 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       resumeRequest,
       toolDisallowlist,
       forceMcs,
+      // runPrompt 第 11 参是 toolsearchMode（headless 暂无对应 flag，缺省 off），
+      // 此前错位把 presentationSurface 传进了它（CLI typecheck 盲区，无门禁）。
+      undefined,
       presentationSurface,
     );
   }
@@ -532,6 +535,7 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       resumeRequest,
       toolDisallowlist,
       forceMcs,
+      undefined,
       presentationSurface,
     );
   }

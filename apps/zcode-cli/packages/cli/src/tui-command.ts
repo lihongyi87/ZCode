@@ -51,7 +51,8 @@ export const runTuiCommand = async (
       toolsearchMode,
       options.browserUse,
       options.browserExecutable,
-      workflowMode,
+      // workflowMode 不是 createTuiSubmitPrompt 的参数（运行时多余实参被忽略）；
+      // 本作用域在下方 listSlashCommandSuggestions 里消费。
     );
     const unregisterShutdownHandlers = registerCliShutdownHandlers({
       cleanup: async () => {
