@@ -817,6 +817,26 @@ exceptions:
       scripts/architecture/upstream-snapshot.json（以合并落地形态重锚）；上游 3.16.1 的
       bot×project 绑定等未跟进项见 docs/development/upstream-sync.md v3.16.1 节。后续对
       这些文件的逻辑修改应顺带评估是否 adopt 成 managed 模块。
+  - id: lsp-semantic-tools
+    rule: unmanaged-new-file
+    paths:
+      - apps/zcode-cli/packages/adapters/src/lsp/index.ts
+      - apps/zcode-cli/packages/contracts/src/interfaces/lsp.port.ts
+      - apps/zcode-cli/packages/contracts/src/tools/lsp.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/lsp-definition.ts
+    reason: >-
+      spec 151 LSP 语义工具族批一（LspDefinition，只读零审批）：LspPort 契约、
+      NodeLspAdapter（JSON-RPC over stdio，per-language 懒启动+每请求文档同步）、
+      工具 handler 与注册门 includeLsp（未配置 server 即整体关闭）。源头思路参考
+      Charm Crush（FSL-1.1-MIT，只借鉴不搬码），自研实现；见
+      docs/development/151-lsp-tools.md。批二（references/rename）落地时沿用户例
+      扩充本条。
+  - id: cli-tui-prompt-handler-runtime-split
+    rule: unmanaged-new-file
+    paths: [apps/zcode-cli/packages/cli/src/tui-prompt-handler-runtime.ts]
+    reason: >-
+      上游 3.15.1 的 tui-prompt-handler 拆分文件，随整版 merge 进树；本条登记的是
+      既有状态（本轮仅做 version 形参穿线的类型修复，未改模块边界）。
   - id: side-pane-full-view-shortcut-command-edit
     rule: unmanaged-new-file
     paths: [packages/shared/src/shortcutCommands.ts]

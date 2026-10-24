@@ -16,6 +16,7 @@ import { createNodeFileSystemAdapter } from "@zcode/adapters/fs";
 import { createNodeWebFetchHttpClientAdapter } from "@zcode/adapters/http";
 import { createJimpImageProcessorAdapter } from "@zcode/adapters/image";
 import { createPopplerPdfDocumentAdapter } from "@zcode/adapters/pdf";
+import { createNodeLspAdapter } from "@zcode/adapters/lsp";
 import { createNodeSessionMailboxAdapter } from "@zcode/adapters/mailbox";
 import { createNodeContextSourceAdapter } from "@zcode/adapters/context";
 import { createNodeSkillAdapter } from "@zcode/adapters/skills";
@@ -395,6 +396,18 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         videoCacheRootDir: join(storageRoot, "cli", "video-cache"),
       });
     const imageProcessorPort = options.imageProcessorPort ?? createJimpImageProcessorAdapter();
+    // spec 151:LSP 语义工具(可选增强;未配置 servers 时 port 仍在但 availableLanguages()
+    // 为空,工具注册门保持关闭——不静默降级,也不注册无用工具)。
+    const lspPort =
+      options.lspPort ??
+      createNodeLspAdapter({
+        servers: Object.fromEntries(
+          Object.entries(configResult.config.lsp?.servers ?? {}).map(([languageId, server]) => [
+            languageId,
+            { command: server.command, args: server.args },
+          ]),
+        ),
+      });
     const messageEnabled = isMessageEnabled(options.env ?? process.env);
     const sessionMailboxPort =
       options.sessionMailboxPort ??
@@ -844,6 +857,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       eventStore: options.eventStore ?? createInMemorySessionEventStore(),
       sessionStore,
       sessionMailboxPort,
+      lspPort,
       logger,
       executionPort,
       workspaceHookAdmission: workspaceHookRuntimeSecurity?.admission,

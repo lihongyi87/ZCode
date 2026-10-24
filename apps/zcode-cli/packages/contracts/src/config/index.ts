@@ -231,6 +231,7 @@ export interface RuntimeConfig {
     memory: boolean;
     skill: boolean;
     mcp: boolean;
+    lsp: boolean;
   };
   compact: {
     domainInstructions: string;
@@ -240,6 +241,10 @@ export interface RuntimeConfig {
   };
   mcp: {
     servers: Record<string, McpServerConfig>;
+  };
+  /** spec 151:LSP 语义工具(server 清单;空=功能整体关闭)。 */
+  lsp: {
+    servers: Record<string, { command: string; args?: string[] }>;
   };
   plugins: PluginConfig;
   skills: {
@@ -325,6 +330,7 @@ export const DefaultRuntimeConfig: RuntimeConfig = {
     memory: true,
     skill: true,
     mcp: true,
+    lsp: false,
   },
   compact: {
     domainInstructions: "",
@@ -333,6 +339,9 @@ export const DefaultRuntimeConfig: RuntimeConfig = {
     use: true,
   },
   mcp: {
+    servers: {},
+  },
+  lsp: {
     servers: {},
   },
   plugins: {

@@ -95,6 +95,7 @@ function registerRuntimeBuiltInTools(runtime: AgentRuntimeInternal, deps: AgentR
     bashTimeoutPolicy: runtime.config.bashTimeoutPolicy,
     includeSkill: Boolean(runtime.skillPort),
     includeAgent: Boolean(runtime.subagentPort),
+    includeLsp: Boolean(runtime.lspPort?.availableLanguages().length),
     includeSendMessage: runtime.subagentPort?.sendMessage !== undefined,
     includeRespondToCoordinator:
       runtime.config.taskType === "subagent_child" && Boolean(deps.coordinatorResponsePort),
@@ -266,6 +267,7 @@ function createRuntimeToolExecutor(
     dangerousCommandPolicy: runtime.config.dangerousCommandPolicy,
     skillPort: deps.skillPort,
     subagentPort: runtime.subagentPort,
+    lspPort: runtime.lspPort,
     coordinatorResponsePort: deps.coordinatorResponsePort,
     workflowSubmitPort: deps.workflowSubmitPort,
     workflowEscalatePort: deps.workflowEscalatePort,

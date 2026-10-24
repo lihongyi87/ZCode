@@ -11,6 +11,7 @@ import type {
   SessionEventStorePort,
   SessionId,
   SessionMailboxPort,
+  LspPort,
   SessionStorePort,
   ContextSourcePort,
   ContextSourceSnapshot,
@@ -152,6 +153,7 @@ export interface AgentRuntimeInternal
   workspaceRoot: string;
   sessionStore?: SessionStorePort;
   sessionMailboxPort?: SessionMailboxPort;
+  lspPort?: LspPort;
   sessionPersisted: boolean;
   needsPlanModeExitReminder: boolean;
   latestConversationMessageId?: MessageId;

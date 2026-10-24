@@ -82,6 +82,10 @@
       "types": "./dist/mailbox/index.d.ts",
       "import": "./dist/mailbox/index.js"
     },
+    "./lsp": {
+      "types": "./dist/lsp/index.d.ts",
+      "import": "./dist/lsp/index.js"
+    },
     "./workflow": {
       "types": "./dist/workflow/index.d.ts",
       "import": "./dist/workflow/index.js"

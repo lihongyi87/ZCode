@@ -40,6 +40,7 @@ import {
 import { isSubagentDispatchToolName } from "../compat.js";
 import { skillToolEntry } from "./skill.js";
 import { kbSearchToolEntry } from "./kb-search.js";
+import { lspDefinitionToolEntry } from "./lsp-definition.js";
 import { todoReadToolEntry, todoWriteToolEntry } from "./todo.js";
 import {
   cronCreateToolEntry,
@@ -105,6 +106,7 @@ export const builtInTools: ToolEntry[] = [
   exitPlanModeToolEntry,
   askUserQuestionToolEntry,
   sendMessageToolEntry,
+  lspDefinitionToolEntry,
   respondToCoordinatorToolEntry,
   submitResultToolEntry,
   // actor 的升级通道。与 submit_result 完全同构：
@@ -189,6 +191,7 @@ interface RegisterBuiltInToolsOptions {
   bashTimeoutPolicy?: BashTimeoutPolicy;
   includeSkill?: boolean;
   includeAgent?: boolean;
+  includeLsp?: boolean;
   includeSendMessage?: boolean;
   includeRespondToCoordinator?: boolean;
   includeSubmitResult?: boolean;
@@ -254,6 +257,9 @@ export function registerBuiltInTools(
       continue;
     }
     if (entry.metadata.name === "SendMessage" && options.includeSendMessage !== true) {
+      continue;
+    }
+    if (entry.metadata.name === "LspDefinition" && options.includeLsp !== true) {
       continue;
     }
     if (

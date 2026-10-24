@@ -27,6 +27,7 @@ import type {
   SessionModePort,
   SessionStorePort,
   SkillPort,
+  LspPort,
   SubagentPort,
   SubagentRunOptions,
   ToolArtifactStorePort,
@@ -108,6 +109,7 @@ export interface ToolExecutorOptions {
   dangerousCommandPolicy?: DangerousCommandPolicy;
   skillPort?: SkillPort;
   subagentPort?: SubagentPort;
+  lspPort?: LspPort;
   coordinatorResponsePort?: CoordinatorResponsePort;
   workflowSubmitPort?: WorkflowSubmitPort;
   /** actor 的升级端口；存在即为该会话注册 escalate。 */
@@ -227,6 +229,7 @@ export interface ToolExecutorDeps {
   dangerousCommandPolicy?: DangerousCommandPolicy;
   skillPort?: SkillPort;
   subagentPort?: SubagentPort;
+  lspPort?: LspPort;
   coordinatorResponsePort?: CoordinatorResponsePort;
   workflowSubmitPort?: WorkflowSubmitPort;
   /** actor 的升级端口；存在即为该会话注册 escalate。 */

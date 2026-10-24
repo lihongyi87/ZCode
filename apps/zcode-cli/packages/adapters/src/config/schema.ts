@@ -38,10 +38,21 @@ const featuresSchema = z.object({
   memory: z.boolean().optional(),
   skill: z.boolean().optional(),
   mcp: z.boolean().optional(),
+  lsp: z.boolean().optional(),
 });
 
 const memorySchema = z.object({
   use: z.boolean().optional(),
+});
+
+/** spec 151:LSP 语义工具(可选增强,显式配置启用;缺省不注册工具)。 */
+const lspServerSchema = z.object({
+  command: z.string().min(1),
+  args: z.array(z.string()).optional(),
+});
+
+const lspSchema = z.object({
+  servers: z.record(z.string().min(1), lspServerSchema).optional(),
 });
 
 const mcpServerBaseSchema = {
@@ -355,6 +366,7 @@ export const ZCodeConfigFileSchema = z
     compact: z.object({ domainInstructions: z.string().optional() }).optional(),
     memory: memorySchema.optional(),
     mcp: mcpSchema.optional(),
+    lsp: lspSchema.optional(),
     plugins: pluginsSchema.optional(),
     skills: skillsSchema.optional(),
     skill: skillCommandOverridesSchema.optional(),

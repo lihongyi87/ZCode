@@ -85,6 +85,7 @@ import type {
   McpPort,
   McpServerConfig,
   SubagentPort,
+  LspPort,
   ToolArtifactStorePort,
   ToolCallId,
   WorkflowPort,
@@ -371,6 +372,7 @@ export interface AgentRuntimeDeps {
   skillPort?: SkillPort;
   mcpPort?: McpPort;
   subagentPort?: SubagentPort;
+  lspPort?: LspPort;
   coordinatorResponsePort?: CoordinatorResponsePort;
   /** 工作流 actor 提交终态结果的端口；存在即作为 submit_result 工具的注册门。 */
   workflowSubmitPort?: WorkflowSubmitPort;

@@ -43,6 +43,7 @@ import type {
   SkillPort,
   SkillTelemetryMetadata,
   SubagentPort,
+  LspPort,
   SubagentRunOptions,
   ToolArtifactStorePort,
   ToolCancellationPolicy,
@@ -206,6 +207,7 @@ export interface ToolExecutionContext {
   subagentModelOverride?: SubagentRunOptions["modelOverride"];
   skillPort?: SkillPort;
   subagentPort?: SubagentPort;
+  lspPort?: LspPort;
   coordinatorResponsePort?: CoordinatorResponsePort;
   /** 工作流 actor 提交终态结果并等待引擎裁决的端口；仅在 workflow actor 会话注入。 */
   workflowSubmitPort?: WorkflowSubmitPort;
