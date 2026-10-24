@@ -258,7 +258,41 @@
     Call ZCodeShowUninstallerCleanupDetails
   !macroend
 
+  ; 覆盖安装时若 ZCode-CE.exe / 卸载器仍在跑，7z 解压与 Uninstall*.exe 写入都会
+  ; 「复制失败」。默认 checkAppRunning 的软关闭在本机常关不掉；安装前强制结束
+  ; $INSTDIR 下进程，并按映像名兜底 taskkill。
+  !macro ZCodeForceStopInstDirProcesses
+    DetailPrint "ZCode: force-stop processes under $INSTDIR"
+    nsExec::Exec `taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T`
+    Pop $R8
+    nsExec::Exec `taskkill /F /IM "${UNINSTALL_FILENAME}" /T`
+    Pop $R8
+    nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith('$INSTDIR','CurrentCultureIgnoreCase') } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }"`
+    Pop $R8
+    Sleep 600
+  !macroend
+
+  ; 替换上游默认：先强杀再确认；仍占用才弹窗，避免「无法关闭」死循环却不真正杀进程。
+  !macro customCheckAppRunning
+    StrCpy $R7 0
+    zcodeForceStopAppLoop:
+      !insertmacro ZCodeForceStopInstDirProcesses
+      IntOp $R7 $R7 + 1
+      nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "if (@(Get-CimInstance Win32_Process | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith('$INSTDIR','CurrentCultureIgnoreCase') }).Count -gt 0) { exit 0 } else { exit 1 }"`
+      Pop $R0
+      ${if} $R0 == 0
+        ${if} $R7 < 6
+          Sleep 800
+          Goto zcodeForceStopAppLoop
+        ${else}
+          MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY zcodeForceStopAppLoop
+          Quit
+        ${endif}
+      ${endif}
+  !macroend
+
   !macro customInstallExtractStarted
+    !insertmacro ZCodeForceStopInstDirProcesses
     !insertmacro ZCodeReportInstallerStage "extract-started"
   !macroend
 

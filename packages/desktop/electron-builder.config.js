@@ -1,8 +1,16 @@
 /* eslint-disable max-lines -- Electron Builder config keeps related packaging hooks together so build order stays explicit. */
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { runCommand, runCommandAndReadStdout } from "../../scripts/spawn-command.mjs";
 import { loadBuiltinProviderConfig } from "../../scripts/builtin-provider-config.mjs";
@@ -65,8 +73,12 @@ import {
 } from "./scripts/desktop-native-package-policy.mjs";
 import { replaceAppAsarFromStaging } from "./scripts/app-asar-repack.mjs";
 import {
+  patchNsisExtractAppPackageFile,
   patchNsisInstallSectionFile,
+  patchNsisInstallerIncludeFile,
+  restoreNsisExtractAppPackageFileSync,
   restoreNsisInstallSectionFileSync,
+  restoreNsisInstallerIncludeFileSync,
 } from "./scripts/patch-nsis-install-section.mjs";
 
 const buildMetadata = getBuildMetadata();
@@ -102,6 +114,81 @@ const requireFromConfig = createRequire(import.meta.url);
 let nsisInstallSectionPatched = false;
 let nsisInstallSectionOriginalSource = null;
 let nsisInstallSectionPath = null;
+let nsisInstallerIncludeOriginalSource = null;
+let nsisInstallerIncludePath = null;
+let nsisExtractAppPackageOriginalSource = null;
+let nsisExtractAppPackagePath = null;
+
+// ZCODE_EB_SKIP_UNINSTALLER_SIGN=1 跳过 BUILD_UNINSTALLER 舞蹈后，必须提供可嵌入的卸载器文件，
+// 否则 File "/oname=Uninstall ….exe" "${UNINSTALLER_OUT_FILE}" 会编进空源，安装阶段写入失败。
+function stagePrebuiltUninstallerIntoAppOutDir(appOutDir) {
+  if (process.env.ZCODE_EB_SKIP_UNINSTALLER_SIGN !== "1") {
+    return;
+  }
+  const sourceUninstaller =
+    process.env.ZCODE_EB_PREBUILT_UNINSTALLER ||
+    resolve(desktopPackageRoot, "dist", "prebuilt-uninstaller.exe");
+  if (!existsSync(sourceUninstaller) || !existsSync(appOutDir)) {
+    return;
+  }
+  cpSync(sourceUninstaller, join(appOutDir, `Uninstall ${desktopProductIdentity.productName}.exe`));
+}
+
+if (process.env.ZCODE_EB_SKIP_UNINSTALLER_SIGN === "1") {
+  const prebuiltUninstaller =
+    process.env.ZCODE_EB_PREBUILT_UNINSTALLER ||
+    resolve(desktopPackageRoot, "dist", "prebuilt-uninstaller.exe");
+  if (existsSync(prebuiltUninstaller)) {
+    process.env.ZCODE_EB_PREBUILT_UNINSTALLER = prebuiltUninstaller;
+    stagePrebuiltUninstallerIntoAppOutDir(
+      resolve(desktopPackageRoot, desktopDistDir, "win-unpacked"),
+    );
+  }
+}
+
+/**
+ * --prepackaged 不会跑 beforePack，但 NSIS 编译仍需要模板补丁。
+ * 在配置加载时对 win 目标同步打补丁，进程退出时恢复上游模板。
+ */
+async function ensureNsisTemplatesPatchedForWindows() {
+  if (targetPlatform.os !== "win32" || nsisInstallSectionPatched) {
+    return;
+  }
+  const nsisTemplatesRoot = resolve(
+    dirname(requireFromConfig.resolve("app-builder-lib/package.json")),
+    "templates",
+    "nsis",
+  );
+  nsisInstallSectionPath = resolve(nsisTemplatesRoot, "installSection.nsh");
+  nsisInstallerIncludePath = resolve(nsisTemplatesRoot, "include", "installer.nsh");
+  nsisExtractAppPackagePath = resolve(nsisTemplatesRoot, "include", "extractAppPackage.nsh");
+  const [sectionPatch, includePatch, extractPatch] = await Promise.all([
+    patchNsisInstallSectionFile(nsisInstallSectionPath),
+    patchNsisInstallerIncludeFile(nsisInstallerIncludePath),
+    patchNsisExtractAppPackageFile(nsisExtractAppPackagePath),
+  ]);
+  nsisInstallSectionPatched = true;
+  nsisInstallSectionOriginalSource = sectionPatch.originalSource;
+  nsisInstallerIncludeOriginalSource = includePatch.originalSource;
+  nsisExtractAppPackageOriginalSource = extractPatch.originalSource;
+  if (sectionPatch.changed || includePatch.changed || extractPatch.changed) {
+    process.once("exit", () => {
+      restoreNsisInstallSectionFileSync({
+        filePath: nsisInstallSectionPath,
+        originalSource: nsisInstallSectionOriginalSource,
+      });
+      restoreNsisInstallerIncludeFileSync({
+        filePath: nsisInstallerIncludePath,
+        originalSource: nsisInstallerIncludeOriginalSource,
+      });
+      restoreNsisExtractAppPackageFileSync({
+        filePath: nsisExtractAppPackagePath,
+        originalSource: nsisExtractAppPackageOriginalSource,
+      });
+    });
+  }
+}
+await ensureNsisTemplatesPatchedForWindows();
 const desktopElectronVersion = requireFromConfig("./package.json").devDependencies.electron;
 const asarCliPath = resolve(
   dirname(requireFromConfig.resolve("@electron/asar/package.json")),
@@ -111,6 +198,7 @@ const asarCliPath = resolve(
 const REQUIRED_ASAR_RUNTIME_MODULES = [
   "module-details-from-path",
   "pngjs",
+  "@babel/runtime",
   // @zcode/services 的代理连通性探测会动态 require("undici") 取 ProxyAgent。
   // tsup 虽然把 services 代码并进了主/host 产物，但不会把这个运行时 require 的包内联进去，
   // electron-builder 产物又可能漏掉 hoisted 的 undici，最终 mac 安装包启动即报 Cannot find module "undici"。
@@ -147,6 +235,17 @@ const REQUIRED_ASAR_RUNTIME_MODULES = [
   // 飞书渠道时才会在 host 里抛 ERR_MODULE_NOT_FOUND。与上游 v3.14.3 的
   // desktop/electron-builder.config.js:143 同一处置。
   "@larksuiteoapi/node-sdk",
+  // 主进程 OTLP trace/metrics 依赖链在 pnpm list --prod 中会出现多父节点去重空子树，
+  // electron-builder 的 PnpmNodeModulesCollector 先命中空子树时会漏打 @opentelemetry/semantic-conventions、
+  // @opentelemetry/api-logs、@opentelemetry/sdk-logs，导致已安装应用启动即报
+  // Cannot find module '@opentelemetry/semantic-conventions'。作为闭包根统一注入并校验。
+  "@opentelemetry/api",
+  "@opentelemetry/exporter-metrics-otlp-proto",
+  "@opentelemetry/exporter-trace-otlp-proto",
+  "@opentelemetry/resources",
+  "@opentelemetry/sdk-metrics",
+  "@opentelemetry/sdk-trace-base",
+  "electron-updater",
 ];
 // pacman 依赖必须使用 Arch 官方仓库中的包名。electron-builder 的历史默认集合包含
 // 已移除的 libappindicator-gtk3/http-parser，且缺少 Electron 实际需要的运行库；显式
@@ -414,6 +513,17 @@ async function injectHoistedRuntimeModulesIntoAsar(context) {
   }
 }
 
+if (
+  targetPlatform.os === "win32" &&
+  process.argv.includes("--prepackaged") &&
+  existsSync(resolve(desktopPackageRoot, desktopDistDir, "win-unpacked", "resources", "app.asar"))
+) {
+  await injectHoistedRuntimeModulesIntoAsar({
+    electronPlatformName: "win32",
+    appOutDir: resolve(desktopPackageRoot, desktopDistDir, "win-unpacked"),
+  });
+}
+
 async function stripPackagedSourcemapReferences(context) {
   // electron-builder 的 files 规则能排除 .map 文件，但无法删除 JS/CSS 末尾
   // 指向 sourcemap 的注释；afterPack 注入运行时依赖后也可能重新带入第三方 sourceMappingURL。
@@ -562,30 +672,12 @@ export default {
     runTimedSync("beforePack:restoreTargetNodePtyPrebuild", () =>
       restoreTargetNodePtyPrebuild({ desktopPackageRoot, targetPlatform }),
     );
-    if (context.electronPlatformName !== "win32" || nsisInstallSectionPatched) {
-      return;
-    }
-
-    nsisInstallSectionPath = resolve(
-      dirname(requireFromConfig.resolve("app-builder-lib/package.json")),
-      "templates",
-      "nsis",
-      "installSection.nsh",
-    );
-    const patchResult = await runTimedAsync("beforePack:patchNsisInstallSection", () =>
-      patchNsisInstallSectionFile(nsisInstallSectionPath),
-    );
-    nsisInstallSectionPatched = true;
-    nsisInstallSectionOriginalSource = patchResult.originalSource;
-    if (patchResult.changed) {
-      // electron-builder 在当前进程内随后才会编译 NSIS；等整个构建进程退出后恢复 node_modules
-      // 中的上游模板，避免把一次打包的定制内容永久留在开发依赖里。
-      process.once("exit", () => {
-        restoreNsisInstallSectionFileSync({
-          filePath: nsisInstallSectionPath,
-          originalSource: nsisInstallSectionOriginalSource,
-        });
-      });
+    // NSIS 模板补丁已在配置加载时 ensureNsisTemplatesPatchedForWindows 完成
+    //（覆盖 --prepackaged）；此处保留 no-op，避免旧调用点行为漂移。
+    if (context.electronPlatformName === "win32") {
+      await runTimedAsync("beforePack:ensureNsisTemplatesPatched", () =>
+        ensureNsisTemplatesPatchedForWindows(),
+      );
     }
   },
   afterExtract: async (context) => {
@@ -624,7 +716,31 @@ export default {
       await runTimedAsync("afterPack:writeWindowsInstallManifest", () =>
         writeWindowsInstallManifest(context),
       );
+      stagePrebuiltUninstallerIntoAppOutDir(context.appOutDir);
     }
+  },
+  afterAllArtifactBuild: async (buildResult) => {
+    if (process.env.ZCODE_NSIS_SKIP_PRIVATE_TEMP_WRAP === "1") {
+      return [];
+    }
+    const winExeArtifacts = (buildResult?.artifactPaths ?? []).filter(
+      (filePath) =>
+        typeof filePath === "string" &&
+        filePath.toLowerCase().endsWith(".exe") &&
+        !filePath.toLowerCase().includes("__uninstaller"),
+    );
+    if (winExeArtifacts.length === 0) {
+      return [];
+    }
+    const { wrapNsisInstallerWithPrivateTemp, updateLatestYmlForArtifact, regenerateBlockmap } =
+      await import("./scripts/wrap-nsis-private-temp.mjs");
+    for (const artifactPath of winExeArtifacts) {
+      const wrapResult = await wrapNsisInstallerWithPrivateTemp(artifactPath);
+      const latestYmlPath = resolve(dirname(artifactPath), "latest.yml");
+      updateLatestYmlForArtifact(latestYmlPath, basename(artifactPath), wrapResult.path);
+      await regenerateBlockmap(wrapResult.path);
+    }
+    return [];
   },
   extraResources: [
     { from: resolve(workspaceRoot, noticesFileName), to: noticesFileName },
@@ -855,12 +971,12 @@ export default {
     // ZCODE_EB_SKIP_UNINSTALLER_SIGN=1 时提供一个一行 shim 作为"自定义 NSIS 脚本"。
     // electron-builder 看到自定义脚本会跳过卸载器预编译舞蹈（BUILD_UNINSTALLER 中间产物
     // 的编译与运行），其余流程不变：shim 只 !include 上游模板本体，-D defines、-X 命令、
-    // 生成的脚本头、以及 patch-nsis-install-section 对 installSection.nsh 的补丁全部照旧。
+    // 生成的脚本头、以及 patch-nsis-install-section 对 installSection.nsh / installer.nsh 的补丁全部照旧。
     // 为什么留这个开关：本机实测（2026-10-19）卸载器舞蹈无论 26.8.1 还是 26.15.3 都在
     // "运行刚编译的 BUILD_UNINSTALLER 安装器"一步确定性退出码 2 / spawn 失败，而最小
     // NSIS 复现（同样的 WriteUninstaller+quitSuccess）在本机正常；CI 与其他环境未复现。
-    // 代价：独立卸载器不再被预签名（安装包本体与其中嵌入的卸载器数据不受影响，
-    // electron-builder 自己对自定义脚本的提示也是这句）。默认不设变量时保持上游行为。
+    // 代价：独立卸载器不再被预签名；须同时提供 ZCODE_EB_PREBUILT_UNINSTALLER（或 dist/prebuilt-uninstaller.exe）
+    // 供 File 嵌入。默认不设变量时保持上游行为。
     ...(process.env.ZCODE_EB_SKIP_UNINSTALLER_SIGN === "1"
       ? (() => {
           const shimPath = resolve(desktopPackageRoot, "dist", "installer-entry.nsi");

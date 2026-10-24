@@ -9,7 +9,7 @@ import { readdirSync, statSync } from "node:fs";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import process from "node:process";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { collectRuntimeModuleClosureEntries } from "./runtime-dependency-closure.mjs";
 import { resolveDesktopProductIdentity } from "./desktop-product-identity.mjs";
@@ -100,6 +100,7 @@ const requiredRuntimeModules = [
   // 因此作为外部依赖保留；生产包必须显式校验 app.asar 中存在该包，避免漏打导致启动即崩。
   "node-forge",
   // 与 tsup external 对齐，保留 ZIP 解包器的 CommonJS 运行时边界。
+  "yazl",
   "yauzl",
   // ssh2 的关键依赖链（asn1/bcrypt-pbkdf/tweetnacl）若缺失，
   // 连接远程 workspace 时会在 keyParser 阶段直接抛 MODULE_NOT_FOUND。
@@ -107,11 +108,21 @@ const requiredRuntimeModules = [
   "asn1",
   "bcrypt-pbkdf",
   "tweetnacl",
+  "ms",
   // Bot Channel 的飞书渠道运行时惰性 import 该 SDK。它在 tsup 里是外部依赖，
   // 因此必须机械校验 app.asar 里真的有它；否则用户启用飞书渠道时才会在 host 进程里
   // 抛 ERR_MODULE_NOT_FOUND（启动期不报，属"打包能过、用起来才炸"）。
   // 与上游 v3.14.3 的 desktop/scripts/bundle.mjs:113 同一处置。
   "@larksuiteoapi/node-sdk",
+  // 主进程 OTLP trace/metrics 依赖链（含 @opentelemetry/core -> @opentelemetry/semantic-conventions）
+  // 必须完整进包，否则主进程启动即抛 Cannot find module '@opentelemetry/semantic-conventions'。
+  "@opentelemetry/api",
+  "@opentelemetry/exporter-metrics-otlp-proto",
+  "@opentelemetry/exporter-trace-otlp-proto",
+  "@opentelemetry/resources",
+  "@opentelemetry/sdk-metrics",
+  "@opentelemetry/sdk-trace-base",
+  "electron-updater",
 ];
 const electronBuilderRetryCount = 3;
 const electronBuilderRetryDelayMs = 5_000;
@@ -743,6 +754,24 @@ async function main() {
   );
 
   const artifactPath = findBuiltArtifact(os, arch);
+
+  // Windows NSIS stub 在执行任何脚本前就往系统 %TEMP% 解压插件；本机/部分用户环境会被
+  // 杀软干扰并弹出误导性的 "Error writing temporary file"。在 electron-builder 产物上
+  // 套一层私有 TEMP 启动器，把载荷先落到 %LOCALAPPDATA%\ZCode-CE\installer-tmp。
+  if (os === "win" && process.env.ZCODE_NSIS_SKIP_PRIVATE_TEMP_WRAP !== "1") {
+    await runTimedAsync("bundle:wrap-nsis-private-temp", async () => {
+      const { wrapNsisInstallerWithPrivateTemp, updateLatestYmlForArtifact, regenerateBlockmap } =
+        await import("./wrap-nsis-private-temp.mjs");
+      const wrapResult = await wrapNsisInstallerWithPrivateTemp(artifactPath);
+      const latestYmlPath = resolve(desktopDistRoot, "latest.yml");
+      updateLatestYmlForArtifact(latestYmlPath, basename(artifactPath), wrapResult.path);
+      await regenerateBlockmap(wrapResult.path);
+      console.log(
+        `[bundle] NSIS private-TEMP wrap done payload=${wrapResult.payloadSize} wrapped=${wrapResult.wrappedSize}`,
+      );
+    });
+  }
+
   runTimedSync("bundle:audit-bundle-size", () =>
     run(process.execPath, [
       resolve(desktopRoot, "scripts", "audit-bundle-size.mjs"),

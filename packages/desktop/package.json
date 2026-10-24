@@ -26,6 +26,7 @@
     "build:no-runtime-assets": "pnpm prepare:build-meta && node scripts/run-production-build.mjs",
     "build": "pnpm prepare:runtime-assets && pnpm run build:no-runtime-assets",
     "test:installer-nsh-smoke": "node scripts/test-installer-nsh-smoke.mjs",
+    "test:nsis-private-temp-wrap": "node scripts/test-nsis-private-temp-wrap.mjs",
     "test:auto-update-install-reentry-smoke": "node scripts/auto-update-install-reentry-smoke.mjs",
     "test:browser-background-activity-smoke": "electron scripts/browser-background-activity-smoke.mjs",
     "test:browser-hidden-guest-screenshot-smoke": "electron scripts/browser-hidden-guest-screenshot-smoke.mjs",

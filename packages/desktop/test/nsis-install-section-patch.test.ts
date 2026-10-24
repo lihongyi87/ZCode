@@ -5,9 +5,17 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   PATCH_MARKER,
+  UNINSTALLER_COPY_MARKER,
+  ICON_COPY_MARKER,
+  EXTRACT_APP_PACKAGE_MARKER,
+  patchNsisExtractAppPackageFile,
   patchNsisInstallSectionFile,
   patchNsisInstallSectionSource,
+  patchNsisInstallerIncludeFile,
+  patchNsisInstallerIncludeSource,
+  restoreNsisExtractAppPackageFileSync,
   restoreNsisInstallSectionFileSync,
+  restoreNsisInstallerIncludeFileSync,
 } from "../scripts/patch-nsis-install-section.mjs";
 
 function createInstallSectionFixture(eol = "\r\n") {
@@ -96,7 +104,108 @@ describe("NSIS installSection template patch", () => {
 
   it("模板结构变化时应立即失败，而不是静默生成缺少诊断的安装器", () => {
     expect(() => patchNsisInstallSectionSource("InitPluginsDir\n")).toThrow(
-      "electron-builder installSection.nsh 缺少预期锚点",
+      "electron-builder NSIS 模板缺少预期锚点",
     );
+  });
+
+  it("真实 installSection 会把 uninstallerIcon 改为 .new + Rename，且失败不中止", async () => {
+    const require = createRequire(import.meta.url);
+    const source = await readFile(
+      join(
+        dirname(require.resolve("app-builder-lib/package.json")),
+        "templates/nsis/installSection.nsh",
+      ),
+      "utf8",
+    );
+    const patched = patchNsisInstallSectionSource(source);
+    expect(patched).toContain(ICON_COPY_MARKER);
+    expect(patched).toContain('File /oname=uninstallerIcon.ico.new "${UNINSTALLER_ICON}"');
+    expect(patched).toContain('Rename "$INSTDIR\\uninstallerIcon.ico.new"');
+    expect(patched).toContain("zcodeCopyUninstallerIconSkip:");
+    expect(patched).not.toContain("无法写入 uninstallerIcon.ico");
+    expect(patched).not.toContain('File /oname=uninstallerIcon.ico "${UNINSTALLER_ICON}"');
+  });
+});
+
+describe("NSIS installer.nsh uninstaller File patch", () => {
+  it("当前真实 installer.nsh 可改为 .new + Rename 重试且可恢复", async () => {
+    const require = createRequire(import.meta.url);
+    const source = await readFile(
+      join(
+        dirname(require.resolve("app-builder-lib/package.json")),
+        "templates/nsis/include/installer.nsh",
+      ),
+      "utf8",
+    );
+    const root = await mkdtemp(join(tmpdir(), "zcode-nsis-installer-include-"));
+    const path = join(root, "installer.nsh");
+    try {
+      await writeFile(path, source);
+      const first = await patchNsisInstallerIncludeFile(path);
+      expect(first.changed).toBe(true);
+      const patched = await readFile(path, "utf8");
+      expect(patched).toContain(UNINSTALLER_COPY_MARKER);
+      expect(patched).toContain("zcode-uninstaller.bin");
+      expect(patched).toContain(
+        'Rename "$INSTDIR\\zcode-uninstaller.bin" "$INSTDIR\\${UNINSTALL_FILENAME}"',
+      );
+      expect(patched).toContain("zcodeUninstTryElectronNode:");
+      expect(patched).not.toContain(
+        'File "/oname=${UNINSTALL_FILENAME}" "${UNINSTALLER_OUT_FILE}"',
+      );
+      expect(await patchNsisInstallerIncludeFile(path)).toEqual({
+        changed: false,
+        originalSource: null,
+      });
+      restoreNsisInstallerIncludeFileSync({
+        filePath: path,
+        originalSource: first.originalSource,
+      });
+      expect(await readFile(path, "utf8")).toBe(source);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("缺少 File 锚点时立即失败", () => {
+    expect(() =>
+      patchNsisInstallerIncludeSource("!macro installApplicationFiles\n!macroend\n"),
+    ).toThrow("electron-builder NSIS 模板缺少预期锚点");
+  });
+});
+
+describe("NSIS extractAppPackage.nsh patch", () => {
+  it("当前真实 extractAppPackage.nsh 可注入静默强杀与重试逻辑且可恢复", async () => {
+    const require = createRequire(import.meta.url);
+    const source = await readFile(
+      join(
+        dirname(require.resolve("app-builder-lib/package.json")),
+        "templates/nsis/include/extractAppPackage.nsh",
+      ),
+      "utf8",
+    );
+    const root = await mkdtemp(join(tmpdir(), "zcode-nsis-extract-app-package-"));
+    const path = join(root, "extractAppPackage.nsh");
+    try {
+      await writeFile(path, source);
+      const first = await patchNsisExtractAppPackageFile(path);
+      expect(first.changed).toBe(true);
+      const patched = await readFile(path, "utf8");
+      expect(patched).toContain(EXTRACT_APP_PACKAGE_MARKER);
+      expect(patched).toContain("ZCodeForceStopInstDirProcesses");
+      expect(patched).toContain('nsExec::Exec `taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T`');
+      expect(patched).not.toContain("nsExec::ExecToLog");
+      expect(await patchNsisExtractAppPackageFile(path)).toEqual({
+        changed: false,
+        originalSource: null,
+      });
+      restoreNsisExtractAppPackageFileSync({
+        filePath: path,
+        originalSource: first.originalSource,
+      });
+      expect(await readFile(path, "utf8")).toBe(source);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
