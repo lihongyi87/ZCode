@@ -13,7 +13,8 @@
     "test:e2e": "node ../office-runtime/scripts/e2e.mjs"
   },
   "devDependencies": {
-    "@zcode/office-runtime": "workspace:*"
+    "@zcode/office-runtime": "workspace:*",
+    "docx": "9.7.1"
   },
   "office": {
     "title": {

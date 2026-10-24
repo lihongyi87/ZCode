@@ -2,6 +2,7 @@
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "ignorePatterns": [
     ".gitlab/**/*.yml",
+    ".zcode/**",
     ".reverse/**",
     "apps/zcode-cli/tests/gb2312.js",
     "docs/electron/docs/fiddles/**/*.html",

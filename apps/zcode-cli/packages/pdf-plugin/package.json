@@ -13,7 +13,9 @@
     "test:e2e": "node ../office-runtime/scripts/e2e.mjs"
   },
   "devDependencies": {
-    "@zcode/office-runtime": "workspace:*"
+    "@zcode/office-runtime": "workspace:*",
+    "fontkit": "2.0.4",
+    "pdfkit": "0.17.1"
   },
   "office": {
     "title": {

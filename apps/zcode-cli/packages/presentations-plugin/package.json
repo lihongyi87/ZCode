@@ -13,7 +13,8 @@
     "test:e2e": "node ../office-runtime/scripts/e2e.mjs"
   },
   "devDependencies": {
-    "@zcode/office-runtime": "workspace:*"
+    "@zcode/office-runtime": "workspace:*",
+    "pptxgenjs": "4.0.1"
   },
   "office": {
     "title": {
