@@ -37,6 +37,9 @@ export const ConfigKey = {
   FeatureMemory: "features.memory",
   FeatureSkill: "features.skill",
   FeatureMcp: "features.mcp",
+  // spec 151:LSP 语义工具(可选增强,缺省关)。
+  FeatureLsp: "features.lsp",
+  LspServers: "lsp.servers",
 
   // Memory
   MemoryUse: "memory.use",
@@ -113,6 +116,7 @@ export type ConfigValue<K extends ConfigKey> = K extends "modelStream.idleTimeou
                   | "features.memory"
                   | "features.skill"
                   | "features.mcp"
+                  | "features.lsp"
                   | "skills.enabled"
                   | "skills.includeInstructions"
               ? boolean
@@ -128,6 +132,8 @@ export type ConfigValue<K extends ConfigKey> = K extends "modelStream.idleTimeou
                       ? Record<string, SkillCommandOverride>
                       : K extends "mcp.servers"
                         ? Record<string, McpServerConfig>
+                      : K extends "lsp.servers"
+                        ? Record<string, { command: string; args?: string[] }>
                         : K extends "plugins.enabled"
                           ? boolean
                           : K extends "plugins.dirs"
@@ -282,6 +288,7 @@ export interface RuntimeConfigPatch {
   compact?: Partial<RuntimeConfig["compact"]>;
   memory?: Partial<RuntimeConfig["memory"]>;
   mcp?: Partial<RuntimeConfig["mcp"]>;
+  lsp?: Partial<RuntimeConfig["lsp"]>;
   plugins?: Partial<RuntimeConfig["plugins"]>;
   skills?: Partial<RuntimeConfig["skills"]>;
   skillOverrides?: RuntimeConfig["skillOverrides"];

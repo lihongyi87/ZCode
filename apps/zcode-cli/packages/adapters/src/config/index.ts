@@ -126,6 +126,10 @@ class ConfigStore {
         this.set(ConfigKey.FeatureSkill, config.features.skill, scope);
       if (config.features.mcp !== undefined)
         this.set(ConfigKey.FeatureMcp, config.features.mcp, scope);
+      if (config.features.lsp !== undefined)
+        this.set(ConfigKey.FeatureLsp, config.features.lsp, scope);
+      if (config.lsp?.servers !== undefined)
+        this.set(ConfigKey.LspServers, config.lsp.servers, scope);
     }
     if (config.compact) {
       if (config.compact.domainInstructions !== undefined) {
@@ -292,6 +296,8 @@ export class ConfigPortImpl implements ConfigPort {
         memory: this.store.get(ConfigKey.FeatureMemory) ?? true,
         skill: this.store.get(ConfigKey.FeatureSkill) ?? true,
         mcp: this.store.get(ConfigKey.FeatureMcp) ?? true,
+        // spec 151:LSP 缺省关(可选增强,显式配置启用)。
+        lsp: this.store.get(ConfigKey.FeatureLsp) ?? false,
       },
       compact: {
         domainInstructions:
@@ -303,6 +309,9 @@ export class ConfigPortImpl implements ConfigPort {
       },
       mcp: {
         servers: this.store.get(ConfigKey.McpServers) ?? DefaultConfig.mcp.servers,
+      },
+      lsp: {
+        servers: this.store.get(ConfigKey.LspServers) ?? DefaultConfig.lsp.servers,
       },
       plugins: {
         dirs: this.store.get(ConfigKey.PluginsDirs) ?? DefaultConfig.plugins.dirs,
