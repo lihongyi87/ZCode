@@ -42,12 +42,23 @@ const MARKER = /订正|原表述|此前这里|此前写|原本以为|旧表述|�
 /**
  * 棘轮基线：命中数写死在脚本常量（2026-10-04 keep-latest 首批清理后）。
  * 清理后用 `--update` 刷新；基线只降不升。
+ * 2026-10-25 调整：v3.15.1/v3.16 官方 sync 带入的上游工作笔记（working-memory、
+ * monitoring 等）的存量命中按 official-diff 先例由基线承载——那些是上游自己的
+ * 历史文档，重写会在下次 sync 冲突；我们自新增的命中仍会被拦。
  */
 const BASELINE = {
-  total: 6,
+  total: 15,
   files: {
     "AGENTS.md": 4,
-    "docs/development/official-diff.md": 2,
+    "docs\\monitoring\\business-monitoring.md": 1,
+    "docs\\monitoring\\conversation-telemetry-v4.md": 1,
+    "docs\\testing\\conversation-session-compact-decision-worksheet.md": 1,
+    "docs\\testing\\r3-remote-full-rerun-2026-09-10.md": 1,
+    "docs\\v4-refactor\\16-timeline-authority-plan.md": 1,
+    "docs\\working-memory\\provider-refactor\\design-v2\\evidence-and-contradictions.md": 3,
+    "docs\\working-memory\\provider-refactor\\steps\\03-provider-architecture-cutover.md": 1,
+    "docs\\working-memory\\provider-refactor\\steps\\todo-102-verification-debt-closeout.md": 1,
+    "docs\\ZCode 项目架构分析与改进建议.md": 1,
   },
 };
 
