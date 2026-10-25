@@ -40,7 +40,10 @@ import {
 import { isSubagentDispatchToolName } from "../compat.js";
 import { skillToolEntry } from "./skill.js";
 import { kbSearchToolEntry } from "./kb-search.js";
+import { lspCallHierarchyToolEntry } from "./lsp-call-hierarchy.js";
 import { lspDefinitionToolEntry } from "./lsp-definition.js";
+import { lspReferencesToolEntry } from "./lsp-references.js";
+import { lspRenameToolEntry } from "./lsp-rename.js";
 import { todoReadToolEntry, todoWriteToolEntry } from "./todo.js";
 import {
   cronCreateToolEntry,
@@ -106,7 +109,10 @@ export const builtInTools: ToolEntry[] = [
   exitPlanModeToolEntry,
   askUserQuestionToolEntry,
   sendMessageToolEntry,
+  lspCallHierarchyToolEntry,
   lspDefinitionToolEntry,
+  lspReferencesToolEntry,
+  lspRenameToolEntry,
   respondToCoordinatorToolEntry,
   submitResultToolEntry,
   // actor 的升级通道。与 submit_result 完全同构：
@@ -259,7 +265,13 @@ export function registerBuiltInTools(
     if (entry.metadata.name === "SendMessage" && options.includeSendMessage !== true) {
       continue;
     }
-    if (entry.metadata.name === "LspDefinition" && options.includeLsp !== true) {
+    if (
+      (entry.metadata.name === "LspDefinition" ||
+        entry.metadata.name === "LspReferences" ||
+        entry.metadata.name === "LspCallHierarchy" ||
+        entry.metadata.name === "LspRename") &&
+      options.includeLsp !== true
+    ) {
       continue;
     }
     if (

@@ -65,6 +65,88 @@ process.stdin.on("data", (chunk) => {
       });
       continue;
     }
+    if (message.method === "textDocument/references") {
+      const uri = message.params.textDocument.uri;
+      send({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: [
+          { uri, range: { start: { line: 1, character: 6 }, end: { line: 1, character: 10 } } },
+          { uri, range: { start: { line: 3, character: 5 }, end: { line: 3, character: 9 } } },
+        ],
+      });
+      continue;
+    }
+    if (message.method === "textDocument/prepareCallHierarchy") {
+      const uri = message.params.textDocument.uri;
+      send({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: [{
+          name: "doWork",
+          kind: 12,
+          uri,
+          range: { start: { line: 0, character: 0 }, end: { line: 5, character: 1 } },
+          selectionRange: { start: { line: 0, character: 16 }, end: { line: 0, character: 22 } },
+        }],
+      });
+      continue;
+    }
+    if (message.method === "callHierarchy/incomingCalls") {
+      const uri = message.params.item ? message.params.item.uri : "file:///missing";
+      send({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: [{
+          from: {
+            name: "main",
+            kind: 12,
+            uri,
+            range: { start: { line: 10, character: 0 }, end: { line: 14, character: 1 } },
+            selectionRange: { start: { line: 10, character: 9 }, end: { line: 10, character: 13 } },
+          },
+          fromRanges: [
+            { start: { line: 12, character: 2 }, end: { line: 12, character: 8 } },
+          ],
+        }],
+      });
+      continue;
+    }
+    if (message.method === "callHierarchy/outgoingCalls") {
+      send({ jsonrpc: "2.0", id: message.id, result: [] });
+      continue;
+    }
+    if (message.method === "textDocument/prepareRename") {
+      const uri = message.params.textDocument.uri;
+      send({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: { start: { line: 0, character: 16 }, end: { line: 0, character: 22 } },
+      });
+      continue;
+    }
+    if (message.method === "textDocument/rename") {
+      // 跨两文件的 WorkspaceEdit(changes 形态);newText 回传给断言。
+      const other = message.params.newName === "renamed"
+        ? "file:///renamed-target.ts"
+        : "file:///other-target.ts";
+      send({
+        jsonrpc: "2.0",
+        id: message.id,
+        result: {
+          changes: {
+            [message.params.textDocument.uri]: [
+              { range: { start: { line: 0, character: 16 }, end: { line: 0, character: 22 } }, newText: message.params.newName },
+              { range: { start: { line: 3, character: 5 }, end: { line: 3, character: 11 } }, newText: message.params.newName },
+            ],
+            [other]: [
+              { range: { start: { line: 7, character: 4 }, end: { line: 7, character: 10 } }, newText: message.params.newName },
+            ],
+          },
+        },
+      });
+      continue;
+    }
     send({ jsonrpc: "2.0", id: message.id, result: null });
   }
 });
@@ -143,6 +225,58 @@ describe("NodeLspAdapter (spec 151)", () => {
     // 跨进程 spawn + 握手在 Windows 上偏慢,放宽用例级超时。
     30_000,
   );
+
+  it("references 返回归一化位置列表", async () => {
+    const { fixturePath, logPath, sourcePath } = await setup();
+    const adapter = createNodeLspAdapter({
+      servers: { typescript: { command: process.execPath, args: [fixturePath, logPath] } },
+    });
+    const locations = await adapter.references({
+      languageId: "typescript",
+      filePath: sourcePath,
+      line: 2,
+      character: 7,
+    });
+    expect(locations).toHaveLength(2);
+    // 0-based (1,6) → 1-based (2,7)
+    expect(locations[0]).toMatchObject({ path: sourcePath, line: 2, character: 7 });
+  });
+
+  it("callHierarchy incoming 返回调用方符号与调用点", async () => {
+    const { fixturePath, logPath, sourcePath } = await setup();
+    const adapter = createNodeLspAdapter({
+      servers: { typescript: { command: process.execPath, args: [fixturePath, logPath] } },
+    });
+    const calls = await adapter.callHierarchy({
+      languageId: "typescript",
+      filePath: sourcePath,
+      line: 1,
+      character: 17,
+      direction: "incoming",
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.item).toMatchObject({ name: "main", path: sourcePath, line: 11, character: 10 });
+    expect(calls[0]?.sites[0]).toMatchObject({ line: 13, character: 3 });
+  });
+
+  it("rename 返回跨文件编辑计划(changes 形态归一化)", async () => {
+    const { fixturePath, logPath, sourcePath } = await setup();
+    const adapter = createNodeLspAdapter({
+      servers: { typescript: { command: process.execPath, args: [fixturePath, logPath] } },
+    });
+    const plan = await adapter.rename({
+      languageId: "typescript",
+      filePath: sourcePath,
+      line: 1,
+      character: 17,
+      newName: "renamed",
+    });
+    expect(plan.symbolName).toBe("renamed");
+    expect(plan.files).toHaveLength(2);
+    const main = plan.files.find((file) => file.path === sourcePath);
+    expect(main?.edits).toHaveLength(2);
+    expect(main?.edits[0]).toMatchObject({ line: 1, character: 17, endLine: 1, endCharacter: 23, newText: "renamed" });
+  });
 
   it("未配置语言给出显式错误(不静默降级)", async () => {
     const { fixturePath, logPath, sourcePath } = await setup();

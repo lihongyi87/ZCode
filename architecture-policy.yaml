@@ -824,13 +824,15 @@ exceptions:
       - apps/zcode-cli/packages/contracts/src/interfaces/lsp.port.ts
       - apps/zcode-cli/packages/contracts/src/tools/lsp.ts
       - apps/zcode-cli/packages/core/src/tool/handlers/lsp-definition.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/lsp-references.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/lsp-call-hierarchy.ts
+      - apps/zcode-cli/packages/core/src/tool/handlers/lsp-rename.ts
     reason: >-
-      spec 151 LSP 语义工具族批一（LspDefinition，只读零审批）：LspPort 契约、
-      NodeLspAdapter（JSON-RPC over stdio，per-language 懒启动+每请求文档同步）、
-      工具 handler 与注册门 includeLsp（未配置 server 即整体关闭）。源头思路参考
-      Charm Crush（FSL-1.1-MIT，只借鉴不搬码），自研实现；见
-      docs/development/151-lsp-tools.md。批二（references/rename）落地时沿用户例
-      扩充本条。
+      spec 151 LSP 语义工具族批一+批二（LspDefinition/LspReferences/LspCallHierarchy
+      只读零审批 + LspRename 需审批写路径）：LspPort 契约、NodeLspAdapter（JSON-RPC
+      over stdio，per-language 懒启动+每请求文档同步）、工具 handler 与注册门
+      includeLsp（未配置 server 即整体关闭）。源头思路参考 Charm Crush
+      （FSL-1.1-MIT，只借鉴不搬码），自研实现；见 docs/development/151-lsp-tools.md。
   - id: cli-tui-prompt-handler-runtime-split
     rule: unmanaged-new-file
     paths: [apps/zcode-cli/packages/cli/src/tui-prompt-handler-runtime.ts]

@@ -2,7 +2,18 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath as nodeFileURLToPath, pathToFileURL } from "node:url";
-import type { LspDefinitionRequest, LspLocation, LspPort } from "@zcode/contracts";
+import type {
+  LspCallHierarchyCall,
+  LspCallHierarchyRequest,
+  LspDefinitionRequest,
+  LspFileEdit,
+  LspLocation,
+  LspPort,
+  LspReferencesRequest,
+  LspRenameRequest,
+  LspRenameResult,
+  LspSymbolPositionRequest,
+} from "@zcode/contracts";
 
 /**
  * NodeLspAdapter(spec 151):LSP 语义查询的最小客户端。
@@ -45,7 +56,96 @@ export class NodeLspAdapter implements LspPort {
     return Object.keys(this.options.servers);
   }
 
-  async definition(request: LspDefinitionRequest): Promise<LspLocation[]> {
+  async references(
+    request: LspReferencesRequest & { includeDeclaration?: boolean },
+  ): Promise<LspLocation[]> {
+    const session = await this.sessionFor(request);
+    const content = await readFile(request.filePath, "utf8");
+    const uri = pathToFileURL(request.filePath).href;
+    this.notify(session, "textDocument/didOpen", {
+      textDocument: { uri, languageId: request.languageId, version: 1, text: content },
+    });
+    try {
+      const raw = (await this.request(session, "textDocument/references", {
+        textDocument: { uri },
+        position: { line: request.line - 1, character: request.character - 1 },
+        context: { includeDeclaration: request.includeDeclaration ?? false },
+      })) as unknown;
+      return normalizeDefinitionResult(raw);
+    } finally {
+      this.notify(session, "textDocument/didClose", { textDocument: { uri } });
+    }
+  }
+
+  async callHierarchy(
+    request: LspCallHierarchyRequest,
+  ): Promise<LspCallHierarchyCall[]> {
+    const session = await this.sessionFor(request);
+    const content = await readFile(request.filePath, "utf8");
+    const uri = pathToFileURL(request.filePath).href;
+    this.notify(session, "textDocument/didOpen", {
+      textDocument: { uri, languageId: request.languageId, version: 1, text: content },
+    });
+    try {
+      const items = (await this.request(session, "textDocument/prepareCallHierarchy", {
+        textDocument: { uri },
+        position: { line: request.line - 1, character: request.character - 1 },
+      })) as unknown;
+      const prepared = Array.isArray(items) ? items : items == null ? [] : [items];
+      const item = prepared[0] as
+        | { name?: unknown; uri?: unknown; selectionRange?: { start?: pos } }
+        | undefined;
+      if (!item || typeof item.uri !== "string") {
+        return [];
+      }
+      const method =
+        request.direction === "outgoing"
+          ? "callHierarchy/outgoingCalls"
+          : "callHierarchy/incomingCalls";
+      const calls = (await this.request(session, method, {
+        item,
+      })) as unknown;
+      return normalizeCallHierarchyCalls(calls, request.direction);
+    } finally {
+      this.notify(session, "textDocument/didClose", { textDocument: { uri } });
+    }
+  }
+
+  async rename(request: LspRenameRequest): Promise<LspRenameResult> {
+    const session = await this.sessionFor(request);
+    const content = await readFile(request.filePath, "utf8");
+    const uri = pathToFileURL(request.filePath).href;
+    this.notify(session, "textDocument/didOpen", {
+      textDocument: { uri, languageId: request.languageId, version: 1, text: content },
+    });
+    try {
+      const prepared = (await this.request(session, "textDocument/prepareRename", {
+        textDocument: { uri },
+        position: { line: request.line - 1, character: request.character - 1 },
+      })) as unknown;
+      // prepareRename 返回 null/undefined = 位置不可改名(如字符串内部),显式报给模型。
+      if (prepared == null) {
+        throw new Error(
+          `The symbol at ${request.filePath}:${request.line}:${request.character} cannot be renamed.`,
+        );
+      }
+      const workspaceEdit = (await this.request(session, "textDocument/rename", {
+        textDocument: { uri },
+        position: { line: request.line - 1, character: request.character - 1 },
+        newName: request.newName,
+      })) as unknown;
+      return {
+        symbolName: request.newName,
+        files: normalizeWorkspaceEdit(workspaceEdit),
+      };
+    } finally {
+      this.notify(session, "textDocument/didClose", { textDocument: { uri } });
+    }
+  }
+
+  private async sessionFor(
+    request: LspSymbolPositionRequest,
+  ): Promise<ServerSession> {
     const server = this.options.servers[request.languageId];
     if (!server) {
       throw new Error(
@@ -53,7 +153,11 @@ export class NodeLspAdapter implements LspPort {
           `Configured: ${this.availableLanguages().join(", ") || "(none)"}.`,
       );
     }
-    const session = await this.ensureSession(request.languageId, server);
+    return await this.ensureSession(request.languageId, server);
+  }
+
+  async definition(request: LspDefinitionRequest): Promise<LspLocation[]> {
+    const session = await this.sessionFor(request);
     const content = await readFile(request.filePath, "utf8");
     const uri = pathToFileURL(request.filePath).href;
 
@@ -178,6 +282,108 @@ export class NodeLspAdapter implements LspPort {
     const body = JSON.stringify(message);
     session.process.stdin.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
   }
+}
+
+/** callHierarchy/incomingCalls: CallHierarchyIncomingCall[] = {from, fromRanges}; outgoing 对称 {to, fromRanges}。 */
+function normalizeCallHierarchyCalls(
+  raw: unknown,
+  direction: "incoming" | "outgoing",
+): LspCallHierarchyCall[] {
+  const list = Array.isArray(raw) ? raw : raw == null ? [] : [raw];
+  const calls: LspCallHierarchyCall[] = [];
+  for (const entry of list) {
+    const record = entry as {
+      from?: CallHierarchyItemLike;
+      to?: CallHierarchyItemLike;
+      fromRanges?: Array<{ start?: pos; end?: pos }>;
+    };
+    const item = direction === "outgoing" ? record.to : record.from;
+    if (!item || typeof item.uri !== "string") continue;
+    const selectionStart = item.selectionRange?.start;
+    if (!selectionStart || typeof selectionStart.line !== "number") continue;
+    const itemPath = fileUrlToPath(item.uri);
+    // fromRanges 是「调用点在 from 文档内的 Range 列表」——没有 uri 字段,
+    // 不能复用 normalizeDefinitionResult(它按 Location 形态过滤会全部丢弃)。
+    const sites: LspLocation[] = (record.fromRanges ?? []).map((range) => {
+      const start = range.start;
+      if (!start || typeof start.line !== "number") return undefined;
+      return {
+        path: itemPath,
+        line: start.line + 1,
+        character: (start.character ?? 0) + 1,
+        ...(range.end && typeof range.end.line === "number"
+          ? {
+              endLine: range.end.line + 1,
+              endCharacter: (range.end.character ?? 0) + 1,
+            }
+          : {}),
+      };
+    }).filter((site) => site !== undefined);
+    calls.push({
+      item: {
+        name: typeof item.name === "string" ? item.name : "(unnamed)",
+        path: itemPath,
+        line: selectionStart.line + 1,
+        character: (selectionStart.character ?? 0) + 1,
+      },
+      sites,
+    });
+  }
+  return calls;
+}
+
+interface CallHierarchyItemLike {
+  name?: unknown;
+  uri?: unknown;
+  selectionRange?: { start?: pos };
+}
+
+/** WorkspaceEdit 两形态:changes: {uri: TextEdit[]} 与 documentChanges: [{textDocument:{uri}, edits}]。 */
+function normalizeWorkspaceEdit(raw: unknown): LspFileEdit[] {
+  if (raw == null || typeof raw !== "object") return [];
+  const record = raw as {
+    changes?: Record<string, unknown>;
+    documentChanges?: Array<{
+      textDocument?: { uri?: unknown };
+      edits?: unknown;
+    }>;
+  };
+  const files: LspFileEdit[] = [];
+  const pushFile = (uri: unknown, edits: unknown) => {
+    if (typeof uri !== "string" || !Array.isArray(edits) || edits.length === 0) return;
+    const normalized = edits
+      .map((edit) => {
+        const e = edit as { range?: { start?: pos; end?: pos }; newText?: unknown };
+        const start = e.range?.start;
+        const end = e.range?.end;
+        if (
+          !start ||
+          !end ||
+          typeof start.line !== "number" ||
+          typeof end.line !== "number" ||
+          typeof e.newText !== "string"
+        ) {
+          return undefined;
+        }
+        return {
+          line: start.line + 1,
+          character: (start.character ?? 0) + 1,
+          endLine: end.line + 1,
+          endCharacter: (end.character ?? 0) + 1,
+          newText: e.newText,
+        };
+      })
+      .filter((edit) => edit !== undefined);
+    if (normalized.length === 0) return;
+    files.push({ path: fileUrlToPath(uri), edits: normalized });
+  };
+  if (record.changes) {
+    for (const [uri, edits] of Object.entries(record.changes)) pushFile(uri, edits);
+  }
+  for (const change of record.documentChanges ?? []) {
+    pushFile(change.textDocument?.uri, change.edits);
+  }
+  return files;
 }
 
 /** LSP definition 结果三形态:单 Location / Location[] / LocationLink[]。 */

@@ -1,11 +1,11 @@
-# 151 · LSP 语义工具族(批一:definition)
+# 151 · LSP 语义工具族(批一:definition ✅;批二:references/call_hierarchy/rename ✅)
 
 ## 背景与来源
 
 七仓 harness 全景考察(记忆 `harness-landscape-survey`,2026-10-23)结论:LSP 语义工具族是
 ZCode 唯一「同类都有而我们没有」的能力维度。源头 Charm Crush(FSL-1.1-MIT)——**只借鉴
-思路,不搬代码**(FSL 禁竞争性使用)。批一交付 `LspDefinition`(只读、零审批、价值立现);
-批二(未开工):references/call_hierarchy/rename(rename 需审批+写路径)。
+思路,不搬代码**(FSL 禁竞争性使用)。批一交付 `LspDefinition`(只读、零审批);批二交付
+`LspReferences`/`LspCallHierarchy`(只读零审批)与 `LspRename`(需审批+写路径)。
 
 ## 设计
 
@@ -40,7 +40,14 @@ resolveWorkspacePath 归一,与 Edit/Read 同规则)。
 - ⬜ 真实 typescript-language-server 手测(可选;本机未装该 server,如实声明未做)。
 - ✅ typecheck/lint/fmt/architecture 全绿;架构例外按治理登记
   (`architecture-policy.yaml` 的 lsp-semantic-tools 条)。
-- 批二(references/call_hierarchy/rename)未开工;rename 需审批+写路径。
+- ✅ 批二(2026-10-25):LspReferences/LspCallHierarchy(只读零审批)+LspRename
+  (needsApproval+workspace 写路径,两阶段应用:全部文件先算后写,避免半套改动)。
+  集成测试夹具覆盖 references/callHierarchy/preRename+rename 跨文件 WorkspaceEdit
+  (changes 形态);applyLspTextEdits 纯函数测试覆盖同行多编辑/跨行折叠/越界报错。
+  已知限制:rename 的多文件变更**未接入 checkpoint/rewind**(Edit 的 per-file
+  checkpoint 管线是 runtime 私有),回滚依赖模型重跑反向 rename——批三评估接入。
+  - 批二时修复的夹具外 adapter 缺陷:fromRanges 是无 uri 的纯 Range,复用
+    definition 归一化会全量丢弃,已单独映射。
 
 ## 与既有文档的关系
 
