@@ -44,6 +44,7 @@ import { lspCallHierarchyToolEntry } from "./lsp-call-hierarchy.js";
 import { lspDefinitionToolEntry } from "./lsp-definition.js";
 import { lspReferencesToolEntry } from "./lsp-references.js";
 import { lspRenameToolEntry } from "./lsp-rename.js";
+import { skillManageToolEntry } from "./skill-manage.js";
 import { todoReadToolEntry, todoWriteToolEntry } from "./todo.js";
 import {
   cronCreateToolEntry,
@@ -113,6 +114,7 @@ export const builtInTools: ToolEntry[] = [
   lspDefinitionToolEntry,
   lspReferencesToolEntry,
   lspRenameToolEntry,
+  skillManageToolEntry,
   respondToCoordinatorToolEntry,
   submitResultToolEntry,
   // actor 的升级通道。与 submit_result 完全同构：

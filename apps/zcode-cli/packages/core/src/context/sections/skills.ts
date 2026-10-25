@@ -25,10 +25,15 @@ export function buildSkillsSection(options: SkillsSectionOptions): ContextSectio
     return null;
   }
 
-  const content = buildSkillsContent(
+  // 学习循环触发指令(spec 152):三种时刻沉淀技能。固定追加在降级逻辑之后
+  // (预算外固定成本 ~500 字符);技能数为 0 时整段缺席,触发说明由 SkillManage
+  // 工具描述自身承载。
+  const content = `${buildSkillsContent(
     options.outcome.skills,
     options.metadataBudget ?? DEFAULT_SKILL_METADATA_BUDGET,
-  );
+  )}
+
+${SKILL_MANAGE_PROMPT_BLOCK}`;
 
   return {
     name: "Skills",
@@ -41,6 +46,16 @@ export function buildSkillsSection(options: SkillsSectionOptions): ContextSectio
     preview: content.slice(0, 100),
   };
 }
+
+const SKILL_MANAGE_PROMPT_BLOCK = [
+  "## Persisting new skills",
+  "",
+  "When a multi-step workflow worked and is worth repeating, you hit errors or dead",
+  "ends and found the working path, or the user corrects your approach — save it as a",
+  "personal skill with the SkillManage tool (requires user approval). Lessons, not",
+  "logs: store a generalizable rule plus one line of why. New skills are invocable as",
+  "/<name> from the next session.",
+].join("\n");
 
 /** P6 短描述档字符数（三级降级的第②档）。 */
 const SHORT_DESCRIPTION_CHARS = 120;

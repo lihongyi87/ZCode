@@ -1639,3 +1639,25 @@ describe("context builder — workflow actor identity", () => {
     expect(text).toContain("\n\n# Harness\n- Text you output outside of tool use");
   });
 });
+
+describe("skills 段的学习循环触发指令(spec 152)", () => {
+  it("技能段末尾带 SkillManage 沉淀指令", async () => {
+    const { buildSkillsSection } = await import("../src/context/sections/skills.js");
+    const section = buildSkillsSection({
+      outcome: {
+        skills: [
+          {
+            name: "sample",
+            description: "sample skill",
+            source: "zcode",
+            scope: "user",
+            priority: 10,
+            path: "/tmp/sample/SKILL.md",
+          },
+        ],
+      } as never,
+    });
+    expect(section?.content).toContain("## Persisting new skills");
+    expect(section?.content).toContain("SkillManage");
+  });
+});
