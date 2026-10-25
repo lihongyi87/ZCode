@@ -55,6 +55,21 @@ export function getFileMutationCheckpointCandidate(
   };
 }
 
+/**
+ * 多文件变更(LspRename)的候选提取:output.fileMutations 数组逐项走单文件校验,
+ * 任一项无效即整批丢弃(fail-closed,与单文件同语义——半套 checkpoint 比没有更糟)。
+ */
+export function getFileMutationCheckpointCandidates(output: unknown): FileMutationCheckpointCandidate[] {
+  if (!isPlainRecord(output) || !Array.isArray(output.fileMutations)) return [];
+  const candidates: FileMutationCheckpointCandidate[] = [];
+  for (const entry of output.fileMutations) {
+    const candidate = getFileMutationCheckpointCandidate(entry);
+    if (!candidate) return [];
+    candidates.push(candidate);
+  }
+  return candidates;
+}
+
 export function stringifyWorkspaceCheckpointArtifact(
   candidate: FileMutationCheckpointCandidate,
   result: ToolExecutionResult,

@@ -19,6 +19,7 @@ import type {
 import {
   isResolvablePermissionBroker,
   getFileMutationCheckpointCandidate,
+  getFileMutationCheckpointCandidates,
   WORKSPACE_CHECKPOINT_CONTENT_TYPE,
   stringifyWorkspaceCheckpointArtifact,
   throwIfTurnAborted,
@@ -181,59 +182,68 @@ export async function emitFileMutationCheckpoint(
 ): Promise<void> {
   if (!this.artifactStore || !options.result.success) return;
 
-  const candidate = getFileMutationCheckpointCandidate(options.result.output);
-  if (!candidate) return;
+  // Edit/Write 单文件走 filePath 形态;LspRename 多文件走 fileMutations 数组形态。
+  const multiCandidates = getFileMutationCheckpointCandidates(options.result.output);
+  const candidates =
+    multiCandidates.length > 0
+      ? multiCandidates
+      : [getFileMutationCheckpointCandidate(options.result.output)].filter(
+          (candidate) => candidate !== undefined,
+        );
+  if (candidates.length === 0) return;
 
   try {
-    throwIfTurnAborted(options.abortSignal);
-    const artifact = await this.artifactStore.writeToolResultArtifact(
-      {
-        sessionId: this.sessionId,
-        turnId: options.traceContext.turnId,
+    for (const candidate of candidates) {
+      throwIfTurnAborted(options.abortSignal);
+      const artifact = await this.artifactStore.writeToolResultArtifact(
+        {
+          sessionId: this.sessionId,
+          turnId: options.traceContext.turnId,
+          toolCallId: options.result.toolCallId,
+          toolName: options.result.toolName,
+          content: stringifyWorkspaceCheckpointArtifact(candidate, options.result),
+          contentType: WORKSPACE_CHECKPOINT_CONTENT_TYPE,
+          retention: "session",
+          trace: options.traceContext,
+        },
+        { signal: options.abortSignal },
+      );
+      throwIfTurnAborted(options.abortSignal);
+
+      const event = this.createEvent(
+        SessionEventType.CheckpointCreated,
+        {
+          checkpointId: `checkpoint_${crypto.randomUUID()}`,
+          messageId: options.messageId,
+          targetMessageId: options.messageId,
+          toolMessageId: options.toolMessageId,
+          scope: RewindScope.Workspace,
+          snapshotRef: artifact.uri,
+          diffRef: artifact.uri,
+          fileCount: 1,
+        },
+        options.traceContext,
+      );
+      await this.appendEvent(event, options.traceContext);
+      options.events.push(event);
+      recordTurnFileChange(this.currentTurnFileChanges, {
+        afterContent: candidate.content,
+        beforeContent: candidate.originalFile,
+        path: candidate.filePath,
+        structuredPatch: candidate.structuredPatch,
+        toolName: options.result.toolName,
+      });
+
+      this.logger?.debug("Workspace checkpoint created", {
+        ...traceContextToLogContext(options.traceContext),
+        event: "checkpoint.created",
+        fileCount: 1,
+        module: "core.runtime",
+        status: "completed",
         toolCallId: options.result.toolCallId,
         toolName: options.result.toolName,
-        content: stringifyWorkspaceCheckpointArtifact(candidate, options.result),
-        contentType: WORKSPACE_CHECKPOINT_CONTENT_TYPE,
-        retention: "session",
-        trace: options.traceContext,
-      },
-      { signal: options.abortSignal },
-    );
-    throwIfTurnAborted(options.abortSignal);
-
-    const event = this.createEvent(
-      SessionEventType.CheckpointCreated,
-      {
-        checkpointId: `checkpoint_${crypto.randomUUID()}`,
-        messageId: options.messageId,
-        targetMessageId: options.messageId,
-        toolMessageId: options.toolMessageId,
-        scope: RewindScope.Workspace,
-        snapshotRef: artifact.uri,
-        diffRef: artifact.uri,
-        fileCount: 1,
-      },
-      options.traceContext,
-    );
-    await this.appendEvent(event, options.traceContext);
-    options.events.push(event);
-    recordTurnFileChange(this.currentTurnFileChanges, {
-      afterContent: candidate.content,
-      beforeContent: candidate.originalFile,
-      path: candidate.filePath,
-      structuredPatch: candidate.structuredPatch,
-      toolName: options.result.toolName,
-    });
-
-    this.logger?.debug("Workspace checkpoint created", {
-      ...traceContextToLogContext(options.traceContext),
-      event: "checkpoint.created",
-      fileCount: 1,
-      module: "core.runtime",
-      status: "completed",
-      toolCallId: options.result.toolCallId,
-      toolName: options.result.toolName,
-    });
+      });
+    }
   } catch (error) {
     if (isTurnCancellationError(error, options.abortSignal)) {
       throw createTurnCancelledError(error);
@@ -243,7 +253,6 @@ export async function emitFileMutationCheckpoint(
       ...traceContextToLogContext(options.traceContext),
       errorMessage: error instanceof Error ? error.message : String(error),
       event: "checkpoint.create.failed",
-      filePath: candidate.filePath,
       module: "core.runtime",
       status: "failed",
       toolCallId: options.result.toolCallId,

@@ -44,8 +44,9 @@ resolveWorkspacePath 归一,与 Edit/Read 同规则)。
   (needsApproval+workspace 写路径,两阶段应用:全部文件先算后写,避免半套改动)。
   集成测试夹具覆盖 references/callHierarchy/preRename+rename 跨文件 WorkspaceEdit
   (changes 形态);applyLspTextEdits 纯函数测试覆盖同行多编辑/跨行折叠/越界报错。
-  已知限制:rename 的多文件变更**未接入 checkpoint/rewind**(Edit 的 per-file
-  checkpoint 管线是 runtime 私有),回滚依赖模型重跑反向 rename——批三评估接入。
+  checkpoint/rewind:rename 输出带 fileMutations(逐文件 before/after/结构化 diff),
+  emitFileMutationCheckpoint 扩展多文件形态——每个改动文件独立 checkpoint 事件并
+  登记 turn file changes,workspace rewind 可整体回滚一次 rename。
   - 批二时修复的夹具外 adapter 缺陷:fromRanges 是无 uri 的纯 Range,复用
     definition 归一化会全量丢弃,已单独映射。
 

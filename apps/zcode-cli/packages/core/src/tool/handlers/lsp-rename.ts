@@ -8,6 +8,7 @@ import {
   inferLanguageId,
 } from "@zcode/contracts";
 import { readFileSync, writeFileSync } from "node:fs";
+import { createStructuredPatch } from "../diff.js";
 import { resolveWorkspacePath } from "../path-policy.js";
 import type { ToolEntry, ToolHandler } from "../types.js";
 
@@ -74,7 +75,17 @@ const lspRenameHandler: ToolHandler = async (input, context) => {
   // 应用编辑:逐文件读原文→按起点倒序应用→写回。两阶段(先全部算出新内容再落盘)
   // 避免半套改动:任一文件读/算失败时还没有写任何文件。
   const applied: Array<{ path: string; editCount: number }> = [];
-  const staged: Array<{ path: string; content: string }> = [];
+  const staged: Array<{
+    path: string;
+    content: string;
+    fileMutation: {
+      filePath: string;
+      originalFile: string;
+      content: string;
+      structuredPatch: ReturnType<typeof createStructuredPatch>;
+      type: "lsp_rename";
+    };
+  }> = [];
   try {
     for (const fileEdit of plan.files) {
       const resolved = resolveWorkspacePath({
@@ -85,7 +96,23 @@ const lspRenameHandler: ToolHandler = async (input, context) => {
       });
       const before = readFileSync(resolved, "utf8");
       const after = applyLspTextEdits(before, fileEdit.edits);
-      staged.push({ path: resolved, content: after });
+      staged.push({
+        path: resolved,
+        content: after,
+        // checkpoint 候选:runtime 的 emitFileMutationCheckpoint 按 fileMutations
+        // 逐文件建 checkpoint 并登记 turn file changes——rename 由此可 rewind。
+        fileMutation: {
+          filePath: resolved,
+          originalFile: before,
+          content: after,
+          structuredPatch: createStructuredPatch({
+            filePath: resolved,
+            oldContent: before,
+            newContent: after,
+          }),
+          type: "lsp_rename",
+        },
+      });
       applied.push({ path: resolved, editCount: fileEdit.edits.length });
     }
   } catch (error) {
@@ -99,7 +126,11 @@ const lspRenameHandler: ToolHandler = async (input, context) => {
     writeFileSync(file.path, file.content, "utf8");
   }
 
-  return { symbolName: parsed.new_name, files: applied };
+  return {
+    symbolName: parsed.new_name,
+    files: applied,
+    fileMutations: staged.map((file) => file.fileMutation),
+  };
 };
 
 export const lspRenameToolEntry: ToolEntry = {
@@ -135,6 +166,17 @@ export const lspRenameToolEntry: ToolEntry = {
             editCount: { type: "integer" },
           },
           required: ["path", "editCount"],
+        },
+      },
+      fileMutations: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            filePath: { type: "string" },
+            type: { type: "string" },
+          },
+          required: ["filePath", "type"],
         },
       },
     },

@@ -131,6 +131,36 @@ export const LspRenameInputSchema = z.object({
   new_name: z.string().min(1),
 });
 
+/** checkpoint 管线的多文件变更候选(与 core rewind helper 的单文件形态对齐)。 */
+export const LspRenameFileMutationSchema = z.object({
+  filePath: z.string().min(1),
+  originalFile: z.string().nullable(),
+  content: z.string(),
+  structuredPatch: z.array(
+    z.object({
+      oldStart: z.number().int().nonnegative(),
+      oldLines: z.number().int().nonnegative(),
+      newStart: z.number().int().nonnegative(),
+      newLines: z.number().int().nonnegative(),
+      lines: z.array(z.string()),
+    }),
+  ),
+  type: z.literal("lsp_rename"),
+});
+
+export const LspRenameOutputSchema = z.object({
+  symbolName: z.string(),
+  files: z.array(
+    z.object({
+      path: z.string(),
+      editCount: z.number().int(),
+    }),
+  ),
+  fileMutations: z.array(LspRenameFileMutationSchema).optional(),
+});
+
+export type LspRenameOutput = z.infer<typeof LspRenameOutputSchema>;
+
 export const LspRenameInputJsonSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
