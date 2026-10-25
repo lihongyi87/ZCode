@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatContextCacheHitRateLabel,
+  formatContextCacheHitRatePercent,
   formatContextUsageSummary,
   formatContextUsageTokenCount,
 } from "@/chat-input-toolbar/contextUsage.js";
@@ -40,6 +41,17 @@ describe("chat input context usage formatting", () => {
     expect(formatContextCacheHitRateLabel(0.78, "en-US")).toBe("78%");
     expect(formatContextCacheHitRateLabel(0.781, "en-US")).toBe("78.1%");
     expect(formatContextCacheHitRateLabel(null, "en-US")).toBeNull();
+  });
+
+  it("速度药丸与弹窗共用同一舍入口径（工具条不再各自 Math.round 成整数）", () => {
+    // 回归：药丸曾用 Math.round(hits*100)%，弹窗保留一位小数，
+    // 同一份聚合数据显示 85% vs 85.4% 的「两处不一样」。
+    expect(formatContextCacheHitRatePercent(0.854, "en-US")).toBe("85.4%");
+    expect(formatContextCacheHitRatePercent(0.854, "en-US")).toBe(
+      formatContextCacheHitRateLabel(0.854, "en-US"),
+    );
+    expect(formatContextCacheHitRatePercent(0.779, "en-US")).toBe("77.9%");
+    expect(formatContextCacheHitRatePercent(null, "en-US")).toBeNull();
   });
 
   it("closes the context panel before running an inner action", () => {

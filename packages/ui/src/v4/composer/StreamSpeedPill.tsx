@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type { SessionUsageState } from "@zcode/shared/zcode-protocol-v4";
+import { formatContextCacheHitRatePercent } from "@/chat-input-toolbar/contextUsage.js";
 
 /**
  * 输出速度药丸 v3（吸收自 deepseek-harness StatsPills，口径按本仓数据面重做）。
@@ -206,6 +207,8 @@ export interface StreamSpeedPillProps {
   title: string;
   /** 缓存命中率段的本地化文案（如「缓存命中」）。 */
   cacheLabel: string;
+  /** 百分比格式化 locale；与上下文弹窗共用同一舍入口径。 */
+  locale: string;
 }
 
 /** 常驻显示：`usage.decode` 在场时显示 DSH 口径的权威解码速度；旧 CLI 没有该字段时
@@ -216,6 +219,7 @@ export const StreamSpeedPill = memo(function StreamSpeedPill({
   active,
   title,
   cacheLabel,
+  locale,
 }: StreamSpeedPillProps) {
   const decodedSpeed = decodeTokensPerSecond(usage?.decode);
   const local = useStreamSpeed(usage, streamingChars, active);
@@ -223,10 +227,10 @@ export const StreamSpeedPill = memo(function StreamSpeedPill({
   const speed = decodedSpeed ?? local.speed;
   const live = decodedSpeed === null && local.live;
   const hitRate = usage?.contextWindow?.cache?.hitRate ?? null;
-  const cacheText =
-    hitRate !== null && Number.isFinite(hitRate)
-      ? `${cacheLabel} ${Math.round(Math.max(0, hitRate) * 100)}%`
-      : null;
+  // 与上下文弹窗「平均缓存命中率」共用同一 formatter：此前这里各自 Math.round 成整数，
+  // 弹窗保留一位小数，用户会看到 85% vs 85.4% 的「数据不一致」（实为舍入口径不同）。
+  const cacheText = formatContextCacheHitRatePercent(hitRate, locale);
+  const cacheDisplay = cacheText === null ? null : `${cacheLabel} ${cacheText}`;
   return (
     <span
       title={title}
@@ -240,12 +244,12 @@ export const StreamSpeedPill = memo(function StreamSpeedPill({
           ·
         </span>
       )}
-      {cacheText !== null && (
+      {cacheDisplay !== null && (
         <>
           <span aria-hidden className="text-foreground-subtlest">
             ·
           </span>
-          <span data-testid="v4-stream-cache">{cacheText}</span>
+          <span data-testid="v4-stream-cache">{cacheDisplay}</span>
         </>
       )}
     </span>

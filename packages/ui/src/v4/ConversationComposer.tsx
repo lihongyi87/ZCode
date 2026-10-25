@@ -2699,6 +2699,7 @@ function ConversationComposerImpl({
                 active={composerPhase === "running"}
                 title={intl.formatMessage({ id: "chat.toolbar.streamSpeed.title" })}
                 cacheLabel={intl.formatMessage({ id: "chat.toolbar.streamSpeed.cache" })}
+                locale={locale}
               />
               {submitControlNode}
             </>

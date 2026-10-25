@@ -128,6 +128,19 @@ export function formatContextUsageSummary({
   )} (${percentageFormatter.format(percent)})`;
 }
 
+export function formatContextCacheHitRatePercent(
+  hitRate: number | null | undefined,
+  locale: string,
+): string | null {
+  if (hitRate === null || hitRate === undefined || !Number.isFinite(hitRate)) {
+    return null;
+  }
+  return new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 1,
+    style: "percent",
+  }).format(Math.max(0, hitRate));
+}
+
 export function formatContextCacheHitRateLabel(
   hitRate: number | null | undefined,
   locale: string,
@@ -143,10 +156,7 @@ export function formatContextCacheHitRateLabel(
     return null;
   }
 
-  return new Intl.NumberFormat(locale, {
-    maximumFractionDigits: 1,
-    style: "percent",
-  }).format(Math.max(0, hitRate));
+  return formatContextCacheHitRatePercent(hitRate, locale);
 }
 
 function getBreakdownToneStyle(index: number): CSSProperties {

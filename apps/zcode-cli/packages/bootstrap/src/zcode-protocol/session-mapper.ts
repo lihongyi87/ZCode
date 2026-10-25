@@ -810,7 +810,29 @@ function contextUsedFromTokens(
   return input + (nonNegativeInteger(tokens.output) ?? 0);
 }
 
-function contextCacheUsageFromMessages(
+/**
+ * 最近一次成功 compact 边界的下标；无边界返回 -1。
+ * compact 会更换缓存前缀，边界之前的轮次命中率对「当前上下文」没有意义——
+ * 口径必须与 core 的活跃上下文过滤（mainTurnCacheHitAggregateFromMessages 只数
+ * activeMessages 成员）一致，否则快照里的命中率与工具条活聚合数值不一致。
+ */
+export function lastCompactionBoundaryIndex(
+  messages: readonly MessageWithParts[],
+): number {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (
+      message?.info.role === "user" &&
+      message.info.summary &&
+      message.parts.some((part) => part.type === "compaction" && part.compactBoundary)
+    ) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+export function contextCacheUsageFromMessages(
   messages: readonly MessageWithParts[],
 ): ZCodeSessionContextUsage["cache"] | undefined {
   let inputTokens = 0;
@@ -821,7 +843,9 @@ function contextCacheUsageFromMessages(
   let latestCacheReadTokens = 0;
   let latestCacheWriteTokens = 0;
 
-  for (const message of messages) {
+  const startIndex = lastCompactionBoundaryIndex(messages) + 1;
+  for (let index = startIndex; index < messages.length; index += 1) {
+    const message = messages[index];
     if (message.info.role !== "assistant" || message.info.summary) {
       continue;
     }
