@@ -42,8 +42,11 @@ resolveWorkspacePath 归一,与 Edit/Read 同规则)。
   rename 跨文件与 callHierarchy 全部通过。实测驱动两处打磨:① tsserver 返回小写
   盘符,adapter 路径归一化补大写盘符;② tsserver 冷启动异步加载项目,首查可能拿到
   不完整结果——真实 IDE 等项目就绪信号,最小适配层以有界轮询表达(测试内建
-  pollUntil;产品侧模型对不完整结果自然重试)。环境:scratch 装 typescript@6 +
-  typescript-language-server(.lsp-real-server/,gitignore)。
+  pollUntil;产品侧模型对不完整结果自然重试)。环境:在**仓库外**的 scratch 目录装
+  typescript@6 + typescript-language-server,设 ZCODE_LSP_SERVER_BIN 指向其 cli.js。
+  ⚠️ 不要在仓库内/仓库根 cwd 装包:npm 会沿目录向上命中仓库根并把依赖写进
+  pnpm-lock(实测把 vscode-jsonrpc 钉到 5.0.1,langium 的 lib/common/ 子路径
+  解析失败,vite build 全挂;`git checkout pnpm-lock.yaml && pnpm install` 可恢复)。
 - ✅ typecheck/lint/fmt/architecture 全绿;架构例外按治理登记
   (`architecture-policy.yaml` 的 lsp-semantic-tools 条)。
 - ✅ 批二(2026-10-25):LspReferences/LspCallHierarchy(只读零审批)+LspRename
