@@ -13,6 +13,8 @@ export const TASK_OUTPUT_PROVIDER_DESCRIPTION = `Wait for a background task and 
 
 PREFERRED way to wait on any long-running background task: call with block=true instead of sleeping in a loop (e.g. "sleep 300 && tail the log"). The wait is event-driven — it returns as soon as the task completes or the timeout elapses, and a <task-notification> with the output file path is also delivered on exit. timeout is capped at 600000 ms (10 minutes); for longer tasks, call again to keep waiting.
 
+Expected wait over ~60s (slow builds, long installs, full test suites): prefer block=false, do other work, and poll again — holding a long blocking wait wastes the turn and gives the user a frozen-looking surface. The summary line shows the blocking cap and output-file size while waiting.
+
 Reading results:
 - For bash tasks: the output file path contains stdout/stderr — prefer the Read tool on that path.
 - For local_agent tasks: use the Agent tool result directly. Do NOT Read the .output file — it is a symlink to the full subagent conversation transcript (JSONL) and will overflow your context window.

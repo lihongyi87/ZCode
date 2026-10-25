@@ -30,12 +30,46 @@ export function projectToolActivity(
       },
     ];
   }
-  if (row.toolName !== "Bash" || row.status !== "running" || row.backgrounded) return [];
-  const parsed = executionOutputPreviewSchema.safeParse(
-    (event.payload as ToolCallProgressPayload).outputPreview,
-  );
+  if (row.status !== "running" || row.backgrounded) return [];
+  const payload = event.payload as ToolCallProgressPayload;
+
+  // TaskOutput 阻塞等待心跳(spec 155):elapsedMs+message 进 row.progress,
+  // 否则「已等待/上限/输出规模」永远到不了 v4 UI,等待看起来像卡死。
+  if (row.toolName === "TaskOutput") {
+    if (payload.elapsedMs === undefined && payload.message === undefined) return [];
+    return [
+      {
+        op: "row.upserted",
+        row: {
+          ...row,
+          progress: {
+            ...(payload.elapsedMs !== undefined ? { elapsedMs: payload.elapsedMs } : {}),
+            ...(payload.message !== undefined ? { message: payload.message.slice(0, 200) } : {}),
+            updatedAt: event.timestamp.getTime(),
+          },
+        },
+      },
+    ];
+  }
+
+  if (row.toolName !== "Bash") return [];
+  const parsed = executionOutputPreviewSchema.safeParse(payload.outputPreview);
   if (!parsed.success) return [];
-  return [{ op: "row.upserted", row: { ...row, outputPreview: parsed.data } }];
+  // spec 155:Bash 的 outputBytes 进 row.progress——0 字节=真静默可见。
+  const progress =
+    payload.outputBytes !== undefined
+      ? { bytes: payload.outputBytes, updatedAt: event.timestamp.getTime() }
+      : undefined;
+  return [
+    {
+      op: "row.upserted",
+      row: {
+        ...row,
+        outputPreview: parsed.data,
+        ...(progress ? { progress } : {}),
+      },
+    },
+  ];
 }
 
 /** 统一在投影事务中清掉预览，涵盖 result/error、Stop、转后台与轮次收口。 */

@@ -59,8 +59,24 @@ export function ToolCallProgressIndicator({ progress }: { progress: ToolProgress
             { id: "chat.toolCall.progress.waited" },
             { duration: formatElapsedDuration(progress.elapsedMs) },
           )}
+          {formatProgressBytesSuffix(progress)}
         </span>
       ) : null}
     </span>
   );
+}
+
+/**
+ * 字节可见性(spec 155):管道/重定向命令的输出流为 0 时显示「暂无输出」,
+ * 有产出时显示累计字节——「在干活」与「真静默」不再共享同一个转圈。
+ */
+function formatProgressBytesSuffix(progress: ToolProgress): string {
+  if (progress.bytes === undefined) return "";
+  return progress.bytes > 0 ? ` · 已收 ${formatProgressByteCount(progress.bytes)}` : " · 暂无输出";
+}
+
+function formatProgressByteCount(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }

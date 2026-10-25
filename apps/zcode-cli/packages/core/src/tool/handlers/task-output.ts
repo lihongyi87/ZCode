@@ -24,6 +24,7 @@ import type {
   ToolInputValidationResult,
   ToolPersistedModelContentInput,
 } from "../types.js";
+import { statSync } from "node:fs";
 import {
   formatCompactFileSize,
   projectTask,
@@ -72,7 +73,10 @@ const taskOutputHandler: ToolHandler = async (input, context) => {
     return taskOutputResult("success", projectedTask);
   }
 
-  await emitWaitingProgress(context);
+  await emitWaitingProgress(context, 0, {
+    timeoutMs: parsed.timeout,
+    outputFile: initialTask.outputFile,
+  });
   const task = await waitForTask(parsed.task_id, parsed.timeout, context);
   if (!task) {
     return taskOutputResult("timeout", null);
@@ -257,7 +261,10 @@ async function waitForTask(
     const now = Date.now();
     if (now - lastHeartbeatAt >= TASK_OUTPUT_PROGRESS_HEARTBEAT_MS) {
       lastHeartbeatAt = now;
-      await emitWaitingProgress(context, now - startedAt);
+      await emitWaitingProgress(context, now - startedAt, {
+        timeoutMs,
+        outputFile: task.outputFile,
+      });
     }
     await delay(TASK_OUTPUT_POLL_INTERVAL_MS);
   }
@@ -281,9 +288,21 @@ function markTaskNotified(task: RuntimeTaskSnapshot, context: ToolExecutionConte
 async function emitWaitingProgress(
   context: ToolExecutionContext,
   elapsedMs = 0,
+  options: { timeoutMs?: number; outputFile?: string } = {},
 ): Promise<void> {
   if (!context.emitEvent) return;
 
+  // 可见性三要素(spec 155):已等待秒数、阻塞上限、输出文件规模——
+  // 「有终点的等待」替代无限转圈的观感。文件规模探测失败不影响心跳。
+  let sizeSuffix = "";
+  if (options.outputFile) {
+    try {
+      sizeSuffix = ` · 输出文件 ${formatCompactFileSize(statSync(options.outputFile).size)}`;
+    } catch {
+      sizeSuffix = " · 输出文件 (尚未创建)";
+    }
+  }
+  const capSuffix = options.timeoutMs ? ` / 阻塞上限 ${Math.round(options.timeoutMs / 1000)}s` : "";
   await context.emitEvent({
     id: crypto.randomUUID() as never,
     sessionId: context.sessionId,
@@ -296,6 +315,7 @@ async function emitWaitingProgress(
       toolCallId: context.toolCallId as never,
       toolName: TASK_OUTPUT_TOOL_NAME,
       elapsedMs,
+      message: `已等待${capSuffix}${sizeSuffix}`,
     },
   });
 }
