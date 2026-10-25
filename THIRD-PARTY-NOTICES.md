@@ -2296,8 +2296,6 @@ Original copyright, license and NOTICE text is retained below. Identical text is
 
 - typescript@6.0.2 — Apache-2.0
 
-- typescript@6.0.3 — Apache-2.0
-
 - uc.micro@1.0.6 — MIT
 
 - ufo@1.6.3 — MIT
@@ -36581,8 +36579,6 @@ SPDX-License-Identifier: (MIT OR CC0-1.0)
 - typescript@5.9.3: LICENSE.txt
 
 - typescript@6.0.2: LICENSE.txt
-
-- typescript@6.0.3: LICENSE.txt
 
 
 
