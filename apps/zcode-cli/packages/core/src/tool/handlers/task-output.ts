@@ -294,15 +294,20 @@ async function emitWaitingProgress(
 
   // 可见性三要素(spec 155):已等待秒数、阻塞上限、输出文件规模——
   // 「有终点的等待」替代无限转圈的观感。文件规模探测失败不影响心跳。
-  let sizeSuffix = "";
+  // message 只描述上限与规模:已等待秒数由 elapsedMs 字段承担，UI 单独渲染成
+  // 「已等待 N 秒」并把这个 message 接在其后；这里再带「已等待」会重复。
+  let sizeText = "";
   if (options.outputFile) {
     try {
-      sizeSuffix = ` · 输出文件 ${formatCompactFileSize(statSync(options.outputFile).size)}`;
+      sizeText = `输出文件 ${formatCompactFileSize(statSync(options.outputFile).size)}`;
     } catch {
-      sizeSuffix = " · 输出文件 (尚未创建)";
+      sizeText = "输出文件 (尚未创建)";
     }
   }
-  const capSuffix = options.timeoutMs ? ` / 阻塞上限 ${Math.round(options.timeoutMs / 1000)}s` : "";
+  const capText = options.timeoutMs
+    ? `阻塞上限 ${Math.round(options.timeoutMs / 1000)}s`
+    : "";
+  const message = [capText, sizeText].filter(Boolean).join(" · ");
   await context.emitEvent({
     id: crypto.randomUUID() as never,
     sessionId: context.sessionId,
@@ -315,7 +320,7 @@ async function emitWaitingProgress(
       toolCallId: context.toolCallId as never,
       toolName: TASK_OUTPUT_TOOL_NAME,
       elapsedMs,
-      message: `已等待${capSuffix}${sizeSuffix}`,
+      message,
     },
   });
 }

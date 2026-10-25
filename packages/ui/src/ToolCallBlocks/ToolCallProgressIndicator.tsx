@@ -45,11 +45,6 @@ export function ToolCallProgressIndicator({ progress }: { progress: ToolProgress
           <span className="tool-call-progress-indeterminate absolute inset-y-0 w-1/3 rounded-full bg-brand" />
         )}
       </span>
-      {progress.message ? (
-        <span className="min-w-0 truncate text-ui-sm text-foreground-subtle">
-          {progress.message}
-        </span>
-      ) : null}
       {progress.elapsedMs !== undefined ? (
         <span
           className="shrink-0 text-ui-sm tabular-nums text-foreground-subtle"
@@ -60,6 +55,11 @@ export function ToolCallProgressIndicator({ progress }: { progress: ToolProgress
             { duration: formatElapsedDuration(progress.elapsedMs) },
           )}
           {formatProgressBytesSuffix(progress)}
+        </span>
+      ) : null}
+      {progress.message ? (
+        <span className="min-w-0 truncate text-ui-sm text-foreground-subtle">
+          {formatProgressMessage(progress.message, progress.elapsedMs !== undefined)}
         </span>
       ) : null}
     </span>
@@ -73,6 +73,15 @@ export function ToolCallProgressIndicator({ progress }: { progress: ToolProgress
 function formatProgressBytesSuffix(progress: ToolProgress): string {
   if (progress.bytes === undefined) return "";
   return progress.bytes > 0 ? ` · 已收 ${formatProgressByteCount(progress.bytes)}` : " · 暂无输出";
+}
+
+/**
+ * message 是工具自带的进度说明（目前唯一生产者是 TaskOutput 阻塞心跳），排在
+ * 「已等待 N 秒」之后。CLI 侧 message 只描述阻塞上限与输出规模、不自带「已等待」，
+ * 否则会重复成「已等待 / 阻塞上限 120s … 已等待 15 秒」。
+ */
+function formatProgressMessage(message: string, hasElapsedMs: boolean): string {
+  return hasElapsedMs ? ` · ${message}` : message;
 }
 
 function formatProgressByteCount(bytes: number): string {

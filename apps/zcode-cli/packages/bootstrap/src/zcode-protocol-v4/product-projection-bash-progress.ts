@@ -54,18 +54,22 @@ export function projectToolActivity(
 
   if (row.toolName !== "Bash") return [];
   const parsed = executionOutputPreviewSchema.safeParse(payload.outputPreview);
-  if (!parsed.success) return [];
   // spec 155:Bash 的 outputBytes 进 row.progress——0 字节=真静默可见。
   const progress =
     payload.outputBytes !== undefined
       ? { bytes: payload.outputBytes, updatedAt: event.timestamp.getTime() }
       : undefined;
+  // 修复原因(用户实测 `sleep 240s` 看起来像卡死):静默命令没有 stdout/stderr,
+  // 因此没有 outputPreview。旧实现要求 preview 解析成功才放行,把「零输出」这唯一
+  // 需要字节可见性的场景整条丢弃——UI 只剩转圈。预览与进度改为各自独立:
+  // 有 preview 才写 preview,有 outputBytes 就写 progress。
+  if (!parsed.success && progress === undefined) return [];
   return [
     {
       op: "row.upserted",
       row: {
         ...row,
-        outputPreview: parsed.data,
+        ...(parsed.success ? { outputPreview: parsed.data } : {}),
         ...(progress ? { progress } : {}),
       },
     },

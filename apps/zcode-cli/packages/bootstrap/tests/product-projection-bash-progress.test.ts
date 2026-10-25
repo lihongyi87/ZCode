@@ -215,4 +215,23 @@ describe("ToolOutput waiting heartbeat projection (TaskOutput 阻塞等待)", ()
     expect(deltas).toEqual([]);
     expect(h.row().progress).toBeUndefined();
   });
+
+  it("projects zero-output Bash progress to row.progress（静默命令不能只剩转圈）", () => {
+    // 回归（用户实测 sleep 240s 像卡死）：静默命令没有 stdout/stderr → 没有
+    // outputPreview。旧实现要求 preview 解析成功才放行，把「零输出」这唯一需要
+    // 字节可见性的场景整条丢弃，UI 只剩转圈。
+    const h = harness();
+    const deltas = h.apply(SessionEventType.ToolCallProgress, {
+      toolCallId: "bash-1",
+      toolName: "Bash",
+      outputBytes: 0,
+      elapsedMs: 12_000,
+    });
+    expect(h.row().progress?.bytes).toBe(0);
+    expect(h.row().outputPreview).toBeUndefined();
+    expect(
+      deltas.some((delta) => delta.op === "row.upserted" && delta.row.kind === "toolCall"),
+    ).toBe(true);
+    for (const delta of deltas) expect(conversationDeltaSchema.parse(delta)).toEqual(delta);
+  });
 });
