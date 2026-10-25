@@ -378,12 +378,29 @@ export function firstModelTokenAt(
 ): number | undefined {
   for (const event of events.slice(startIndex)) {
     if (event.type !== SessionEventType.ModelStreaming) continue;
-    const payload = event.payload as { delta?: string; kind?: string };
-    if (
+    const payload = event.payload as {
+      delta?: string;
+      kind?: string;
+      toolName?: string;
+    };
+    // 与 DSH `isTokenDelta` 同口径：文本增量、推理增量、工具调用参数增量都算模型首个
+    // 输出 token。修复原因（用户实测 497 tok/s）：旧口径只认 text/reasoning，纯工具调用步
+    // （只有 tool_input_delta、没有文本）拿不到 firstTokenAt，而 outputTokens 仍计入
+    // decodeTokens——分子有、分母缺，读数虚高。
+    //
+    // 不把 `tool_call` 起始算首 token：本仓工具参数是缓冲后批量 flush（换行或满 4096 字符
+    // 才发 delta），`tool_call` 事件又排在最后一次 flush 之后，时间点贴近该步完成；用它当
+    // 首 token 会把分母压到接近 0，反而放大虚高。DSH 的 stream 是逐 chunk 记录原始到达
+    // 时间，没有这层缓冲，所以它认带名字的 tool-call 起始；本仓不能用同一判据。
+    const hasTokenDelta =
       (payload.kind === "text_delta" || payload.kind === "reasoning_delta") &&
-      payload.delta &&
-      payload.delta.length > 0
-    ) {
+      typeof payload.delta === "string" &&
+      payload.delta.length > 0;
+    const hasToolInputDelta =
+      payload.kind === "tool_input_delta" &&
+      typeof payload.delta === "string" &&
+      payload.delta.length > 0;
+    if (hasTokenDelta || hasToolInputDelta) {
       return event.timestamp.getTime();
     }
   }
