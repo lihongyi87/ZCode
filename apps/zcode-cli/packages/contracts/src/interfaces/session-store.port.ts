@@ -817,6 +817,11 @@ export const SESSION_ENTRY_WORKSPACE_FILE_REWIND = "runtime/workspace_file_rewin
 /** 动态工作流工具面已在本会话激活（docs/dynamic-workflow/launch.md「On demand: activation」）。 */
 export const SESSION_ENTRY_DYNAMIC_WORKFLOW_ACTIVATION =
   "runtime/dynamic_workflow_activation" as const;
+/**
+ * spec 154：会话的订阅式编排状态（proactive subscriptions + generation）。
+ * 存 session_entry 而不是独立表，与其它 session-local 配置同源。
+ */
+export const SESSION_ENTRY_ORCHESTRATION_STATE = "orchestration state" as const;
 
 export const SESSION_ENTRY_TYPES = [
   SESSION_ENTRY_TARGET_COMPLETION_VERIFICATION,
@@ -827,6 +832,7 @@ export const SESSION_ENTRY_TYPES = [
   SESSION_ENTRY_WORKSPACE_CHECKPOINT,
   SESSION_ENTRY_WORKSPACE_FILE_REWIND,
   SESSION_ENTRY_DYNAMIC_WORKFLOW_ACTIVATION,
+  SESSION_ENTRY_ORCHESTRATION_STATE,
 ] as const;
 
 export type SessionEntryType = (typeof SESSION_ENTRY_TYPES)[number];

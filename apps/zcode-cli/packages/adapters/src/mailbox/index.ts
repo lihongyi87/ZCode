@@ -14,6 +14,9 @@ export interface NodeSessionMailboxOptions {
 
 const SESSION_ID_PATTERN = /^sess_[A-Za-z0-9._-]+$/;
 
+/** append 写入的文件名前缀长度：15 位零填充毫秒时间戳 + 一个 "-"。 */
+const MESSAGE_ID_PREFIX_LENGTH = 16;
+
 export class NodeSessionMailboxAdapter implements SessionMailboxPort {
   constructor(private readonly options: NodeSessionMailboxOptions) {}
 
@@ -50,8 +53,71 @@ export class NodeSessionMailboxAdapter implements SessionMailboxPort {
     return messages;
   }
 
-  async append(input: SessionMailboxAppendInput): Promise<SessionMailboxEnvelope> {
-    const unreadDir = this.sessionDir(input.toSessionId, "unread");
+  /**
+   * 只读窥视 unread：与 drainUnread 同样按文件名字典序（即投递序），但**不移动文件**。
+   * proactive dispatcher 用它判断「有没有可唤醒的信封」——发布事件失败时消息必须仍是
+   * unread，否则下一次 drain 会静默漏掉这次唤醒。
+   */
+  async peekUnread(input: {
+    sessionId: SessionId;
+    limit?: number;
+    filter?: (envelope: SessionMailboxEnvelope) => boolean;
+  }): Promise<SessionMailboxEnvelope[]> {
+    const unreadDir = this.sessionDir(input.sessionId, "unread");
+    await mkdir(unreadDir, { recursive: true });
+
+    const entries = (await readdir(unreadDir))
+      .filter((entry) => entry.endsWith(".json"))
+      .sort();
+    const messages: SessionMailboxEnvelope[] = [];
+    for (const entry of entries) {
+      if (messages.length >= (input.limit ?? 20)) break;
+      const envelope = parseEnvelope(await readFile(join(unreadDir, entry), "utf8"));
+      if (input.filter && !input.filter(envelope)) continue;
+      messages.push(envelope);
+    }
+    return messages;
+  }
+
+  /**
+   * 按 messageId 把 unread 标记为已读。幂等：已读或不存在的 id 静默跳过。
+   * @returns 实际移动的消息数。
+   */
+  async markRead(input: {
+    sessionId: SessionId;
+    messageIds: readonly string[];
+  }): Promise<number> {
+    if (input.messageIds.length === 0) return 0;
+    const unreadDir = this.sessionDir(input.sessionId, "unread");
+    const readDir = this.sessionDir(input.sessionId, "read");
+    await mkdir(readDir, { recursive: true });
+
+    const wanted = new Set(input.messageIds);
+    let moved = 0;
+    let entries: string[];
+    try {
+      entries = await readdir(unreadDir);
+    } catch {
+      return 0;
+    }
+    for (const entry of entries) {
+      if (!entry.endsWith(".json")) continue;
+      // 文件名 = <15 位零填充时间戳>-<messageId>.json；按前缀长度切，不能用 split("-")
+      // （messageId 是带连字符的 UUID，按连字符切会只剩最后一段）。
+      const stem = entry.slice(0, -".json".length);
+      const messageId = stem.slice(MESSAGE_ID_PREFIX_LENGTH);
+      if (!wanted.has(messageId)) continue;
+      try {
+        await rename(join(unreadDir, entry), join(readDir, entry));
+        moved += 1;
+      } catch {
+        // 并发 drain 已移走该文件：目标状态已达成，不算失败。
+      }
+    }
+    return moved;
+  }
+
+  async append(input: SessionMailboxAppendInput): Promise<SessionMailboxEnvelope> {    const unreadDir = this.sessionDir(input.toSessionId, "unread");
     await mkdir(unreadDir, { recursive: true });
 
     // drainUnread 按文件名字典序取最旧,文件名以毫秒时间戳为前缀保证投递序可读。

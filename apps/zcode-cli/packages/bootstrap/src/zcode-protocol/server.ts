@@ -122,6 +122,9 @@ import {
 } from "../zcode-protocol-v4/interaction-registry.js";
 import { createConversationV4Gateway } from "./v4-bridge.js";
 import { createSessionResidentPoolHost } from "./session-residency.js";
+import type { ProactiveStorePort } from "@zcode/contracts";
+import type { ProactiveScheduler } from "@zcode/adapters/proactive";
+import { createProactiveSchedulerFromEnv } from "@zcode/adapters/proactive";
 import {
   DEFAULT_SESSION_RESIDENT_HIGH_WATER_COUNT,
   SessionResidentPool,
@@ -266,6 +269,8 @@ export class ZCodeProtocolAgentServer {
   private clientDisconnectError?: Error;
   private readonly context: ZCodeProtocolAgentServerContext;
   private readonly logger;
+  /** spec 154：主动编排调度器；env 未开启/无 ProactiveStorePort 时不构造。 */
+  private proactiveScheduler?: ProactiveScheduler;
   private readonly pendingClientRequests = new Map<string, PendingClientRequest<unknown>>();
   private readonly pluginOperationControllers = new Map<string, AbortController>();
   private readonly workspaceGenerateTextControllers = new Map<string, AbortController>();
@@ -315,6 +320,11 @@ export class ZCodeProtocolAgentServer {
     // v4 通道：gateway 闭包持有 context 做帧出口与命令副作用，构造完立即挂回。
     this.context.v4Gateway = createConversationV4Gateway(this.context);
     this.browserControlPort = createProtocolBrowserControlBroker(this.context);
+    // spec 154：订阅式主动编排。三重缺省关闭：env 总开关（ZCODE_PROACTIVE_ORCHESTRATION）、
+    // 消息面（ZCODE_MESSAGE_ENABLED，无信箱即无事件源）、持久面能力（sessionStore 实现
+    // ProactiveStorePort）。任一缺席都不构造调度器——关闭状态下零开销。
+    this.proactiveScheduler = this.createProactiveSchedulerIfPossible();
+    this.proactiveScheduler?.start();
     const sessionResidentTargetCount =
       deps.sessionResidentPoolOptions?.targetCount ?? deps.sessionResidentTargetCount;
     const sessionResidentHighWaterCount =
@@ -430,8 +440,69 @@ export class ZCodeProtocolAgentServer {
   }
 
   /** 进程资源关闭，不使用会删除产品会话/发布 session.removed 的 session/close。 */
+  /**
+   * spec 154：构造主动编排调度器（可能返回 undefined）。
+   *
+   * 能力 feature-detect：SessionStorePort 只有在同时实现 ProactiveStorePort
+   * （SqliteSessionStore + migration 0027）时才可承载事件/trigger；不支持时
+   * 静默跳过（旧宿主/测试注入的内存 store 不因此失败）。
+   */
+  private createProactiveSchedulerIfPossible(): ProactiveScheduler | undefined {
+    const sessionStore = this.context.deps.sessionStore;
+    if (!sessionStore) return undefined;
+    const proactiveStore = sessionStore as Partial<ProactiveStorePort>;
+    const saveSessionEntry = sessionStore.saveSessionEntry?.bind(sessionStore);
+    const sessionEntries = sessionStore.sessionEntries?.bind(sessionStore);
+    // 编排状态读写与 ProactiveStorePort 同源（同一 SqliteSessionStore），
+    // 但在 SessionStorePort 上是可选方法：三者任一缺席即视为能力不完整。
+    if (
+      typeof proactiveStore.publishProactiveEvent !== "function" ||
+      !saveSessionEntry ||
+      !sessionEntries
+    ) {
+      this.logger?.info("proactive orchestration store unsupported; scheduler disabled", {
+        event: "zcode_protocol.proactive.store_unsupported",
+      });
+      return undefined;
+    }
+    const env = this.context.deps.env ?? process.env;
+    return createProactiveSchedulerFromEnv({
+      env,
+      store: proactiveStore as ProactiveStorePort,
+      listSessions: (input) => sessionStore.listSessions(input ?? {}),
+      sessionStore: {
+        sessionEntries: (input) =>
+          sessionEntries({
+            sessionID: input.sessionID as Parameters<typeof sessionEntries>[0]["sessionID"],
+            ...(input.type !== undefined ? { type: input.type } : {}),
+          }),
+        saveSessionEntry: async (entry) => {
+          await saveSessionEntry(
+            entry as Parameters<typeof saveSessionEntry>[0],
+          );
+        },
+      },
+      // 注入语义：只唤醒**已驻留**的会话。会话不在注册表（未打开/已被 resident
+      // pool 收敛）时抛错，dispatcher 按退避重试，attempts 上限后 rejected——
+      // 这是 P1 的诚实边界：主动接力对活着的工作区会话生效，冷会话由既有
+      // mailbox drain hook（UserPromptSubmit 交付）兜底。
+      enqueueDeferredInput: async (sessionId, prompt) => {
+        const record = this.context.sessions.get(sessionId);
+        const enqueue = record?.app.enqueueDeferredInput;
+        if (!enqueue) {
+          throw new Error(`proactive target session is not resident: ${sessionId}`);
+        }
+        await enqueue.call(record!.app, prompt, { delivery: "queue" });
+      },
+      logger: this.logger,
+    });
+  }
+
   shutdown(): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
+    // 主动编排调度器先停：后续派发会因 assertServing 失败而徒劳退避。
+    this.proactiveScheduler?.dispose();
+    this.proactiveScheduler = undefined;
     this.shutdownPromise = this.runtimeResources.close();
     const error = new Error("ZCode Protocol runtime stopping");
     this.disconnectClient(error);

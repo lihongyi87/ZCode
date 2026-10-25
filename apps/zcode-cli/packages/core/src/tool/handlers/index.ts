@@ -60,6 +60,7 @@ import {
 } from "./plan-mode.js";
 import { askUserQuestionToolEntry } from "./ask-user-question.js";
 import { sendMessageToolEntry } from "./send-message.js";
+import { proactiveSubscribeToolEntry } from "./proactive-subscribe.js";
 import { respondToCoordinatorToolEntry } from "./respond-to-coordinator.js";
 import { createSubmitResultToolEntry, submitResultToolEntry } from "./submit-result.js";
 import { escalateToolEntry } from "./escalate.js";
@@ -110,6 +111,7 @@ export const builtInTools: ToolEntry[] = [
   exitPlanModeToolEntry,
   askUserQuestionToolEntry,
   sendMessageToolEntry,
+  proactiveSubscribeToolEntry,
   lspCallHierarchyToolEntry,
   lspDefinitionToolEntry,
   lspReferencesToolEntry,

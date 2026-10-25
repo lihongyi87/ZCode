@@ -93,6 +93,10 @@
     "./tools": {
       "types": "./dist/tools/index.d.ts",
       "import": "./dist/tools/index.js"
+    },
+    "./proactive": {
+      "types": "./dist/proactive/index.d.ts",
+      "import": "./dist/proactive/index.js"
     }
   },
   "scripts": {

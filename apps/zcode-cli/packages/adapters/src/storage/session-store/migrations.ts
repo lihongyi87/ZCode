@@ -5,6 +5,7 @@ import { SESSION_DATABASE_IDENTITY_MIGRATION } from "@zcode/shared/sqlite-migrat
 
 import { OFFICIAL_GLM_SELECTION_MIGRATION_SQL } from "./migrations/0021-official-glm-selection.js";
 import { BACKFILLED_SESSION_REASONING_MIGRATION_SQL } from "./migrations/0022-backfilled-session-reasoning.js";
+import { PROACTIVE_ORCHESTRATION_MIGRATION_SQL } from "./migrations/0027-proactive-orchestration.js";
 
 export const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
   {
@@ -999,5 +1000,11 @@ export const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     sql: `
       alter table session_target add column min_time_seconds integer;
     `,
+  },
+  {
+    appVersion: "0.16.9",
+    id: "0027_proactive_orchestration",
+    touchedTables: ["proactive_event", "proactive_trigger"],
+    sql: PROACTIVE_ORCHESTRATION_MIGRATION_SQL,
   },
 ];

@@ -15,6 +15,8 @@ export * from "./interfaces/pdf-document.port.js";
 export * from "./interfaces/permission.port.js";
 export * from "./interfaces/session.port.js";
 export * from "./interfaces/session-mailbox.port.js";
+export * from "./interfaces/proactive-orchestration.js";
+export * from "./interfaces/proactive-store.port.js";
 export * from "./interfaces/session-store.port.js";
 export * from "./interfaces/input-history.port.js";
 export * from "./interfaces/tool-artifact-store.port.js";

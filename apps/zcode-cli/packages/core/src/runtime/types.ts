@@ -146,6 +146,19 @@ export interface AgentRuntimeConfig {
   /** CE 线增量（experimental）：缓存保活器——会话空闲超阈值时发同前缀迷你请求刷新
    * provider 侧 prompt cache，消除长空档后下一请求的预填充跳升。默认关。 */
   cacheKeepAlive?: { enabled?: boolean; idleThresholdMs?: number };
+  /**
+   * spec 154：订阅式主动编排（飞鱼吸收）。
+   *
+   * `enabled` 缺省 false——自动接力会让会话在无人值守时自己动起来，必须由用户/宿主
+   * 显式开启。`allowedWorkspaceKeys` 是逐工作区同意名单：即使 enabled=true，未列入的
+   * 工作区也不会发布 proactive 事件（不留下待派发 trigger）。
+   */
+  proactiveOrchestration?: {
+    enabled?: boolean;
+    allowedWorkspaceKeys?: readonly string[];
+    /** 派发循环间隔；缺省 5s。 */
+    pollIntervalMs?: number;
+  };
   targetCompletionVerification?: { enabled?: boolean };
   midConversationSystem?: {
     mode?: "auto" | "force";

@@ -45,6 +45,19 @@ export interface SessionMailboxPort {
   ): Promise<SessionMailboxEnvelope[]>;
   /** 投递一条消息到目标会话 unread;原子落盘,幂等性由调用方 requestId 保障。 */
   append(input: SessionMailboxAppendInput): Promise<SessionMailboxEnvelope>;
+  /**
+   * spec 154：只读窥视 unread，不移动文件。
+   *
+   * 与 drainUnread 的区别是「不改状态」——proactive dispatcher 需要先看有没有可唤醒的
+   * 信封再决定是否发布事件；用 drain 会在事件发布失败时把消息标成已读而丢失唤醒。
+   */
+  peekUnread(input: {
+    sessionId: SessionId;
+    limit?: number;
+    filter?: (envelope: SessionMailboxEnvelope) => boolean;
+  }): Promise<SessionMailboxEnvelope[]>;
+  /** spec 154：按 messageId 把 unread 标记为已读（幂等，已读/不存在返回 false）。 */
+  markRead(input: { sessionId: SessionId; messageIds: readonly string[] }): Promise<number>;
 }
 
 /** 判定信封是否满足 proactive 唤醒条件(信任锚三件套齐全且深度未超限)。 */

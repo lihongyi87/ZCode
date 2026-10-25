@@ -174,4 +174,79 @@ describe("NodeSessionMailboxAdapter", () => {
     expect(legacy).toHaveLength(1);
     expect(legacy[0]?.messageId).toBe("legacy-1");
   });
+
+  describe("peekUnread / markRead (spec 154)", () => {
+    it("peek 只读不移动文件，重复 peek 仍能看到", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "zcode-mailbox-peek-"));
+      const mailbox = createNodeSessionMailboxAdapter({ rootDir });
+      await mailbox.append({
+        toSessionId: "sess_target",
+        fromSessionId: "sess_source",
+        content: "hello",
+      });
+
+      const first = await mailbox.peekUnread({ sessionId: "sess_target" });
+      const second = await mailbox.peekUnread({ sessionId: "sess_target" });
+
+      expect(first).toHaveLength(1);
+      expect(second).toHaveLength(1);
+      expect(second[0]?.messageId).toBe(first[0]?.messageId);
+      // 关键:文件仍在 unread,后续 drain 还能交付。
+      expect(await mailbox.drainUnread({ sessionId: "sess_target" })).toHaveLength(1);
+    });
+
+    it("markRead 把指定消息移到 read，且幂等", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "zcode-mailbox-mark-"));
+      const mailbox = createNodeSessionMailboxAdapter({ rootDir });
+      const envelope = await mailbox.append({
+        toSessionId: "sess_target",
+        fromSessionId: "sess_source",
+        content: "hello",
+      });
+
+      expect(
+        await mailbox.markRead({ sessionId: "sess_target", messageIds: [envelope.messageId] }),
+      ).toBe(1);
+      // 二次标记同一 id:已经是 read,返回 0 而不是报错。
+      expect(
+        await mailbox.markRead({ sessionId: "sess_target", messageIds: [envelope.messageId] }),
+      ).toBe(0);
+      expect(await mailbox.peekUnread({ sessionId: "sess_target" })).toHaveLength(0);
+    });
+
+    it("markRead 只移动命中的消息，其余保持 unread", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "zcode-mailbox-mixed-"));
+      const mailbox = createNodeSessionMailboxAdapter({ rootDir });
+      const first = await mailbox.append({
+        toSessionId: "sess_target",
+        fromSessionId: "sess_source",
+        content: "one",
+      });
+      await mailbox.append({
+        toSessionId: "sess_target",
+        fromSessionId: "sess_source",
+        content: "two",
+      });
+
+      expect(
+        await mailbox.markRead({ sessionId: "sess_target", messageIds: [first.messageId] }),
+      ).toBe(1);
+      const remaining = await mailbox.peekUnread({ sessionId: "sess_target" });
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0]?.content).toBe("two");
+    });
+
+    it("markRead 对不存在的 id 返回 0", async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "zcode-mailbox-missing-"));
+      const mailbox = createNodeSessionMailboxAdapter({ rootDir });
+      await mailbox.append({
+        toSessionId: "sess_target",
+        fromSessionId: "sess_source",
+        content: "hello",
+      });
+      expect(
+        await mailbox.markRead({ sessionId: "sess_target", messageIds: ["nope"] }),
+      ).toBe(0);
+    });
+  });
 });

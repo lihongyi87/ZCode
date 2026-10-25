@@ -21,6 +21,7 @@ import type {
   InputHistoryKind,
   InputHistoryStorePort,
   ListSessionsInput,
+  ProactiveStorePort,
   AppUsageQueryInput,
   AppUsageQueryResult,
   LocalSettingStorePort,
@@ -97,6 +98,7 @@ import { createDwfJournalStore } from "./repositories/dwf-journal.js";
 import * as inputHistoryRepository from "./repositories/input-history.js";
 import * as localSettingsRepository from "./repositories/local-settings.js";
 import * as messageRepository from "./repositories/messages.js";
+import * as proactiveRepository from "./repositories/proactive-orchestration.js";
 import * as scriptWorkflowActivityRepository from "./repositories/script-workflow-activities.js";
 import * as scriptWorkflowRunRepository from "./repositories/script-workflow-runs.js";
 import * as sessionEntryRepository from "./repositories/session-entries.js";
@@ -230,7 +232,8 @@ export class SqliteSessionStore
     InputHistoryStorePort,
     LocalSettingStorePort,
     ScriptWorkflowStorePort,
-    UsageStorePort
+    UsageStorePort,
+    ProactiveStorePort
 {
   private readonly db: DatabaseSync;
   private readonly dbPath: string;
@@ -654,6 +657,32 @@ export class SqliteSessionStore
   }): Promise<SessionEntryInfo[]> {
     return sessionEntryRepository.sessionEntries(this.db, input);
   }
+
+  // ── spec 154 主动编排持久面（migration 0027）──
+  // 全部委托给 proactive-orchestration 仓储：store 只承担「同一个 db 句柄」的接入，
+  // 幂等/租约/退避语义留在仓储，避免两处实现分叉。
+
+  publishProactiveEvent: ProactiveStorePort["publishProactiveEvent"] = (input) =>
+    proactiveRepository.publishProactiveEvent(this.db, input);
+
+  claimProactiveTriggers: ProactiveStorePort["claimProactiveTriggers"] = (input) =>
+    proactiveRepository.claimProactiveTriggers(this.db, input);
+
+  settleProactiveTrigger: ProactiveStorePort["settleProactiveTrigger"] = (input) =>
+    proactiveRepository.settleProactiveTrigger(this.db, input);
+
+  proactiveDepthForSource: ProactiveStorePort["proactiveDepthForSource"] = (sourceCommandId) =>
+    proactiveRepository.proactiveDepthForSource(this.db, sourceCommandId);
+
+  rejectStaleGenerationTriggers: ProactiveStorePort["rejectStaleGenerationTriggers"] = (input) =>
+    proactiveRepository.rejectStaleGenerationTriggers(this.db, input);
+
+  cancelProactiveTriggersForSession: ProactiveStorePort["cancelProactiveTriggersForSession"] = (
+    input,
+  ) => proactiveRepository.cancelProactiveTriggersForSession(this.db, input);
+
+  proactiveTriggersForSession: ProactiveStorePort["proactiveTriggersForSession"] = (input) =>
+    proactiveRepository.proactiveTriggersForSession(this.db, input);
 
   // ── session_input 账本──
 
