@@ -83,7 +83,12 @@ export interface ProactiveDispatcherTickResult {
   delivered: number;
   rejected: number;
   retried: number;
+  /** P2：本轮物化的事件数（含未命中的检查）。 */
+  materializedEvents: number;
 }
+
+/** 物化回看窗口：事件发布后该时长内可被后声明的订阅物化，超窗不再追溯。 */
+export const PROACTIVE_MATERIALIZATION_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * 执行一次派发循环。幂等：同一批消息重复 tick 不会重复生成 trigger（eventId 幂等）。
@@ -98,6 +103,7 @@ export async function runProactiveDispatcherTick(
     delivered: 0,
     rejected: 0,
     retried: 0,
+    materializedEvents: 0,
   };
 
   const workspaces = await deps.listWorkspaces();
@@ -105,6 +111,54 @@ export async function runProactiveDispatcherTick(
   for (const workspace of workspaces) {
     // 护栏：逐工作区同意。未同意的工作区连事件都不发布，避免留下待派发 trigger。
     if (!deps.isProactiveWorkAllowed(workspace.workspaceKey)) continue;
+
+    // P2 物化：task_completed/task_failed/automation_due 由事实发生点发布（targets 空），
+    // 这里按「当前」订阅补生成 trigger。窗口 = 物化窗口；有 trigger（含终态）即不再处理，
+    // 订阅是向前看的契约，不追溯旧事件。
+    const unmatched = deps.store.unmatchedProactiveEvents({
+      workspaceKey: workspace.workspaceKey,
+      sinceMs: now - PROACTIVE_MATERIALIZATION_WINDOW_MS,
+      now,
+      limit: 50,
+    });
+    if (unmatched.length > 0) {
+      // 同一工作区共享一次目标枚举：物化只关心订阅，与会话 mailbox 无关。
+      const materializeTargets: {
+        sessionId: string;
+        subscriptions: readonly ProactiveSubscription[];
+        generation: number;
+      }[] = [];
+      for (const sessionId of workspace.targetSessionIds) {
+        const state = await deps.readOrchestrationState(sessionId);
+        if (state?.status === "running" && state.subscriptions.length > 0) {
+          materializeTargets.push({
+            sessionId,
+            subscriptions: state.subscriptions,
+            generation: state.generation,
+          });
+        }
+      }
+      if (materializeTargets.length > 0) {
+        for (const event of unmatched) {
+          if (
+            !canProactivelyWake({
+              ...(event.sourceCommandId !== undefined
+                ? { sourceCommandId: event.sourceCommandId }
+                : {}),
+              depth: event.depth,
+            })
+          ) {
+            continue;
+          }
+          const triggerIds = deps.store.materializeProactiveTriggers({
+            eventId: event.eventId,
+            now,
+            targets: materializeTargets,
+          });
+          if (triggerIds.length > 0) result.materializedEvents += 1;
+        }
+      }
+    }
 
     for (const targetSessionId of workspace.targetSessionIds) {
       const state = await deps.readOrchestrationState(targetSessionId);

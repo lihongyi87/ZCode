@@ -2538,6 +2538,9 @@ async function runPromptTurnInBackground(
     // 但 inputId 会保留 automation-* runId。这里兜底标记，避免 CronCreate 在绑定 active
     // 会话里递归创建定时任务。
     record.activeAutomationId = activeAutomationId;
+    // spec 154 P2：automation 到点是可订阅事件（automation_due）。与 task 生命周期
+    // 事件同构——只记录事实（targets 空），订阅匹配由宿主 dispatcher 物化。
+    publishAutomationDueProactiveEvent(context, record, activeAutomationId);
   }
   if (activeOffPeakTaskId) {
     // 闲时派发轮同型兜底标记，供 offpeak-port 拒绝递归 OffPeakCreate。
@@ -4336,4 +4339,40 @@ function emitStateUpdated(
     workspace: record.workspace,
   };
   context.notify({ method: "state.updated", params: notification });
+}
+
+/**
+ * spec 154 P2：automation 到点发布 `automation_due` 事件（事实记录，targets 空）。
+ *
+ * 源=被 automation 驱动的会话自身；订阅该会话 automation_due 的协调者会被唤醒
+ * （例如「每次巡检任务跑完汇总一次」）。eventId 以 runId 维度幂等；发布失败
+ * 只记日志——automation turn 本身不能被增强事件阻断。
+ */
+function publishAutomationDueProactiveEvent(
+  context: ZCodeProtocolAgentServerContext,
+  record: ZCodeProtocolSessionRecord,
+  automationId: string,
+): void {
+  const sessionStore = context.deps.sessionStore;
+  const proactiveStore = sessionStore as Partial<import("@zcode/contracts").ProactiveStorePort> | undefined;
+  if (!proactiveStore || typeof proactiveStore.publishProactiveEvent !== "function") return;
+  try {
+    proactiveStore.publishProactiveEvent({
+      eventId: `automation:${record.app.sessionId}:${automationId}`,
+      workspaceKey: record.workspace.workspacePath,
+      sourceSessionId: record.app.sessionId,
+      eventType: "automation_due",
+      sourceCommandId: `automation:${automationId}`,
+      depth: 0,
+      payload: { automationId },
+      now: Date.now(),
+      targets: [],
+    });
+  } catch (error) {
+    context.logger?.warn("proactive automation_due publish failed", {
+      event: "proactive.automation.publish_failed",
+      automationId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

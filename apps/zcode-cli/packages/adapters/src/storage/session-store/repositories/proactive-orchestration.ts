@@ -180,6 +180,99 @@ export function publishProactiveEvent(
 }
 
 /**
+ * 为已存在的事件按「当前」订阅补生成 trigger（P2 事件物化）。
+ *
+ * task_completed/task_failed/automation_due 由 runtime/cron 在事实发生点发布，
+ * 发布者不知道谁订阅了自己——dispatcher 轮询时枚举当前订阅并物化。
+ * 幂等由 (event,target,subscription) 唯一索引承担，重复物化零副作用。
+ */
+export function materializeProactiveTriggers(
+  db: DatabaseSync,
+  input: {
+    eventId: string;
+    now: number;
+    targets: readonly {
+      sessionId: string;
+      subscriptions: readonly ProactiveSubscription[];
+      generation: number;
+    }[];
+  },
+): readonly string[] {
+  const event = db
+    .prepare("select * from proactive_event where id = ?")
+    .get(input.eventId) as unknown as ProactiveEventRow | undefined;
+  if (!event) return [];
+
+  const triggerIds: string[] = [];
+  const insertTrigger = db.prepare(
+    `
+    insert or ignore into proactive_trigger
+      (id, event_id, target_session_id, subscription_id, generation, command_id, prompt,
+       state, attempts, retry_at, owner_id, lease_until, failure_reason, time_created, time_updated)
+    values (?, ?, ?, ?, ?, ?, ?, 'pending', 0, null, null, null, null, ?, ?)
+    `,
+  );
+  for (const target of input.targets) {
+    for (const subscription of target.subscriptions) {
+      if (subscription.event !== event.event_type) continue;
+      if (subscription.sourceId !== event.source_session_id) continue;
+      const triggerId = proactiveTriggerId({
+        eventId: input.eventId,
+        targetSessionId: target.sessionId,
+        subscriptionId: subscription.id,
+        generation: target.generation,
+      });
+      const result = insertTrigger.run(
+        triggerId,
+        input.eventId,
+        target.sessionId,
+        subscription.id,
+        target.generation,
+        proactiveTriggerCommandId({
+          sourceSessionId: event.source_session_id,
+          triggerId,
+        }),
+        subscription.prompt,
+        input.now,
+        input.now,
+      );
+      if (result.changes > 0) triggerIds.push(triggerId);
+    }
+  }
+  return triggerIds;
+}
+
+/**
+ * 近窗内「没有任何 trigger」的事件（物化候选）。
+ *
+ * 有 trigger（含 rejected/delivered）即视为已处理——物化只发生在「发布时订阅者
+ * 还没声明」的窗口；此后新声明的订阅不追溯旧事件（订阅是向前看的契约）。
+ */
+export function unmatchedProactiveEvents(
+  db: DatabaseSync,
+  input: { workspaceKey?: string; sinceMs: number; now: number; limit?: number },
+): ProactiveEventRecord[] {
+  // 参数顺序与 SQL 中 ? 的出现顺序一致：since、now、[workspace]、limit。
+  const workspaceFilter = input.workspaceKey === undefined ? "" : " and e.workspace_key = ?";
+  const params: (string | number)[] = [input.sinceMs, input.now];
+  if (input.workspaceKey !== undefined) params.push(input.workspaceKey);
+  params.push(input.limit ?? 50);
+  const rows = db
+    .prepare(
+      `
+      select e.* from proactive_event e
+      where e.time_created >= ? and e.time_created <= ?
+        and not exists (select 1 from proactive_trigger t where t.event_id = e.id)
+        ${workspaceFilter}
+      order by e.time_created, e.rowid
+      limit ?
+      `,
+    )
+    .all(...params) as unknown as ProactiveEventRow[];
+  return rows.map(decodeEventRow);
+}
+
+/**
  * 认领一批待派发 trigger（单消费者）。
  *
  * 租约过期或 retry_at 已到期的 pending 行都可以被认领——进程崩溃留下的 dispatching 行

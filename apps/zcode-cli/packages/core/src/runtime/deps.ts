@@ -182,6 +182,7 @@ export type {
   SessionInfo,
   SessionMailboxEnvelope,
   SessionMailboxPort,
+  ProactiveStorePort,
   SessionModePort,
   StreamRecoveryAnchorPayload,
   StreamingToolExecutionTiming,

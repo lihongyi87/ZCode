@@ -69,4 +69,27 @@ export interface ProactiveStorePort {
     targetSessionId: string;
     state?: ProactiveTriggerState;
   }): ProactiveTriggerRecord[];
+
+  /**
+   * P2 事件物化：为已存在的事件按「当前」订阅补生成 trigger。
+   * 发布者（runtime/cron）不知道订阅者，dispatcher 轮询时枚举订阅并物化；
+   * 幂等由 (event,target,subscription) 唯一索引承担。
+   */
+  materializeProactiveTriggers(input: {
+    eventId: string;
+    now: number;
+    targets: readonly {
+      sessionId: string;
+      subscriptions: readonly ProactiveSubscription[];
+      generation: number;
+    }[];
+  }): readonly string[];
+
+  /** 近窗内无任何 trigger 的事件（物化候选）。 */
+  unmatchedProactiveEvents(input: {
+    workspaceKey?: string;
+    sinceMs: number;
+    now: number;
+    limit?: number;
+  }): ProactiveEventRecord[];
 }

@@ -31,6 +31,9 @@ export function openProactiveStore(): { store: ProactiveStorePort; close(): void
       repo.cancelProactiveTriggersForSession(db, input),
     proactiveTriggersForSession: (input) =>
       repo.proactiveTriggersForSession(db, input),
+    materializeProactiveTriggers: (input) =>
+      repo.materializeProactiveTriggers(db, input),
+    unmatchedProactiveEvents: (input) => repo.unmatchedProactiveEvents(db, input),
   };
   return { store, close: () => db.close() };
 }

@@ -40,6 +40,7 @@ import {
   createSessionEvent,
   type ExecutionShellSelection,
   type MessageId,
+  type ProactiveStorePort,
 } from "@zcode/contracts";
 import { isRemoteWorkspaceIdentity, resolveZCodeRuntimeEnv } from "@zcode/shared";
 import {
@@ -861,6 +862,13 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       eventStore: options.eventStore ?? createInMemorySessionEventStore(),
       sessionStore,
       sessionMailboxPort,
+      // spec 154 P2：sessionStore 实现 ProactiveStorePort 时把持久面交给 runtime，
+      // turn 终态发布 task_completed/task_failed（事实记录，订阅匹配由宿主物化）。
+      proactiveStore:
+        sessionStore &&
+        typeof (sessionStore as Partial<ProactiveStorePort>).publishProactiveEvent === "function"
+          ? (sessionStore as unknown as ProactiveStorePort)
+          : undefined,
       lspPort,
       logger,
       executionPort,

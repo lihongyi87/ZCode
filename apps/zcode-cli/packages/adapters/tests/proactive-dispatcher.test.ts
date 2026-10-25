@@ -195,3 +195,80 @@ describe("runProactiveDispatcherTick", () => {
     ).toBe("delivered");
   });
 });
+
+
+describe("runProactiveDispatcherTick P2 事件物化", () => {
+  it("task_completed 事件被当前订阅物化并注入", async () => {
+    const store = openStore();
+    // runtime 已发布 task_completed（targets 空）。
+    store.publishProactiveEvent({
+      eventId: "task:sess_source:turn_9:task_completed",
+      workspaceKey: "ws-1",
+      sourceSessionId: "sess_source",
+      eventType: "task_completed",
+      sourceCommandId: "turn:sess_source:turn_9",
+      depth: 0,
+      now: NOW,
+      targets: [],
+    });
+
+    const deliverPrompt = vi.fn(async () => undefined);
+    const deps = {
+      store,
+      now: () => NOW + 5_000,
+      listWorkspaces: () => [{ workspaceKey: "ws-1", targetSessionIds: ["sess_target"] }],
+      readOrchestrationState: () => ({
+        subscriptions: [
+          { id: "sub-t", event: "task_completed", sourceId: "sess_source", prompt: "上游完成了，收尾" },
+        ],
+        generation: 1,
+        status: "running" as const,
+      }),
+      peekMessages: async () => [],
+      deliverPrompt,
+      isProactiveWorkAllowed: () => true,
+    };
+    const result = await runProactiveDispatcherTick(deps);
+
+    expect(result.materializedEvents).toBe(1);
+    expect(result.delivered).toBe(1);
+    expect(deliverPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: "上游完成了，收尾" }),
+    );
+    // 下一轮：事件已有 trigger，不再物化。
+    const second = await runProactiveDispatcherTick(deps);
+    expect(second.materializedEvents).toBe(0);
+  });
+
+  it("缺 sourceCommandId 的事件不物化（来源不明不唤醒）", async () => {
+    const store = openStore();
+    store.publishProactiveEvent({
+      eventId: "task:sess_source:turn_bad:task_failed",
+      workspaceKey: "ws-1",
+      sourceSessionId: "sess_source",
+      eventType: "task_failed",
+      depth: 0,
+      now: NOW,
+      targets: [],
+    });
+    const deliverPrompt = vi.fn(async () => undefined);
+    const deps = {
+      store,
+      now: () => NOW + 5_000,
+      listWorkspaces: () => [{ workspaceKey: "ws-1", targetSessionIds: ["sess_target"] }],
+      readOrchestrationState: () => ({
+        subscriptions: [
+          { id: "sub-f", event: "task_failed", sourceId: "sess_source", prompt: "善后" },
+        ],
+        generation: 1,
+        status: "running" as const,
+      }),
+      peekMessages: async () => [],
+      deliverPrompt,
+      isProactiveWorkAllowed: () => true,
+    };
+    const result = await runProactiveDispatcherTick(deps);
+    expect(result.materializedEvents).toBe(0);
+    expect(deliverPrompt).not.toHaveBeenCalled();
+  });
+});

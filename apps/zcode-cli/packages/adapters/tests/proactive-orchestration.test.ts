@@ -9,6 +9,8 @@ import { SQLITE_MIGRATIONS } from "../src/storage/session-store/migrations.js";
 import {
   cancelProactiveTriggersForSession,
   claimProactiveTriggers,
+  materializeProactiveTriggers,
+  unmatchedProactiveEvents,
   proactiveDepthForSource,
   proactiveTriggersForSession,
   publishProactiveEvent,
@@ -308,5 +310,116 @@ describe("canProactivelyWake", () => {
   it("超深与非法深度被拒", () => {
     expect(canProactivelyWake({ sourceCommandId: "cmd-1", depth: 9 })).toBe(false);
     expect(canProactivelyWake({ sourceCommandId: "cmd-1", depth: -1 })).toBe(false);
+  });
+});
+
+
+describe("P2 事件物化（materialize/unmatched）", () => {
+  it("targets 空发布的事件可被后声明的订阅物化", () => {
+    const db = openDb();
+    // runtime 发布 task_completed：事实记录，无订阅者。
+    publishProactiveEvent(db, {
+      eventId: "task:sess_src:turn_1:task_completed",
+      workspaceKey: "ws-1",
+      sourceSessionId: "sess_source",
+      eventType: "task_completed",
+      sourceCommandId: "turn:sess_src:turn_1",
+      depth: 0,
+      now: NOW,
+      targets: [],
+    });
+    const unmatched = unmatchedProactiveEvents(db, { sinceMs: NOW - 1000, now: NOW + 10, limit: 10 });
+    expect(unmatched).toHaveLength(1);
+    expect(unmatched[0].eventType).toBe("task_completed");
+
+    // 此后会话声明了订阅 → dispatcher 物化。
+    const triggerIds = materializeProactiveTriggers(db, {
+      eventId: "task:sess_src:turn_1:task_completed",
+      now: NOW + 20,
+      targets: [
+        {
+          sessionId: "sess_target",
+          generation: 1,
+          subscriptions: [
+            { id: "sub-t", event: "task_completed", sourceId: "sess_source", prompt: "收尾" },
+          ],
+        },
+      ],
+    });
+    expect(triggerIds).toHaveLength(1);
+    // 物化后不再出现在 unmatched。
+    expect(
+      unmatchedProactiveEvents(db, { sinceMs: NOW - 1000, now: NOW + 30, limit: 10 }),
+    ).toHaveLength(0);
+  });
+
+  it("物化幂等：重复调用零新增", () => {
+    const db = openDb();
+    publishProactiveEvent(db, {
+      eventId: "task:sess_src:turn_2:task_failed",
+      workspaceKey: "ws-1",
+      sourceSessionId: "sess_source",
+      eventType: "task_failed",
+      sourceCommandId: "turn:sess_src:turn_2",
+      depth: 0,
+      now: NOW,
+      targets: [],
+    });
+    const targets = [
+      {
+        sessionId: "sess_target",
+        generation: 1,
+        subscriptions: [
+          { id: "sub-f", event: "task_failed", sourceId: "sess_source", prompt: "善后" },
+        ],
+      },
+    ];
+    expect(materializeProactiveTriggers(db, { eventId: "task:sess_src:turn_2:task_failed", now: NOW + 1, targets })).toHaveLength(1);
+    expect(materializeProactiveTriggers(db, { eventId: "task:sess_src:turn_2:task_failed", now: NOW + 2, targets })).toHaveLength(0);
+  });
+
+  it("订阅的 sourceId 不匹配事件源时不物化", () => {
+    const db = openDb();
+    publishProactiveEvent(db, {
+      eventId: "task:sess_other:turn_3:task_completed",
+      workspaceKey: "ws-1",
+      sourceSessionId: "sess_other",
+      eventType: "task_completed",
+      sourceCommandId: "turn:sess_other:turn_3",
+      depth: 0,
+      now: NOW,
+      targets: [],
+    });
+    const triggerIds = materializeProactiveTriggers(db, {
+      eventId: "task:sess_other:turn_3:task_completed",
+      now: NOW + 1,
+      targets: [
+        {
+          sessionId: "sess_target",
+          generation: 1,
+          subscriptions: [
+            { id: "sub-x", event: "task_completed", sourceId: "sess_source", prompt: "p" },
+          ],
+        },
+      ],
+    });
+    expect(triggerIds).toHaveLength(0);
+  });
+
+  it("回看窗口外的事件不再物化", () => {
+    const db = openDb();
+    publishProactiveEvent(db, {
+      eventId: "task:sess_src:turn_old:task_completed",
+      workspaceKey: "ws-1",
+      sourceSessionId: "sess_source",
+      eventType: "task_completed",
+      sourceCommandId: "turn:sess_src:turn_old",
+      depth: 0,
+      now: NOW - 2 * 60 * 60 * 1000,
+      targets: [],
+    });
+    expect(
+      unmatchedProactiveEvents(db, { sinceMs: NOW - 60 * 60 * 1000, now: NOW, limit: 10 }),
+    ).toHaveLength(0);
   });
 });

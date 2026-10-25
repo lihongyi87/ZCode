@@ -141,8 +141,24 @@ depth=0)→ settle。
 (跨区认领);dispatcher eventId 未含目标维度(多目标幂等跳过);writeSubscriptions
 新写缺省 paused 与工具缺省 running 分叉(写入后永远不派发)。
 
-**P2/P3 未开始**:automation_due/task_completed/task_failed 三事件、编排模式
-工具面选型、同意开关 UI。
+**P2 已实现(2026-10-25)——三事件生命周期溯源**:
+
+- 事件发布与订阅匹配分离:发布者(runtime/automation 入口)只记事实(targets 空),
+  dispatcher tick 物化环节按「当前」订阅补生成 trigger(仓储 materialize/
+  unmatched,唯一索引幂等,回看窗口 1h——订阅是向前看的契约,不追溯旧事件)。
+- `task_completed`/`task_failed`:`recordTurnUsageFact`(turn 终态统一收口)发布,
+  completed/error 分别对应,cancelled 不发布(用户中止既非完成也非失败);
+  deps.proactiveStore 由 create-app feature-detect 注入,发布失败只记 warn。
+- `automation_due`:automation 到点派发 turn 时(server-operations 的
+  activeAutomationId 分支)发布,eventId 以 runId 幂等。
+- 物化护栏:事件同样过 canProactivelyWake(缺 sourceCommandId 不物化)。
+- 测试:仓储 4 例(dispatcher 11 例含物化端到端/runtime 5 例),全量 75 例绿。
+
+**P2-B 编排模式(coordinator/swarm)不做**(2026-10-25 裁决):现有 Agent 工具
+(派单)+SendMessage(成员互发)已覆盖 coordinator/swarm 的能力本体;飞鱼差异仅在
+「工具面按角色收窄」(swarm 成员隐藏 Agent 成员名参数),需要 subagent 参数
+schema 动态化,影响面大而无当期用例。重启条件:多会话编排实际使用中出现
+成员误用协调者工具的真实事故。
 
 ## 非目标
 

@@ -35,6 +35,7 @@ import type {
   SessionId,
   SessionProjection,
   SessionStorePort,
+  ProactiveStorePort,
   SessionTitleSource,
   SessionGoal,
   SavedWorkflowScope,
@@ -229,6 +230,7 @@ export class AgentRuntime {
   private workingDirectory: string;
   private workspaceRoot: string;
   private sessionStore?: SessionStorePort;
+  proactiveStore?: ProactiveStorePort;
   private sessionPersisted = false;
   private needsPlanModeExitReminder = false;
   private latestConversationMessageId?: MessageId;
@@ -310,6 +312,7 @@ export class AgentRuntime {
     this.eventReducer = new EventReducer();
     this.eventStore = deps.eventStore;
     this.sessionStore = deps.sessionStore;
+    this.proactiveStore = deps.proactiveStore;
     this.rootTraceContext = deps.traceContext ?? createRootTraceContext({ sessionId });
     this.appVersion = deps.appVersion ?? "0.0.0";
     this.logger = deps.logger?.child({

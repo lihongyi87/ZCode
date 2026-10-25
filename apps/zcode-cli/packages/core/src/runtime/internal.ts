@@ -13,6 +13,7 @@ import type {
   SessionMailboxPort,
   LspPort,
   SessionStorePort,
+  ProactiveStorePort,
   ContextSourcePort,
   ContextSourceSnapshot,
   ExecutionPort,
@@ -153,6 +154,8 @@ export interface AgentRuntimeInternal
   workspaceRoot: string;
   sessionStore?: SessionStorePort;
   sessionMailboxPort?: SessionMailboxPort;
+  /** spec 154 P2：在场时 turn 终态发布 task_completed/task_failed 事件。 */
+  proactiveStore?: ProactiveStorePort;
   lspPort?: LspPort;
   sessionPersisted: boolean;
   needsPlanModeExitReminder: boolean;

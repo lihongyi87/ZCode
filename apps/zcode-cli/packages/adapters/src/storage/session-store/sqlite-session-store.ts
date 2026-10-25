@@ -684,6 +684,12 @@ export class SqliteSessionStore
   proactiveTriggersForSession: ProactiveStorePort["proactiveTriggersForSession"] = (input) =>
     proactiveRepository.proactiveTriggersForSession(this.db, input);
 
+  materializeProactiveTriggers: ProactiveStorePort["materializeProactiveTriggers"] = (input) =>
+    proactiveRepository.materializeProactiveTriggers(this.db, input);
+
+  unmatchedProactiveEvents: ProactiveStorePort["unmatchedProactiveEvents"] = (input) =>
+    proactiveRepository.unmatchedProactiveEvents(this.db, input);
+
   // ── session_input 账本──
 
   async saveSessionInput(input: {

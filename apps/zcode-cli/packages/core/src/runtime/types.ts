@@ -64,6 +64,7 @@ import type {
   SessionId,
   SessionTaskType,
   SessionMailboxPort,
+  ProactiveStorePort,
   SessionProjection,
   SessionStorePort,
   ContextSourcePort,
@@ -362,6 +363,11 @@ export interface AgentRuntimeDeps {
   eventStore: SessionEventStorePort;
   sessionStore?: SessionStorePort;
   sessionMailboxPort?: SessionMailboxPort;
+  /**
+   * spec 154 P2：主动编排持久面。在场时 runtime 于 turn 终态发布
+   * task_completed/task_failed 事件（事实记录，幂等；订阅匹配由宿主 dispatcher 物化）。
+   */
+  proactiveStore?: ProactiveStorePort;
   modelFactory: RuntimeModelFactory;
   /** 可选宿主能力：解析未来执行的显式意图；不用于修改已冻结 Model。 */
   resolveEffectiveModelSelection?: (selection: ModelSelection) => EffectiveModelSelectionResult;

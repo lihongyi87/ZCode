@@ -198,6 +198,54 @@ export async function recordTurnUsageFact(
       status: "failed",
     });
   }
+
+  await publishTurnLifecycleProactiveEvent(runtime, input);
+}
+
+/**
+ * spec 154 P2：turn 终态发布 task_completed/task_failed 事件。
+ *
+ * 这里只记录事实（幂等 eventId，targets 空）——订阅者是谁、要不要唤醒，由宿主
+ * dispatcher 的物化环节决定。cancelled 不发布：用户主动中止既非完成也非失败，
+ * 不该触发「任务失败→唤醒善后」类订阅。
+ *
+ * depth 固定 0：turn 生命周期事实由会话自身产生；唤醒链的深度递增在后续
+ * mailbox 互发时由 spec 149 的 depth 传递承担，两套链不混算。
+ */
+async function publishTurnLifecycleProactiveEvent(
+  runtime: AgentRuntimeInternal,
+  input: RecordTurnUsageInput,
+): Promise<void> {
+  const proactiveStore = runtime.proactiveStore;
+  if (!proactiveStore) return;
+  if (input.status !== "completed" && input.status !== "error") return;
+
+  try {
+    const session = await runtime.sessionStore?.getSession?.(runtime.sessionId);
+    const workspaceKey = session?.directory ?? runtime.workspaceRoot;
+    if (!workspaceKey) return;
+    const eventType = input.status === "completed" ? "task_completed" : "task_failed";
+    proactiveStore.publishProactiveEvent({
+      eventId: `task:${runtime.sessionId}:${input.turnId}:${eventType}`,
+      workspaceKey,
+      sourceSessionId: runtime.sessionId,
+      eventType,
+      // 锚点非空即可唤醒（canProactivelyWake 只要求在场）；turn 维度唯一保证幂等。
+      sourceCommandId: `turn:${runtime.sessionId}:${input.turnId}`,
+      depth: 0,
+      payload: { turnId: input.turnId, status: input.status },
+      now: input.completedAt,
+      targets: [],
+    });
+  } catch (error) {
+    // 事件发布是增强事实，失败不能影响 turn 收尾主链路。
+    runtime.logger?.warn("Proactive turn lifecycle publish failed", {
+      ...traceContextToLogContext(input.traceContext),
+      errorMessage: error instanceof Error ? error.message : String(error),
+      event: "proactive.turn.publish.failed",
+      module: "core.runtime",
+    });
+  }
 }
 
 export async function recordToolUsageFromEvent(
