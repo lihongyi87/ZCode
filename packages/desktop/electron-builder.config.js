@@ -19,6 +19,7 @@ import { noticesFileName, stageElectronNotices } from "../../scripts/third-party
 import { resolveNativeSearchReleasePlan } from "../../scripts/native-search-tools-config.mjs";
 import { getBuildMetadata } from "./scripts/build-metadata.mjs";
 import { collectRuntimeModuleClosureEntries } from "./scripts/runtime-dependency-closure.mjs";
+import { collectNodeRuntimeBareImports } from "./scripts/node-runtime-imports.mjs";
 import {
   assertPackagedNodePtyPayloadVerified,
   restoreTargetNodePtyPrebuild,
@@ -219,6 +220,12 @@ const REQUIRED_ASAR_RUNTIME_MODULES = [
   // 要到 bundle 校验阶段才报「缺少运行时依赖 pend」。这里以 yauzl 作为闭包根注入，
   // 与 bundle.mjs 的校验名单保持一致，让递归依赖收集把 pend 一起补进产物。
   "yauzl",
+  // yaml 在 tsup 里是外部依赖（services 技能/设置同步/终端配置等 ESM import 保留运行时边界），
+  // 因此 app.asar 必须真的带上它。2026-10-25 实测出包：collector 漏收 yaml（asar 里只有
+  // 传递依赖 js-yaml，解析不到 `yaml`），已安装应用主进程启动即报
+  // ERR_MODULE_NOT_FOUND: Cannot find package 'yaml'。yaml v2 是零依赖叶子包，
+  // 显式注入即可让 main/host/scheduler 产物稳定解析。
+  "yaml",
   // 生产态里 ssh2 虽然被打进 app.asar，但它的依赖链偶发被 electron-builder 漏拷。
   // 已出现线上报错 Cannot find module 'asn1'（Require stack: ssh2 keyParser）。
   // 这里把 ssh2 关键依赖链一起注入，避免远程 SSH 连接在已安装应用里因缺包直接失败。
@@ -256,6 +263,42 @@ const REQUIRED_ASAR_RUNTIME_MODULES = [
   // 拷入 staging 后由下方按平台裁剪保留目标 prebuild，再交给重打包产出 unpacked sidecar。
   "node-pty",
 ];
+/**
+ * 注入清单 = 手写兜底清单 ∪ 产物里实际保留的裸 import 包。
+ *
+ * 手写清单只能覆盖"曾经踩过"的包，而 tsup 把某个依赖改成 external 后，包名只会出现在
+ * 产物 import 里、不会出现在任何清单中——2026-10-25 连续踩到 yaml 与 @arms/rum-electron
+ * 两个同等形态的漏包，主进程启动即 ERR_MODULE_NOT_FOUND。这里改为以构建产物为准自动扩展：
+ * 产物里还在裸 import 的包必然要求 app.asar 内有同名包，扫描结果直接并入注入集合，
+ * 手写清单继续保留（覆盖运行时动态 require、产物扫描看不见的模块，如 pngjs/ms/electron-updater）。
+ */
+function resolveRequiredAsarRuntimeModules() {
+  let detected = [];
+  try {
+    detected = collectNodeRuntimeBareImports(desktopPackageRoot);
+  } catch (error) {
+    // 产物缺失时不要让 inject 阶段直接失败：手写清单照常注入，
+    // 由 bundle 阶段的机械校验把真正的缺包拦下来。
+    console.warn(
+      `[afterPack] failed to scan desktop node outputs for bare imports, fall back to static list: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  const merged = [...REQUIRED_ASAR_RUNTIME_MODULES];
+  const seen = new Set(merged);
+  for (const moduleName of detected) {
+    if (seen.has(moduleName)) {
+      continue;
+    }
+    seen.add(moduleName);
+    merged.push(moduleName);
+  }
+  if (detected.length > 0) {
+    console.log(`[afterPack] required runtime modules resolved=${merged.length} detected=${detected.length}`);
+  }
+  return merged;
+}
 // pacman 依赖必须使用 Arch 官方仓库中的包名。electron-builder 的历史默认集合包含
 // 已移除的 libappindicator-gtk3/http-parser，且缺少 Electron 实际需要的运行库；显式
 // 维护最小运行时闭包，避免 pacman -U 无法解析依赖或启动时才暴露缺库。
@@ -412,7 +455,7 @@ function resolveMissingRuntimeModules(appAsarPath) {
   const asarEntrySet = new Set(asarEntries);
 
   const runtimeModules = collectRuntimeModuleClosureEntries(
-    REQUIRED_ASAR_RUNTIME_MODULES,
+    resolveRequiredAsarRuntimeModules(),
     runtimeModuleLookupRoots,
   );
   const resolvableRuntimeModules = runtimeModules.filter((entry) => {

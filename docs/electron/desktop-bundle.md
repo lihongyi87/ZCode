@@ -114,9 +114,17 @@ ZCODE_SKIP_PREPARE=1 ZCODE_SKIP_BUILD=1 pnpm bundle:desktop
   JS/CSS `sourceMappingURL` 注释。原因是 electron-builder 的 `files` 裁剪只能覆盖主包文件，
   afterPack 运行时依赖注入、`app.asar.unpacked` 和 `extraResources` 仍可能重新带入第三方
   sourcemap 尾注。
-- `packages/desktop/scripts/bundle.mjs` 的 `requiredRuntimeModules`（产物机械校验）必须是
-  `packages/desktop/electron-builder.config.js` 的 `REQUIRED_ASAR_RUNTIME_MODULES`（afterPack 注入）
-  的子集。原因是校验只判断模块在不在 app.asar 里，真正把依赖闭包补进产物的是 afterPack 注入；
-  只加校验不加注入时，没有任何环节负责补齐该模块的子依赖，只能等打包末尾失败。
-  注入名单按 `package.json` 依赖闭包递归展开，已在产物里的模块会被跳过，重复登记不会改变产物。
+- 运行时外置包的注入范围由 `resolveRequiredAsarRuntimeModules()`
+  （`electron-builder.config.js`）与 `resolveRequiredRuntimeModules()`（`bundle.mjs`）共同决定，
+  两者都是「手写兜底清单 ∪ `scripts/node-runtime-imports.mjs` 扫 `out/{main,host,scheduler,preload}`
+  得到的产物裸 import 包」。产物扫描是权威来源：凡是产物里仍以裸说明符 import 的包，
+  必然要求 app.asar 存在同名包；手写清单只兜住产物扫描看不见的部分（运行时动态 `require`、
+  以及 `pngjs`/`ms` 这类间接依赖）。两份清单必须同源同口径，否则校验会放过坏包。
+- 编排顺序（缺一不可）：`tsup` 把包外置 → afterPack 注入依赖闭包 → `bundle.mjs` 机械校验。
+  注入按 `package.json` 依赖闭包递归展开，已在产物里的模块会被跳过，重复登记不改变产物。
+  只加校验不加注入时没有任何环节负责补齐子依赖，只能等打包末尾失败。
+- 2026-10-25 实测的漏包形态：collector 在 pnpm hoisted 布局下整盘失效（日志里 `npm error
+  missing:` 列出全部依赖），此时唯一兜底就是上面的注入清单。当天连续漏了 `yaml` 与
+  `@arms/rum-electron` 两个包，都是「产物裸 import + 无人登记」，安装后主进程启动即
+  `ERR_MODULE_NOT_FOUND`。这正是把清单从纯手写改成产物扫描驱动的直接原因。
 - 开发态仍保留 tsup sourcemap，方便本地调试 main/host/preload；生产态不生成也不暴露 sourcemap。

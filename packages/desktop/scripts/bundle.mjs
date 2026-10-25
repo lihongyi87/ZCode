@@ -12,6 +12,7 @@ import process from "node:process";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { collectRuntimeModuleClosureEntries } from "./runtime-dependency-closure.mjs";
+import { collectNodeRuntimeBareImports } from "./node-runtime-imports.mjs";
 import { resolveDesktopProductIdentity } from "./desktop-product-identity.mjs";
 import {
   findDesktopNativePackageViolations,
@@ -118,6 +119,11 @@ const requiredRuntimeModules = [
   // 与 tsup external 对齐，保留 ZIP 解包器的 CommonJS 运行时边界。
   "yazl",
   "yauzl",
+  // yaml 在 tsup 里是外部依赖，漏打时主进程启动即抛
+  // ERR_MODULE_NOT_FOUND: Cannot find package 'yaml'（2026-10-25 实测出包踩中，
+  // collector 只带进了传递依赖 js-yaml，解析不到 `yaml`）。纳入机械校验，
+  // 让 bundle 阶段就把缺 yaml 的坏包拦下来。
+  "yaml",
   // ssh2 的关键依赖链（asn1/bcrypt-pbkdf/tweetnacl）若缺失，
   // 连接远程 workspace 时会在 keyParser 阶段直接抛 MODULE_NOT_FOUND。
   // 这里把 ssh2 关键依赖链纳入机械校验，避免坏包流出。
@@ -140,6 +146,37 @@ const requiredRuntimeModules = [
   "@opentelemetry/sdk-trace-base",
   "electron-updater",
 ];
+/**
+ * 校验名单 = 手写兜底清单 ∪ 产物里实际保留的裸 import 包。
+ *
+ * 与 electron-builder.config.js 的 resolveRequiredAsarRuntimeModules 同口径：手写清单只覆盖
+ * 曾踩坑/动态 require 的包，产物扫描负责兜住"tsup 新改成 external 但没人登记"的包。
+ * 2026-10-25：yaml 与 @arms/rum-electron 都是产物裸 import、却不在任何清单里，
+ * 于是打包全绿、安装后主进程启动才报 ERR_MODULE_NOT_FOUND。校验必须与注入同源，
+ * 否则仍会放过坏包。
+ */
+function resolveRequiredRuntimeModules() {
+  let detected = [];
+  try {
+    detected = collectNodeRuntimeBareImports(desktopRoot);
+  } catch (error) {
+    console.warn(
+      `[bundle] failed to scan node outputs for bare imports, fall back to static list: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  const merged = [...requiredRuntimeModules];
+  const seen = new Set(merged);
+  for (const moduleName of detected) {
+    if (seen.has(moduleName)) {
+      continue;
+    }
+    seen.add(moduleName);
+    merged.push(moduleName);
+  }
+  return merged;
+}
 const electronBuilderRetryCount = 3;
 const electronBuilderRetryDelayMs = 5_000;
 const electronBuilderHeartbeatIntervalMs = 30_000;
@@ -691,7 +728,7 @@ function verifyPackagedRuntimeDependencies(os, arch) {
   }
 
   const runtimeModules = collectRuntimeModuleClosureEntries(
-    requiredRuntimeModules,
+    resolveRequiredRuntimeModules(),
     runtimeModuleLookupRoots,
   );
   const resolvableRuntimeModules = runtimeModules.filter((entry) => {
