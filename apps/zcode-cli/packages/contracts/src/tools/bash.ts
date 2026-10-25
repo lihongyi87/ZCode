@@ -56,10 +56,15 @@ export const BashInputSchema = z
     description: z.string().optional().describe(BASH_DESCRIPTION_FIELD_PROMPT),
     /**
      * Set to true to run this command in the background. Use Read to read the output later.
+     * Prefer this over long foreground waits: pure `sleep` commands of 60s or more are
+     * auto-backgrounded anyway, and long builds/tests should run in background with
+     * TaskOutput polling instead of holding the turn.
      */
     run_in_background: semanticBoolean()
       .optional()
-      .describe("Set to true to run this command in the background."),
+      .describe(
+        "Set to true to run this command in the background. Use Read to read the output later. Prefer this for long waits (builds, tests, pure sleep ≥60s): foreground long waits block the whole turn.",
+      ),
     /**
      * Set this to true to dangerously override sandbox mode and run commands without sandboxing.
      */

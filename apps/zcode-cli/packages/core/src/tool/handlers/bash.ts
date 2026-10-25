@@ -68,7 +68,7 @@ import {
   isRuntimeReadOnlyBashCommand,
   type BashPermissionMatcher,
 } from "./bash-semantics.js";
-import { isBashAutoBackgroundEligible } from "./bash-background-policy.js";
+import { isBashAutoBackgroundEligible, isPureWaitBashCommand } from "./bash-background-policy.js";
 import { supportsBashBackgroundLifecycle } from "./bash-background-lifecycle.js";
 import { resolveBashPermissionRulePolicy } from "./bash-command-permission-policy.js";
 import {
@@ -185,17 +185,31 @@ async function executeBashHandler(
     return emptyBashOutput(parsed);
   }
 
-  const request = createExecutionRequest(parsed, context, timeoutPolicy);
+  // 纯等待命令(spec 156):sleep ≥60s 的唯一作用是消耗时间,前台持有整个 turn
+  // 的执行槽没有任何收益。在入口等价改写为 run_in_background,与模型显式传
+  // run_in_background 完全同路(request 输出限制、explicit 生命周期、后台结果文案
+  // 全部一致);模型立刻拿到 backgrounded+taskId,继续其他工作或用 TaskOutput 回收。
+  // 必须以 supportsBashBackgroundLifecycle 为前提:不支持后台的 port 上保持前台
+  // 语义,否则下面 run_in_background 的 ConfigurationError 会把原本能跑的 sleep 打断。
+  const effectiveParsed =
+    !parsed.run_in_background &&
+    supportsBashBackgroundLifecycle(executionPort) &&
+    isPureWaitBashCommand(parsed.command)
+      ? { ...parsed, run_in_background: true }
+      : parsed;
+
+  const request = createExecutionRequest(effectiveParsed, context, timeoutPolicy);
   const progressTiming: BashProgressTiming = {};
-  const commandTelemetry = startBashCommandTelemetry(parsed, context);
+  const commandTelemetry = startBashCommandTelemetry(effectiveParsed, context);
   const runOptions = createExecutionRunOptions(context, progressTiming, commandTelemetry);
   // 闲时后台归属由 Runtime 生命周期保留，Bash 复用普通显式/超时后台路径。
-  const eligibleForAutoBackground = isBashAutoBackgroundEligible(parsed);
+  // effectiveParsed 承载 spec 156 的改写结果,后续全部分支都以它为准。
+  const eligibleForAutoBackground = isBashAutoBackgroundEligible(effectiveParsed);
   const backgroundLifecyclePort = supportsBashBackgroundLifecycle(executionPort)
     ? executionPort
     : undefined;
 
-  if (parsed.run_in_background && !backgroundLifecyclePort) {
+  if (effectiveParsed.run_in_background && !backgroundLifecyclePort) {
     throw createCoreError(
       CoreErrorType.ConfigurationError,
       "ExecutionPort does not support the Bash background lifecycle",
@@ -210,7 +224,7 @@ async function executeBashHandler(
   }
 
   const runCommand = async () =>
-    parsed.run_in_background && backgroundLifecyclePort
+    effectiveParsed.run_in_background && backgroundLifecyclePort
       ? backgroundLifecyclePort.runBashWithBackgroundLifecycle(
           request,
           { mode: "explicit" },
@@ -239,7 +253,7 @@ async function executeBashHandler(
     : await runCommand();
 
   if (runResult.kind === "backgrounded") {
-    return toBackgroundedBashOutput(runResult.task, parsed);
+    return toBackgroundedBashOutput(runResult.task, effectiveParsed);
   }
 
   const result = runResult.result;

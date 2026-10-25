@@ -1288,6 +1288,73 @@ describe("bashHandler", () => {
     expect(output.interrupted).toBe(false);
   });
 
+  it("纯等待 sleep ≥60s 自动转后台（spec 156）", async () => {
+    let capturedMode: string | undefined;
+    let capturedRequest: ExecutionRequest | undefined;
+    const runBashWithBackgroundLifecycle = vi.fn(
+      async (request: ExecutionRequest, lifecycle: { mode: "explicit" | "auto_on_timeout" }) => {
+        capturedMode = lifecycle.mode;
+        capturedRequest = request;
+        return {
+          kind: "backgrounded" as const,
+          task: {
+            taskId: "exec_pure_wait",
+            status: "running" as const,
+            startedAt: new Date(),
+            outputPath: "/tmp/exec_pure_wait-stdout.log",
+            stdoutPersistedOutputPath: "/tmp/exec_pure_wait-stdout.log",
+            stderrPersistedOutputPath: "/tmp/exec_pure_wait-stderr.log",
+          },
+        };
+      },
+    );
+    const executionPort: BashBackgroundLifecycleExecutionPort = {
+      async run() {
+        throw new Error("run should not be called");
+      },
+      runBashWithBackgroundLifecycle,
+    };
+
+    const output = (await bashHandler(
+      { command: "sleep 240" } satisfies BashInput,
+      contextWith(executionPort),
+    )) as BashOutput;
+
+    expect(runBashWithBackgroundLifecycle).toHaveBeenCalledTimes(1);
+    expect(capturedMode).toBe("explicit");
+    // 后台模式的请求特征:不做成功后 cwd 捕获(与显式 run_in_background 同路)。
+    expect(capturedRequest?.captureCwdAfterSuccess).toBeUndefined();
+    expect(output.status).toBe("backgrounded");
+    expect(output.backgroundTaskId).toBe("exec_pure_wait");
+  });
+
+  it("短 sleep 不自动转后台，保持前台", async () => {
+    const run = vi.fn(async () => executionResult({ status: "completed", exitCode: 0 }));
+    const runBashWithBackgroundLifecycle = vi.fn();
+    const executionPort: BashBackgroundLifecycleExecutionPort = {
+      run,
+      runBashWithBackgroundLifecycle,
+    };
+
+    await bashHandler({ command: "sleep 45" } satisfies BashInput, contextWith(executionPort));
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(runBashWithBackgroundLifecycle).not.toHaveBeenCalled();
+  });
+
+  it("不支持后台生命周期的 port 上 sleep ≥60s 保持前台，不抛错", async () => {
+    const run = vi.fn(async () => executionResult({ status: "completed", exitCode: 0 }));
+    const executionPort: ExecutionPort = { run };
+
+    const output = (await bashHandler(
+      { command: "sleep 240" } satisfies BashInput,
+      contextWith(executionPort),
+    )) as BashOutput;
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(output.status).toBe("completed");
+  });
+
   it.each([
     { inputTimeout: undefined, expected: 250 },
     { inputTimeout: 0, expected: 250 },
