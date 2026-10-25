@@ -81,3 +81,4 @@ bench/.memory-recall-live-queries.json
 bench/.memory-recall-live-result.json
 # kb 探针 live 金标含知识库内部路径细节，不入公开库
 bench/.kb-recall-queries.json
+.lsp-real-server/

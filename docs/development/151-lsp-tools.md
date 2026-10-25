@@ -37,7 +37,13 @@ resolveWorkspacePath 归一,与 Edit/Read 同规则)。
   全链,断言位置返回与 1-based 往返;未配置语言的显式错误。
   (`adapters/tests/lsp-adapter.test.ts`,2/2;夹具还抓出并修复两个实现 bug:
   stdout 帧解析按行读导致末条响应滞留死锁、Windows 下 file URL→路径丢盘符。)
-- ⬜ 真实 typescript-language-server 手测(可选;本机未装该 server,如实声明未做)。
+- ✅ 真实 typescript-language-server 实测(2026-10-25,`lsp-real-server.test.ts`,
+  门控 ZCODE_LSP_SERVER_BIN):tsserver 6.0.3 + tls 6.0.2 下 definition/references/
+  rename 跨文件与 callHierarchy 全部通过。实测驱动两处打磨:① tsserver 返回小写
+  盘符,adapter 路径归一化补大写盘符;② tsserver 冷启动异步加载项目,首查可能拿到
+  不完整结果——真实 IDE 等项目就绪信号,最小适配层以有界轮询表达(测试内建
+  pollUntil;产品侧模型对不完整结果自然重试)。环境:scratch 装 typescript@6 +
+  typescript-language-server(.lsp-real-server/,gitignore)。
 - ✅ typecheck/lint/fmt/architecture 全绿;架构例外按治理登记
   (`architecture-policy.yaml` 的 lsp-semantic-tools 条)。
 - ✅ 批二(2026-10-25):LspReferences/LspCallHierarchy(只读零审批)+LspRename

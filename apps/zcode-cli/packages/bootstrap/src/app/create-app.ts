@@ -1,6 +1,7 @@
 import { subagentProfilesFromSnapshot } from "../runtime-subagents/index.js";
 import { CliDefaultSelection } from "./cli-default-selection.js";
 import { isAbsolute, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { tmpdir } from "node:os";
 import {
   createInMemorySessionEventStore,
@@ -407,6 +408,9 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
             { command: server.command, args: server.args },
           ]),
         ),
+        // 真 language server 需要项目根解析 tsconfig/跨文件引用;workingDirectory 即
+        // agent 的工作区根(pathToFileURL 转file:// URI)。
+        rootUri: pathToFileURL(workingDirectory).href,
       });
     const messageEnabled = isMessageEnabled(options.env ?? process.env);
     const sessionMailboxPort =

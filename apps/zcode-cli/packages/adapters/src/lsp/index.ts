@@ -34,6 +34,9 @@ export interface LspServerConfig {
 
 export interface NodeLspAdapterOptions {
   servers: Readonly<Record<string, LspServerConfig>>;
+  /** 工作区根(file:// URI)。真 language server 需要项目根才能解析 tsconfig/跨文件;
+   * 缺省 null(单文件推断项目,夹具与无根场景)。 */
+  rootUri?: string | null;
 }
 
 interface ServerSession {
@@ -51,6 +54,21 @@ export class NodeLspAdapter implements LspPort {
   private readonly sessions = new Map<string, ServerSession>();
 
   constructor(private readonly options: NodeLspAdapterOptions) {}
+
+  /** LSP initialize 的根参数:rootUri + workspaceFolders(现代 server 优先读后者)。 */
+  private initializeRoot(): Record<string, unknown> {
+    const rootUri = this.options.rootUri ?? null;
+    return {
+      rootUri,
+      ...(rootUri
+        ? {
+            workspaceFolders: [
+              { uri: rootUri, name: rootUri.replaceAll("\\", "/").split("/").pop() ?? "workspace" },
+            ],
+          }
+        : {}),
+    };
+  }
 
   availableLanguages(): readonly string[] {
     return Object.keys(this.options.servers);
@@ -237,8 +255,8 @@ export class NodeLspAdapter implements LspPort {
   private async initialize(session: ServerSession): Promise<void> {
     await this.request(session, "initialize", {
       processId: process.pid,
-      rootUri: null,
       capabilities: {},
+      ...this.initializeRoot(),
     });
     this.notify(session, "initialized", {});
   }
@@ -422,7 +440,13 @@ type pos = { line?: number; character?: number };
 function fileUrlToPath(uri: string): string {
   // 必须用官方转换:手写 new URL(uri).pathname 在 Windows 丢盘符处理("/C:/...")。
   try {
-    return nodeFileURLToPath(uri);
+    const path = nodeFileURLToPath(uri);
+    // tsserver 返回小写盘符(file:///c%3A/...),与调用方的大写盘符路径做相等比较会失败;
+    // Windows 文件系统大小写不敏感,统一归一为大写盘符。
+    if (/^[a-z]:/.test(path)) {
+      return path[0].toUpperCase() + path.slice(1);
+    }
+    return path;
   } catch {
     return uri;
   }
