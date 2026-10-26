@@ -278,6 +278,18 @@ describe("NodeLspAdapter (spec 151)", () => {
     expect(main?.edits[0]).toMatchObject({ line: 1, character: 17, endLine: 1, endCharacter: 23, newText: "renamed" });
   });
 
+  it("warmup 预启动 server 并完成握手(批三:消首次查询冷启动)", async () => {
+    const { fixturePath, logPath } = await setup();
+    const adapter = createNodeLspAdapter({
+      servers: { typescript: { command: process.execPath, args: [fixturePath, logPath] } },
+    });
+    const warmed = await adapter.warmup();
+    expect(warmed).toEqual(["typescript"]);
+    // 预热后日志里应已有 initialize 记录(握手完成,后续查询不再冷启动)
+    const entries = await readFile(logPath, "utf8");
+    expect(entries).toContain("initialize");
+  });
+
   it("未配置语言给出显式错误(不静默降级)", async () => {
     const { fixturePath, logPath, sourcePath } = await setup();
     const adapter = createNodeLspAdapter({
