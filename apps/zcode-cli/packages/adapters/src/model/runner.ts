@@ -222,6 +222,8 @@ export class AiSdkModelAdapter {
         responseJsonSchema: request.responseJsonSchema,
         abortSignal: request.abortSignal,
         maxOutputTokens: request.options.maxOutputTokens,
+        // spec 157:runtime-only 透传;resolveForRequest 仅对 DeepSeek provider 注入。
+        deepSeekSessionLog: request.deepSeekSessionLog,
         ...invocationContext,
         ...(shouldAttachReasoningTelemetry
           ? {

@@ -57,4 +57,5 @@ accept 幂等性由两侧共同保证:core 侧 transaction 有 `accepted` 闩(�
 
 - 单测 15 个:wire 打包 5(watermark 续传/截断/blockedAtSeq/seq 倒退防护/不可序列化)+ fold 增量 5(词表映射/全量/增量/失配全量重发/无新增跳过)+ fetch 注入 5(顶层注入/非 2xx 不 accept/accept 幂等/Request 对象路径/非 JSON 透传)。
 - 真端点 smoke:fold 产物两轮(全量+增量)全 200,accept 水印推进正确。
-- 开发中修掉的三个真 bug(测试断言先行就不会溜进主线):① 指纹锚定末条→追加即失配,永远全量重发(改链式前缀 hash);② 水印重置为 0 后 `seq > 0` 过滤把首条事件永远滤掉(改哨兵 -1 + wire afterSeq 归 0);③ pack 守卫把合法的首次全量(afterSeq=0+first.seq=0)当 fold 缺陷拒收(守卫仅在水位 >0 时生效)。
+- 全链 wire 测试(`adapters/tests/deepseek-session-log-wire.test.ts`,2 用例):经 `AiSdkModelAdapter.createModel → generateText → toLegacyRequest → resolveForRequest → createFactory → kindFetch` 的**真实装配链**断言最终 HTTP body:DeepSeek provider 注入顶层字段且 2xx 后 accept 一次;非 DeepSeek provider 不注入。回归:runner 共享路径 6 套件 324 用例全绿。
+- **开发中修掉的五个真 bug**(没有测试断言先行全会溜进主线):① 指纹锚定末条→追加即失配,永远全量重发(改链式前缀 hash);② 水印重置为 0 后 `seq > 0` 过滤把首条事件永远滤掉(改哨兵 -1 + wire afterSeq 归 0);③ pack 守卫把合法的首次全量(afterSeq=0+first.seq=0)当 fold 缺陷拒收(守卫仅在水位 >0 时生效);④⑤ `ExecutableModel.prepareRequest` 与 runner `toLegacyRequest` 都是逐字段挑选,runtime-only 的 `deepSeekSessionLog` 在这两处被静默丢弃——**typecheck 全绿但字段永远发不出去**(contracts `ModelRequest` 补字段 + 两处显式搬运;这正是「验证必须打到最终消费点」的又一次重现)。

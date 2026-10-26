@@ -91,6 +91,8 @@ class ExecutableModel implements Model {
       tools: request.tools,
       responseJsonSchema: request.responseJsonSchema,
       abortSignal: request.abortSignal,
+      // spec 157:runtime-only 透传,runner 侧 toLegacyRequest 继续接力。
+      deepSeekSessionLog: request.deepSeekSessionLog,
       options: {
         ...validateOptions(this.optionSpecs, { ...this.options, ...requestOptions }),
       },

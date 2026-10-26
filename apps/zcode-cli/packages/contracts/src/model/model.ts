@@ -20,6 +20,8 @@ export type {
   EnumOptionSpecData as EnumOptionSpec,
   LimitOptionSpecData as LimitOptionSpec,
 } from "@zcode/shared/model-config";
+import type { DeepSeekSessionLogRequestTransaction } from "../deepseek/session-log-fold.js";
+
 export type ModelOptionSpecs = ModelOptionSpecsData;
 export type ModelProperties = ModelPropertiesData;
 export type ModelPropertiesInput = ModelProperties;
@@ -36,6 +38,12 @@ export interface ModelRequest {
   responseJsonSchema?: JsonSchema;
   options?: ModelOptions;
   abortSignal?: AbortSignal;
+  /**
+   * Runtime-only 的 DeepSeek `dsh_session_log` 传递对象(spec 157)。runner 仅对
+   * DeepSeek provider 把 value 注入 HTTP body 顶层字段,2xx 后调用 accept() 推进水印;
+   * 非 DeepSeek provider 忽略。不可序列化,不进 JSON schema。
+   */
+  deepSeekSessionLog?: DeepSeekSessionLogRequestTransaction;
 }
 
 // 第一阶段沿用已经完成 Provider SDK 归一化的结果和流事件字段；
