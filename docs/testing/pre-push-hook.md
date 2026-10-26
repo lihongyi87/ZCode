@@ -28,6 +28,14 @@ pre-push 直接使用当前 `PATH` 中的 pnpm / Node，不强制依赖 mise。�
 - GUI Git 客户端若找不到 Node / pnpm，可在个人 `~/.config/husky/init.sh` 中初始化自己的
   版本管理环境，参见 [Husky 官方说明](https://typicode.github.io/husky/how-to.html#node-version-managers-and-guis)。
 - 缺少命令或检查失败仍然阻止 push；hook 不自动安装工具，不静默跳过检查。
+
+### 快速通道（日常迭代）
+
+`ZCODE_PUSH_FAST=1 git push …` 把门禁里的全量单测换成 `pnpm test:unit:affected`
+（受影响面），其余检查不变。适用于日常迭代的频繁推送；**发版/重要分支推送不要
+设置该变量**，保持与 CI 等价的全量门禁。受影响面入口的语义见下节
+（Vitest 官方 changed/related；工作区含未提交改动时全部纳入选择）。
+
 - 本次只解除 hook 对 mise 的依赖，不新增版本检查，也不修改现有开发、CLI/SEA 或 CI 的版本要求。
 
 ## Affected Unit Tests

@@ -87,4 +87,6 @@ export interface LspPort {
   callHierarchy(request: LspCallHierarchyRequest): Promise<LspCallHierarchyCall[]>;
   /** 语义 rename:返回跨文件编辑计划(工具层审批后应用)。 */
   rename(request: LspRenameRequest): Promise<LspRenameResult>;
+  /** 预热:对已配置语言预启动 server(可选;未实现则首次查询时冷启动)。 */
+  warmup?(): Promise<readonly string[]>;
 }

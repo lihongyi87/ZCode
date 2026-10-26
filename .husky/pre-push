@@ -2,4 +2,10 @@
 # 目的：不再用「push → 等 CI → 失败 → 再 push」这种方式试错，避免无谓的流水线运行。
 # 注意：本地绿不等于 CI 绿（CI 是干净检出 + pnpm install --frozen-lockfile），
 #       但能挡掉绝大多数失败；CI 仍作为干净环境的最终裁判保留。
-pnpm run verify:pre-push
+# ZCODE_PUSH_FAST=1：日常迭代的快速通道——全量单测换受影响面（Vitest 官方
+# changed/related）。发版/重要分支推送不要设，保持与 CI 等价的全量门禁。
+if [ "$ZCODE_PUSH_FAST" = "1" ]; then
+  pnpm run verify:pre-push:fast
+else
+  pnpm run verify:pre-push
+fi

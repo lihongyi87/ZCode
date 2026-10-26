@@ -174,6 +174,21 @@ export class NodeLspAdapter implements LspPort {
     return await this.ensureSession(request.languageId, server);
   }
 
+  /** 预热(spec 151 批三):对已配置语言的 server 预启动+握手,消掉首次语义查询的
+   * 冷启动等待。失败静默(server 死亡时下次请求会重启);返回完成语言清单。 */
+  async warmup(): Promise<readonly string[]> {
+    const warmed: string[] = [];
+    for (const [languageId, server] of Object.entries(this.options.servers)) {
+      try {
+        await this.ensureSession(languageId, server);
+        warmed.push(languageId);
+      } catch {
+        // 预热失败不致命:首次请求时会再走 ensureSession 并把 stderr 带进错误。
+      }
+    }
+    return warmed;
+  }
+
   async definition(request: LspDefinitionRequest): Promise<LspLocation[]> {
     const session = await this.sessionFor(request);
     const content = await readFile(request.filePath, "utf8");

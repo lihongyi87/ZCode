@@ -413,6 +413,9 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         // agent 的工作区根(pathToFileURL 转file:// URI)。
         rootUri: pathToFileURL(workingDirectory).href,
       });
+    // LSP 预热(spec 151 批三):配置了 servers 就后台预启动 server 并完成握手,
+    // 消掉首次语义查询 1-2s 的冷启动等待。失败静默(下次请求自动重试)。
+    void lspPort.warmup?.().catch(() => undefined);
     const messageEnabled = isMessageEnabled(options.env ?? process.env);
     const sessionMailboxPort =
       options.sessionMailboxPort ??
