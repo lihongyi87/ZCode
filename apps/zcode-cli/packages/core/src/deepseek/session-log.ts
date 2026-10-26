@@ -20,9 +20,13 @@ import {
 /** 进程级水印:同 session 的后续请求增量续传。 */
 const watermarks = new Map<string, DeepSeekSessionLogWatermark>();
 
-/** 开关:默认关;`ZCODE_DEEPSEEK_SESSION_LOG=1` 开启。 */
+/**
+ * 开关:默认开(DeepSeek 官方端点接受性已实测,spec 157);
+ * `ZCODE_DEEPSEEK_SESSION_LOG=0` 显式关闭(第三方 DeepSeek 兼容网关若拒收未知
+ * 顶层字段,用它退回)。
+ */
 export function isDeepSeekSessionLogEnabled(): boolean {
-  return process.env.ZCODE_DEEPSEEK_SESSION_LOG === "1";
+  return process.env.ZCODE_DEEPSEEK_SESSION_LOG !== "0";
 }
 
 export function isDeepSeekSessionLogProvider(providerId: string): boolean {

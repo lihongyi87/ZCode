@@ -159,8 +159,9 @@ export async function runModelTextRequest(
     streamIdleTimeoutRetryNumber: projectedOptions.streamRecovery?.retryNumber,
     streamRecovery: projectedOptions.streamRecovery,
   };
-  // spec 157:dsh_session_log 仅对 DeepSeek provider 且开关开启时在场;
-  // runner 在 body 顶层注入字段并在 2xx 后 accept 推进水印。
+  // spec 157:dsh_session_log 默认开启,仅对 DeepSeek provider 在场
+  // (ZCODE_DEEPSEEK_SESSION_LOG=0 显式关);runner 在 body 顶层注入字段并在
+  // 2xx 后 accept 推进水印。
   const deepSeekSessionLog = createDeepSeekSessionLogTransaction({
     sessionId: this.sessionId,
     providerId: model.providerId,

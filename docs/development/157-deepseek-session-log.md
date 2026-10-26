@@ -1,6 +1,6 @@
 # 157 · DeepSeek `dsh_session_log` 增量会话日志(DSH 吸收)
 
-状态:已实现(默认关,`ZCODE_DEEPSEEK_SESSION_LOG=1` 开启)
+状态:已实现,**默认开启**(`ZCODE_DEEPSEEK_SESSION_LOG=0` 显式关闭)
 来源:`deepseek-ai/deepseek-harness` 的 `@deepseek-ai/dsh-session-log-deepseek` + `@deepseek-ai/deepseek-llm-api-extensions`(Apache-2.0)。**语义移植,非逐字节拷贝**——wire 契约、水印语义、maxBytes 截断语义与上游对齐;实现按 ZCode 分层重写,故不进 `copied-components.json`(该登记只收逐字节拷贝,先例:spec 150 的缓存兜底映射)。
 
 ## 它解决什么
@@ -42,8 +42,8 @@ accept 幂等性由两侧共同保证:core 侧 transaction 有 `accepted` 闩(�
 
 ## 开关
 
-- `ZCODE_DEEPSEEK_SESSION_LOG=1` 开启(默认关);`ZCODE_DEEPSEEK_SESSION_LOG_MAX_BYTES` 覆盖默认 8MiB。
-- 非 DeepSeek provider 一律不注入;开关关时全程零开销(装配函数第一行短路)。
+- **默认开启**(端点接受性已用真实 key 实测,2026-10-26);`ZCODE_DEEPSEEK_SESSION_LOG=0` 显式关闭——预留给「第三方 DeepSeek 兼容网关拒收未知顶层字段」的退路。`ZCODE_DEEPSEEK_SESSION_LOG_MAX_BYTES` 覆盖默认 8MiB。
+- 非 DeepSeek provider 一律不注入(providerId 判定);显式关闭时全程零开销(装配函数第一行短路)。
 - config 化(设置 UI)留后续:当前仅单人使用,环境变量足够。
 
 ## 已知边界

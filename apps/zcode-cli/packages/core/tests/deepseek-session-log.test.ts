@@ -24,13 +24,19 @@ afterAll(() => {
   }
 });
 
-function enableSessionLog(): void {
-  process.env.ZCODE_DEEPSEEK_SESSION_LOG = "1";
+/** 用例 1 会把开关设为 "0";后续用例先恢复默认开。 */
+function resetSessionLogSwitch(): void {
+  delete process.env.ZCODE_DEEPSEEK_SESSION_LOG;
 }
 
 describe("createDeepSeekSessionLogTransaction", () => {
-  it("开关默认关:不构造 transaction(零开销短路)", () => {
+  it("默认开:不设 env 也构造;=0 显式关(spec 157 默认生效)", () => {
     delete process.env.ZCODE_DEEPSEEK_SESSION_LOG;
+    expect(isDeepSeekSessionLogEnabled()).toBe(true);
+    expect(
+      createDeepSeekSessionLogTransaction({ sessionId: "s1", providerId: "deepseek", messages }),
+    ).toBeDefined();
+    process.env.ZCODE_DEEPSEEK_SESSION_LOG = "0";
     expect(isDeepSeekSessionLogEnabled()).toBe(false);
     expect(
       createDeepSeekSessionLogTransaction({ sessionId: "s1", providerId: "deepseek", messages }),
@@ -38,7 +44,7 @@ describe("createDeepSeekSessionLogTransaction", () => {
   });
 
   it("非 DeepSeek provider:不构造(其他 provider 不受影响)", () => {
-    enableSessionLog();
+    delete process.env.ZCODE_DEEPSEEK_SESSION_LOG;
     expect(
       createDeepSeekSessionLogTransaction({ sessionId: "s1", providerId: "zhipu-coding-plan", messages }),
     ).toBeUndefined();
@@ -47,7 +53,7 @@ describe("createDeepSeekSessionLogTransaction", () => {
   });
 
   it("构造后 accept 幂等推进水印;水印支撑下轮增量", () => {
-    enableSessionLog();
+    resetSessionLogSwitch();
     const tx = createDeepSeekSessionLogTransaction({
       sessionId: "s2",
       providerId: "deepseek",
@@ -71,7 +77,7 @@ describe("createDeepSeekSessionLogTransaction", () => {
   });
 
   it("无新增事件:undefined(请求不携带字段)", () => {
-    enableSessionLog();
+    resetSessionLogSwitch();
     expect(
       createDeepSeekSessionLogTransaction({ sessionId: "s3", providerId: "deepseek", messages: [] }),
     ).toBeUndefined();
