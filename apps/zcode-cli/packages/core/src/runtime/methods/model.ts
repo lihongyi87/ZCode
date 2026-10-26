@@ -2,6 +2,7 @@ import { beginLocalTurnPreparation } from "@zcode/contracts";
 import { runWithModelInvocationContext, traceContextToLogContext } from "../deps.js";
 // 重植（3.15.1 升级整取 model.ts 时被官方版冲掉）：流式文本进入历史前消毒孤立代理项。
 import { sanitizeLoneSurrogates } from "../../model/sanitize-surrogates.js";
+import { createDeepSeekSessionLogTransaction } from "../../deepseek/session-log.js";
 import type { ModelReasoningContentBlock, ModelToolCall, ModelUsage, ToolCallId } from "../deps.js";
 import {
   buildSuspiciousEmptyDiagnostics,
@@ -158,6 +159,13 @@ export async function runModelTextRequest(
     streamIdleTimeoutRetryNumber: projectedOptions.streamRecovery?.retryNumber,
     streamRecovery: projectedOptions.streamRecovery,
   };
+  // spec 157:dsh_session_log 仅对 DeepSeek provider 且开关开启时在场;
+  // runner 在 body 顶层注入字段并在 2xx 后 accept 推进水印。
+  const deepSeekSessionLog = createDeepSeekSessionLogTransaction({
+    sessionId: this.sessionId,
+    providerId: model.providerId,
+    messages: projectedOptions.messages,
+  });
   const modelRequest = {
     messages: projectedOptions.messages,
     tools: projectedOptions.tools,
@@ -166,6 +174,7 @@ export async function runModelTextRequest(
     ...(projectedOptions.maxOutputTokens !== undefined
       ? { options: { maxOutputTokens: projectedOptions.maxOutputTokens } }
       : {}),
+    ...(deepSeekSessionLog ? { deepSeekSessionLog } : {}),
   };
 
   this.logger?.debug(

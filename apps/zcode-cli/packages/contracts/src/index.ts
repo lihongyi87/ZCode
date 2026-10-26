@@ -4,6 +4,7 @@
 
 // Interfaces
 export * from "./deepseek/session-log-wire.js";
+export * from "./deepseek/session-log-fold.js";
 export * from "./interfaces/shared.js";
 export * from "./interfaces/execution.port.js";
 export * from "./interfaces/browser-control.port.js";

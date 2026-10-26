@@ -27,6 +27,8 @@ import { createModelRequestSecurityState } from "./request-security-edition/inde
 import type { ModelRequestSecurityState, ModelRequestSecurityPort } from "./request-security.js";
 import { createOpenAIResponsesJsonCompatFetch } from "./openai-responses-json-compat.js";
 import { createModelOptionMapFetch, type RawRequestBodyCapture } from "./model-option-map-fetch.js";
+import { createDeepSeekSessionLogFetch } from "./deepseek-session-log-fetch.js";
+import type { DeepSeekSessionLogRequestTransaction } from "@zcode/contracts";
 import { createNetworkProxyFetch } from "../network/proxy-fetch.js";
 import { createProviderEndpointRoutingFetch } from "./provider-endpoint-routing-fetch.js";
 import { normalizeModelTlsFailure } from "./failure-tls.js";
@@ -87,10 +89,16 @@ export interface AiSdkBoundModelResolution {
   resolveRequest(input: {
     readonly options: ModelOptionValues;
     readonly requestAuth?: ModelRequestAuth;
+    readonly deepSeekSessionLog?: DeepSeekSessionLogRequestTransaction;
   }): AiSdkResolvedModel;
 }
 
 type LanguageModelFactory = (modelId: string) => LanguageModel;
+
+/** spec 157:与 core 侧 isDeepSeekSessionLogProvider 同一判定(providerId 含 deepseek)。 */
+function isDeepSeekProviderId(providerId: string): boolean {
+  return providerId.toLowerCase().includes("deepseek");
+}
 type ProviderFetch = typeof globalThis.fetch;
 type ProviderCode = string | number;
 
@@ -205,9 +213,9 @@ export class AiSdkModelExecution {
     const optionMaps = compileModelOptionMaps(input.optionSpecs);
     return {
       // 这里只构造不执行请求的基础 Model；真正请求必须通过 resolveRequest 绑定完整 options。
-      resolved: this.resolveSnapshot(snapshot, undefined, undefined, undefined),
-      resolveRequest: ({ options, requestAuth }) =>
-        this.resolveSnapshot(snapshot, requestAuth, optionMaps, options),
+      resolved: this.resolveSnapshot(snapshot, undefined, undefined, undefined, undefined),
+      resolveRequest: ({ options, requestAuth, deepSeekSessionLog }) =>
+        this.resolveSnapshot(snapshot, requestAuth, optionMaps, options, deepSeekSessionLog),
     };
   }
 
@@ -245,6 +253,7 @@ export class AiSdkModelExecution {
     requestAuth: ModelRequestAuth | undefined,
     optionMaps: CompiledModelOptionMaps | undefined,
     optionValues: ModelOptionValues | undefined,
+    deepSeekSessionLog: DeepSeekSessionLogRequestTransaction | undefined,
   ): AiSdkResolvedModel {
     const providerConfig = applyModelRequestAuth(snapshot.providerConfig, requestAuth);
     // Model 创建时的 Provider 事实必须被冻结在当前 binding 中。若按 providerId 缓存
@@ -257,6 +266,7 @@ export class AiSdkModelExecution {
       optionValues,
       rawRequestBodyCapture,
       snapshot.supportsJsonSchemaOutput,
+      deepSeekSessionLog,
       snapshot.providerConfig.access?.type === "zhipu-account" ? requestAuth?.apiKeyId : undefined,
     );
     return {
@@ -281,6 +291,7 @@ export class AiSdkModelExecution {
     optionValues: ModelOptionValues | undefined,
     rawRequestBodyCapture: RawRequestBodyCapture,
     supportsJsonSchemaOutput: boolean,
+    deepSeekSessionLog: DeepSeekSessionLogRequestTransaction | undefined,
     apiKeyId?: string,
   ): LanguageModelFactory {
     const apiKey = this.resolveApiKey(providerConfig);
@@ -315,12 +326,19 @@ export class AiSdkModelExecution {
           })
         : fetch;
 
+    // spec 157:dsh_session_log 包装放在兼容层之外(最外层),拿到的是 SDK 序列化后的
+    // 最终 JSON;仅 DeepSeek provider 且请求携带 transaction 时生效。
+    const kindFetch =
+      deepSeekSessionLog && isDeepSeekProviderId(providerId)
+        ? createDeepSeekSessionLogFetch({ fetch: optionFetch, transaction: deepSeekSessionLog })
+        : optionFetch;
+
     switch (providerConfig.kind) {
       case "openai": {
         const provider = createOpenAI({
           apiKey,
           baseURL: providerConfig.baseURL,
-          fetch: createOpenAIResponsesJsonCompatFetch(optionFetch),
+          fetch: createOpenAIResponsesJsonCompatFetch(kindFetch),
           headers,
         });
         return provider.responses as LanguageModelFactory;
@@ -330,7 +348,7 @@ export class AiSdkModelExecution {
         const provider = createAnthropic({
           apiKey,
           baseURL: normalizeAnthropicBaseURL(providerConfig.baseURL),
-          fetch: createAnthropicCompatFetch(optionFetch),
+          fetch: createAnthropicCompatFetch(kindFetch),
           headers: withAnthropicAuthorizationHeader(apiKey, headers),
         });
         return provider as LanguageModelFactory;
@@ -341,7 +359,7 @@ export class AiSdkModelExecution {
           name: providerConfig.name ?? providerId,
           baseURL: providerConfig.baseURL,
           apiKey,
-          fetch: optionFetch,
+          fetch: kindFetch,
           headers,
           // OpenAI Compatible 流式 usage 需要显式请求，Usage 是执行结果的一部分。
           includeUsage: true,

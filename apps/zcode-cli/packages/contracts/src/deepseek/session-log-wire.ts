@@ -100,7 +100,9 @@ export function packDeepSeekSessionLog(
   input: DeepSeekSessionLogPackInput,
 ): DeepSeekSessionLogPackResult {
   const { session, sessionFormatVersion, afterSeq, pending, maxBytes } = input;
-  if (pending.length > 0) {
+  if (pending.length > 0 && afterSeq > 0) {
+    // afterSeq=0 表示「无已确认水位」(首次/全量重发),事件从 seq 0 起合法;
+    // 只有水位 >0 时才要求待传事件严格在水位之后(fold 缺陷防护)。
     const first = pending[0];
     if (first.seq <= afterSeq) {
       throw new Error(

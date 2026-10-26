@@ -264,6 +264,7 @@ export class AiSdkModelAdapter {
                   reasoningLevel: optionValues.reasoningLevel,
                 },
                 requestAuth,
+                deepSeekSessionLog: request.deepSeekSessionLog,
               }),
             ),
             properties,
@@ -277,6 +278,7 @@ export class AiSdkModelAdapter {
                 maxOutputTokens,
                 reasoningLevel: optionValues.reasoningLevel,
               },
+              deepSeekSessionLog: request.deepSeekSessionLog,
             }),
             properties,
             ...(options.providerConfig.access.type === "zhipu-account"

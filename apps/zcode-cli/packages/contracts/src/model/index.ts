@@ -11,6 +11,7 @@ import type {
   ToolResultBudget,
 } from "../tools/contract.js";
 import type { TraceContext } from "../tracing/tracer.js";
+import type { DeepSeekSessionLogRequestTransaction } from "../deepseek/session-log-fold.js";
 import type {
   ModelApiCallObservation,
   ModelApiErrorPhase,
@@ -692,6 +693,12 @@ export interface ModelTextRequest extends ModelRequestSettings {
    * 结束即 release。与 statusSink 同族：不进 JSON schema、不进 provider 请求。
    */
   modelRequestAdmission?: ModelRequestAdmission;
+  /**
+   * Runtime-only 的 DeepSeek `dsh_session_log` 传递对象(spec 157)。runner 仅对 DeepSeek
+   * provider 把 value 注入 HTTP body 顶层字段,2xx 后调用 accept() 推进水印;
+   * 非 DeepSeek provider 忽略。与 statusSink 同族:不进 JSON schema。
+   */
+  deepSeekSessionLog?: DeepSeekSessionLogRequestTransaction;
   /**
    * Runtime-only SSE idle timeout 递增序号。0/undefined 表示首请求；
    * 每重试一次在 adapter base timeout 上加 30000ms。
