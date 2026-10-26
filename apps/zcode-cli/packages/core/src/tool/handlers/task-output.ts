@@ -299,7 +299,13 @@ async function emitWaitingProgress(
   let sizeText = "";
   if (options.outputFile) {
     try {
-      sizeText = `输出文件 ${formatCompactFileSize(statSync(options.outputFile).size)}`;
+      const size = statSync(options.outputFile).size;
+      // 三态解释「0 bytes」:文件刚创建还没首刷是启动期正常状态,不提示规模反而
+      // 会被读成「卡了」;已有内容才报字节数。
+      sizeText =
+        size === 0
+          ? "输出文件 (任务启动中,暂无输出)"
+          : `输出文件 ${formatCompactFileSize(size)}`;
     } catch {
       sizeText = "输出文件 (尚未创建)";
     }
