@@ -262,6 +262,14 @@ const REQUIRED_ASAR_RUNTIME_MODULES = [
   // root node_modules 的 node-pty 带 prebuilds/<platform>（beforePack 已恢复目标平台），
   // 拷入 staging 后由下方按平台裁剪保留目标 prebuild，再交给重打包产出 unpacked sidecar。
   "node-pty",
+  // browserView 的 domSnapshot/locator 注入脚本在运行时 createRequire().resolve("playwright-core/package.json")
+  // 定位驱动自带的 injected script（playwrightInjectedScriptSource.ts:40）。这个 require 是
+  // 运行期解析，tsup 不内联；编译产物混淆后（JD.resolve(...)）连 require.resolve 字面形态
+  // 都不存在，产物扫描器 SPECIFIER_PATTERNS 因此看不见它——CE 介质从未带过 playwright-core，
+  // 内置浏览器开页/导航正常但 domSnapshot 首次调用即报
+  // Cannot find module 'playwright-core/package.json'（2026-10-27 实测）。
+  // 以它为闭包根注入，让递归依赖收集补齐其依赖。
+  "playwright-core",
 ];
 /**
  * 注入清单 = 手写兜底清单 ∪ 产物里实际保留的裸 import 包。

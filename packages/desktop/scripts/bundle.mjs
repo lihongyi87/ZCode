@@ -145,6 +145,12 @@ const requiredRuntimeModules = [
   "@opentelemetry/sdk-metrics",
   "@opentelemetry/sdk-trace-base",
   "electron-updater",
+  // browserView 的 domSnapshot/locator 注入脚本在运行时 createRequire().resolve("playwright-core/package.json")
+  // 取注入脚本（playwrightInjectedScriptSource.ts:40）。它是运行期动态 require，编译产物
+  // 混淆后扫描器看不见、tsup 也不内联；漏打时内置浏览器开页正常、domSnapshot 首次调用
+  // 即报 Cannot find module 'playwright-core/package.json'（2026-10-27 实测）。纳入机械
+  // 校验，让 bundle 阶段就把缺 playwright-core 的坏包拦下来。
+  "playwright-core",
 ];
 /**
  * 校验名单 = 手写兜底清单 ∪ 产物里实际保留的裸 import 包。
