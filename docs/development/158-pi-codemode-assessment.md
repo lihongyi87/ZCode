@@ -109,3 +109,32 @@ completed),UI 无需新卡片类型;脚本自身的 stdout/错误进 cell 输出
 1. 立项与否、排在 ACP(153) 之后的优先级确认;
 2. MVP 采用方案 1(策略预批)是否接受;
 3. 收益首测场景选定:建议拿「全插件开启 + 78 工具」会话做 A/B(请求体字节)。
+
+## 实施状态(2026-10-27)
+
+用户已拍板按方案 1 起步。**第一单元已落地并提交**(契约+桥层,休眠态,零行为
+变更——broker 未注入时 `codemode.assertAvailable` 抛明确不可用):
+
+- 共享契约 `packages/shared/src/codemode/nodeReplToolsBroker.ts`:env 键
+  (`ZCODE_NODE_REPL_TOOLS_BROKER_SOCKET/TOKEN`)、describe/invoke 请求响应
+  schema、工具描述符;exports 子路径 `./node-repl-tools-broker`。
+- 桥 `apps/zcode-cli/packages/node-repl-host/src/tools-bridge.ts`:worker 全局
+  **`codemode`**(`describe()` / `invoke(name, args)` / `declarations()` /
+  `assertAvailable`),env 缺失即明确不可用;server.ts 的
+  createInProcessNodeReplExecutor 已注入。
+- 渲染器 `tools-bindings.ts`:TS 声明速查 + inlineBudget 整块截断
+  (`ZCODE_NODE_REPL_TOOLS_INLINE_BUDGET` 可覆写,默认 3000);
+  测试 12 例全绿(tools-bindings 7 + tools-bridge 5)。
+
+**第二单元(待做)**:bootstrap 侧 broker 服务端 + 策略预批 Port + 接线。
+落点已侦察清楚:
+
+- 服务端镜像 `app/node-repl-browser-broker.ts`(readLine/token 认证/EPIPE
+  收敛全可复用);注入镜像 `injectNodeReplBrowserBroker`。
+- Port 实现挂 **AgentRuntime 的 ToolRegistry + ToolExecutor**(registry:
+  `list()/get(name)`,metadata 含 needsApproval/inputSchema;执行器内部已含
+  permission-flow,策略预批过滤后调用即无审批歧义);工具结果经
+  result-serialization 的文本口径渲染成 invoke 的 `output`。
+- 接线在 `create-app.ts`:broker 需在 runtime config 解析**前**创建(env 注入),
+  而 Port 依赖其后创建的 runtime——用 node.ts:1717 的前向引用模式
+  (holder + 运行时赋值)。

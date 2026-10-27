@@ -13,6 +13,7 @@
     "./mcpDisabledTools": "./src/mcpDisabledTools.ts",
     "./runtime-tool-runtime": "./src/runtime-tool-runtime.ts",
     "./node-repl-browser-broker": "./src/browser-use/nodeReplBroker.ts",
+    "./node-repl-tools-broker": "./src/codemode/nodeReplToolsBroker.ts",
     "./process-diagnostic": "./src/process-diagnostic.ts",
     "./model-selection": "./src/model-selection.ts",
     "./account-provider-state": "./src/account-provider-state.ts",

@@ -28,6 +28,7 @@ import {
   installNodeReplProcessGuards,
   installNodeReplShutdownTriggers,
 } from "./process-lifecycle.js";
+import { createToolsBridgeGlobals } from "./tools-bridge.js";
 import { toMcpRunResult } from "./result.js";
 import {
   resolveJsToolDescription,
@@ -144,6 +145,12 @@ export function createInProcessNodeReplExecutor(): NodeReplExecutor {
             getActiveCall: () => activeCuaCall,
             session: () => session,
             documentationRoot: cuaDocumentationRoot,
+          }),
+          // Codemode（spec 158）：tools 桥经 env 注入的 broker socket 访问 agent 进程的
+          // 策略预批工具面；broker 未注入时 codemode.assertAvailable 抛明确不可用。
+          ...createToolsBridgeGlobals({
+            generation,
+            getActiveCall: () => activeCall,
           }),
         }),
       restrictProcess: true,
