@@ -18,6 +18,11 @@ import type { NodeReplToolsPort } from "./node-repl-tools-port.js";
 const NODE_REPL_MCP_SERVER_NAME = "node_repl";
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+// 与 cua-bridge.ts 的 CUA_UNAVAILABLE_IN_SUBAGENT_MESSAGE 同一先例：子代理在父执行器上
+// 组合工具会把副作用与审计事件错误归属到父会话（浏览器/CUA 都在桥层显式拒绝 subagent）。
+// Pi 同样禁止 codemode 嵌套；方案 1 的 MVP 直接对 subagent scope fail-closed。
+export const TOOLS_UNAVAILABLE_IN_SUBAGENT_MESSAGE =
+  "Codemode is not available in subagent; use the native tool surface";
 
 export interface NodeReplToolsBroker {
   close(): Promise<void>;
@@ -170,8 +175,11 @@ function authorizeRequest(request: NodeReplToolsBrokerRequest, input: { token: s
     throw new Error("Node REPL tools broker request is not authorized");
   }
   // token 先证明请求来自宿主启动的 node_repl；工具面本身是策略预批的
-  // （needsApproval 工具不在 describe/invoke 两端出现），subagent scope 由
-  // Port 侧按 runtimeScope 决定是否收紧，不在此处重复裁决。
+  // （needsApproval 工具不在 describe/invoke 两端出现）。subagent 在此 fail-closed：
+  // 其脚本若经父执行器组合工具，副作用与审计事件会错误归属父会话。
+  if (request.runtimeScope === "subagent") {
+    throw new Error(TOOLS_UNAVAILABLE_IN_SUBAGENT_MESSAGE);
+  }
 }
 
 async function executeRequest(

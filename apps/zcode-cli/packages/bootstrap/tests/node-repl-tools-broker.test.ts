@@ -202,6 +202,32 @@ describe("node_repl tools broker", () => {
     expect(String(response.error)).toContain("not authorized");
   });
 
+  it("subagent scope fail-closed（审计归属保护，CUA 同款先例）", async () => {
+    const port = createNodeReplToolsPort({
+      registry: fakeRegistry([fakeEntry("read_file")]),
+      executor: fakeExecutor(() => ({
+        toolCallId: "call-1",
+        toolName: "read_file",
+        success: true,
+        output: "should not run",
+      })),
+    });
+    broker = createNodeReplToolsBroker({ getToolsPort: () => port, logger });
+    await broker.ready;
+
+    const response = await exchange(broker.socketPath, {
+      id: randomUUID(),
+      op: "invoke",
+      runtimeScope: "subagent",
+      sessionId: "session-1",
+      token: broker.token,
+      tool: "read_file",
+      arguments: {},
+    });
+    expect(response).toMatchObject({ ok: false });
+    expect(String(response.error)).toContain("not available in subagent");
+  });
+
   it("Port 未绑定时报明确错误（runtime 尚未装配）", async () => {
     broker = createNodeReplToolsBroker({ getToolsPort: () => undefined, logger });
     await broker.ready;
