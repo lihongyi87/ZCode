@@ -25,7 +25,11 @@ Computer Use 只在 **node_repl 被作为 Computer Use 宿主拉起**时可用�
 `plugin-host-command.ts` 一致）。没有该标识时运行时不会被创建 —— 普通 MCP 客户端、
 CI 与测试因此不会拉起原生驱动。
 
-桌面端与共享宿主会话会自动注入该标识；无需手工配置。
+桌面端与共享宿主会话会自动注入该标识；无需手工配置。Windows 上的凭据注入不依赖
+官方 helper 载荷：`ZCODE_CUA_WIN_HELPER_RECIPE` 仅是 best-effort 附加项，缺失时
+照常铸造 socket+authority（F3-2 懒铸造语义）。曾把 recipe 解析失败打成
+broker_unavailable 导致 Windows 恒不可用（3.15.1 官方化接线引入，2026-10-27 修复，
+回归护栏见 `packages/services/test/nodeCuaWinSpawnEnv.test.ts`）。
 
 ## 模型可见面
 
@@ -73,10 +77,11 @@ CI 与测试因此不会拉起原生驱动。
 
 ## 环境变量
 
-| 变量                           | 归属  | 说明                                             |
-| ------------------------------ | ----- | ------------------------------------------------ |
-| `ZCODE_CUA_NODE_REPL_HOST`     | ZCode | 由宿主注入；`"1"` 表示本进程是 Computer Use 宿主 |
-| `CUA_DRIVER_RS_ENABLE_WAYLAND` | 驱动  | 启用驱动的原生 Wayland 后端                      |
+| 变量                           | 归属  | 说明                                                                                                                                                                               |
+| ------------------------------ | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ZCODE_CUA_NODE_REPL_HOST`     | ZCode | 由宿主注入；`"1"` 表示本进程是 Computer Use 宿主                                                                                                                                   |
+| `ZCODE_CUA_WIN_HELPER_RECIPE`  | ZCode | Windows 专用；官方 helper 载荷（`tools/cua-helper`，私有）在位时由 spawn env 组装附加，供 SDK 首调自 fork helper。开源 trycua 驱动链路不消费它——载荷缺失时缺省不注入，不影响可用性 |
+| `CUA_DRIVER_RS_ENABLE_WAYLAND` | 驱动  | 启用驱动的原生 Wayland 后端                                                                                                                                                        |
 
 `CUA_DRIVER_RS_ENABLE_WAYLAND` **不是 ZCode 的配置项**，是驱动自己的开关。
 上游把原生 Wayland 后端标为 experimental 并默认关闭；关闭时 `list_windows` 恒返回 0 行，

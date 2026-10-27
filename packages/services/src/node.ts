@@ -568,7 +568,6 @@ import {
 } from "@zcode/shared";
 import {
   BROKER_SOCKET_ENV,
-  BROKER_UNAVAILABLE_ENV,
   createCuaPipSessionService,
   createCuaProductMcpServerResolver,
   createProductCuaHelperHost,
@@ -2356,17 +2355,23 @@ export function createLocalServices(options: {
           [ZCODE_CUA_PLUGIN_AUTHORITY_ENV_KEY]: randomBytes(16).toString("hex"),
         };
         if (process.platform === "win32") {
+          // ZCODE_CUA_WIN_HELPER_RECIPE 是官方闭源 helper（windows-helper.js +
+          // ax_native.node，不在开源发行物里）的启动材料，只有带该载荷的官方产品构建才
+          // 解析得出来。开源 trycua 驱动链路不消费它：recipe 全仓（含 @trycua/cua-driver
+          // 包与 seed 后的 node-repl-host）无任何读取方，驱动自带 cua_driver_sdk.dll
+          // 原生后端，broker 由 node-repl-host 进程内自建（F3-2，见
+          // cuaProductHelperSpawnEnv.ts）。3.15.1 官方化接线（4f7c1a3b）曾把 recipe
+          // 解析失败直接打成 BROKER_UNAVAILABLE，使不携带该私有载荷的 CE 构建上
+          // Windows Computer Use 恒不可用（2026-10-27 实测：agent env 带此文案而驱动
+          // 载荷齐全）。故 recipe 仅在解析成功时附加（官方 helper 在位的形态）；
+          // 失败回落 F3-2 懒铸造语义——上面已铸造的 socket+authority 照常下发，
+          // 后端由 SDK ensureBrokerAvailable / node-repl-host 自起。
           const recipe = await resolveStableCuaWinRecipe();
           if (recipe) {
             cuaProductHelperEnv["ZCODE_CUA_WIN_HELPER_RECIPE"] = JSON.stringify({
               ...recipe,
               hostPid: process.pid,
             });
-          } else {
-            cuaProductHelperEnv = {
-              [BROKER_UNAVAILABLE_ENV]:
-                "broker_unavailable: windows helper recipe could not be resolved",
-            };
           }
         }
       }
