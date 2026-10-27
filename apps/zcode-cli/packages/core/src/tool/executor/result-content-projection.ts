@@ -240,6 +240,40 @@ export function fitContentWithSuffix(
   return `${fitStringToBytes(content, remainingBytes, direction)}${suffixContent}`;
 }
 
+/**
+ * DSH spill 语义(spec 159):超预算内容按原序保留首尾,中间以省略标记衔接,取回指引后缀殿后。
+ * 指引必须完整保留(丢了它省略内容就永久不可达);剩余预算头:尾 = 2:1(头部承载结构、
+ * 尾部承载错误与结论);预算装不下标记时退化为纯 head 截断。
+ */
+export function fitContentHeadTailWithSuffix(
+  content: string,
+  maxBytes: number,
+  suffix: string,
+  elisionMarker = "\n[... middle omitted; retrieve via the spilled file ...]\n",
+): string {
+  if (maxBytes <= 0) return "";
+  if (Buffer.byteLength(content, "utf8") + Buffer.byteLength(suffix, "utf8") <= maxBytes) {
+    return `${content}${suffix}`;
+  }
+  const suffixContent = fitStringToBytes(suffix, maxBytes, "head");
+  let remainingBytes = maxBytes - Buffer.byteLength(suffixContent, "utf8");
+  if (remainingBytes <= 0) return suffixContent;
+  const markerBytes = Buffer.byteLength(elisionMarker, "utf8");
+  if (remainingBytes <= markerBytes) {
+    return `${fitStringToBytes(content, remainingBytes, "head")}${suffixContent}`;
+  }
+  remainingBytes -= markerBytes;
+  const headBytes = Math.floor((remainingBytes * 2) / 3);
+  const tailBytes = remainingBytes - headBytes;
+  const head = fitStringToBytes(content, headBytes, "head");
+  const tail = fitStringToBytes(
+    content.slice(head.length === 0 ? 0 : Math.min(content.length, head.length + 1)),
+    tailBytes,
+    "tail",
+  );
+  return `${head}${elisionMarker}${tail}${suffixContent}`;
+}
+
 function joinTextBlocks(content: ModelMessageContentBlock[]): string {
   return content
     .filter(

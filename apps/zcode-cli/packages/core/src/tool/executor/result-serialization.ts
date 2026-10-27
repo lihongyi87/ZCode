@@ -18,6 +18,7 @@ import {
   appendHookToPersistedArtifactPreview,
   appendHookToStringContent,
   appendHookWithoutReorderingStructuredContent,
+  fitContentHeadTailWithSuffix,
   fitContentWithSuffix,
   isEmptyModelContent,
   isPersistedArtifactPreview,
@@ -207,6 +208,37 @@ export async function serializeOutput(
         truncated: true,
         budgetStrategy: effectiveBudget.strategy,
         artifactPath: resolvedArtifactPath,
+      };
+    }
+  }
+
+  // DSH spill 吸收(spec 159):非 artifact 策略工具超预算时,先把全文落到会话私有
+  // artifactStore,再用「首尾按原序保留 + 省略标记 + 取回指引」替换——被省略的中段
+  // 可经 Read/Grep 取回,信息不再永久丢失。存储失败或无 store 时回退下方 head 截断
+  // (fail-open:与此前行为一致,工具调用不因存储故障失败)。
+  if (artifact === undefined && resolvedArtifactPath === undefined && deps.artifactStore) {
+    const spillArtifact = await tryWriteToolArtifact(
+      deps,
+      content,
+      contentType,
+      entry,
+      effectiveBudget,
+      traceContext,
+      toolCallId,
+      signal,
+    );
+    const spillPath = spillArtifact?.path ?? spillArtifact?.uri;
+    if (spillPath) {
+      const spillSuffix = `\n\n[Tool output spilled by resultBudget: originalBytes=${originalBytes}, maxModelBytes=${maxModelBytes}, fullOutput=${spillPath}. Retrieve omitted parts with Read (offset/limit) or search with Grep.]`;
+      const spilledContent = fitContentHeadTailWithSuffix(content, maxModelBytes, spillSuffix);
+      return {
+        content: spilledContent,
+        modelContent: spilledContent,
+        originalBytes,
+        returnedBytes: Buffer.byteLength(spilledContent, "utf8"),
+        truncated: true,
+        budgetStrategy: effectiveBudget.strategy,
+        artifactPath: spillPath,
       };
     }
   }
