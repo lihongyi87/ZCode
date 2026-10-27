@@ -28,7 +28,7 @@ import {
   installNodeReplProcessGuards,
   installNodeReplShutdownTriggers,
 } from "./process-lifecycle.js";
-import { createToolsBridgeGlobals } from "./tools-bridge.js";
+import { createToolsBridgeGlobals, isToolsBrokerConfigured } from "./tools-bridge.js";
 import { toMcpRunResult } from "./result.js";
 import {
   resolveJsToolDescription,
@@ -82,7 +82,7 @@ const requestContextSchema = z
 // `js` 工具的描述随「本会话是否启用 CUA」变化：CUA 关闭时要显式告诉模型「没有 CUA，也没有东西
 // 需要安装」，否则它拿到 node_repl 就会自行安装驱动并猜错包名（方案 a，见 tool-contract.ts）。
 // 工具名与 inputSchema 不变，只有描述多一句后缀。
-function buildNodeReplTools(input: { computerUseEnabled: boolean }): Tool[] {
+function buildNodeReplTools(input: { computerUseEnabled: boolean; codemodeEnabled?: boolean }): Tool[] {
   return [
     {
       name: "js",
@@ -220,7 +220,10 @@ export function createNodeReplMcpRuntime(
     },
   );
 
-  const tools = buildNodeReplTools({ computerUseEnabled: cuaRuntime !== undefined });
+  const tools = buildNodeReplTools({
+    computerUseEnabled: cuaRuntime !== undefined,
+    codemodeEnabled: isToolsBrokerConfigured(),
+  });
   server.setRequestHandler("tools/list", async () => ({ tools }));
   server.setRequestHandler("tools/call", async (request, extra) => {
     if (disposed) throw new Error("node_repl runtime is disposed");

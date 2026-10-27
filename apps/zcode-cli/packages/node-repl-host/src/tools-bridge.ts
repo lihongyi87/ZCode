@@ -28,6 +28,12 @@ export interface ToolsBrokerTransport {
   (request: Record<string, unknown>, signal: AbortSignal): Promise<SuccessfulBrokerResponse>;
 }
 
+/** broker socket+token 是否已注入本会话——js 工具描述的可用性提示据此开关。 */
+export function isToolsBrokerConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env[NODE_REPL_TOOLS_BROKER_SOCKET_ENV]?.trim() &&
+    env[NODE_REPL_TOOLS_BROKER_TOKEN_ENV]?.trim());
+}
+
 export interface CodemodeFacade {
   describe(): Promise<NodeReplToolDescriptor[]>;
   invoke(tool: string, args: Record<string, unknown>): Promise<NodeReplToolInvokeResult>;
@@ -54,10 +60,7 @@ export function createToolsBridgeGlobals(input: {
 
   const assertAvailable = (): void => {
     assertActive();
-    if (
-      !env[NODE_REPL_TOOLS_BROKER_SOCKET_ENV]?.trim() ||
-      !env[NODE_REPL_TOOLS_BROKER_TOKEN_ENV]?.trim()
-    ) {
+    if (!isToolsBrokerConfigured(env)) {
       throw new Error(
         "Codemode is unavailable for this node_repl session: the tools broker is not attached. " +
           "Use the native tool surface instead.",

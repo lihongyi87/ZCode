@@ -52,10 +52,24 @@ export const JS_TOOL_DESCRIPTION_COMPUTER_USE_DISABLED_SUFFIX =
   "in Settings and stop; never install, upgrade or guess a driver package.";
 
 /** 按本会话是否启用了 CUA 解析 `js` 工具描述。 */
-export function resolveJsToolDescription(input: { computerUseEnabled: boolean }): string {
-  return input.computerUseEnabled
+export function resolveJsToolDescription(input: {
+  computerUseEnabled: boolean;
+  codemodeEnabled?: boolean;
+}): string {
+  let description = input.computerUseEnabled
     ? JS_TOOL_DESCRIPTION
     : `${JS_TOOL_DESCRIPTION}${JS_TOOL_DESCRIPTION_COMPUTER_USE_DISABLED_SUFFIX}`;
+  if (input.codemodeEnabled) {
+    // Codemode（spec 158）：broker 已注入时明确授权模型经脚本组合策略预批工具——
+    // 上方「仅 Browser Use / Computer Use」的措辞会把它劝退，必须在描述里同步放开。
+    description +=
+      " A `codemode` global is available in this kernel for composing policy-approved tool calls" +
+      " in JavaScript: `codemode.declarations()` lists the available tools as TypeScript" +
+      " declarations, `codemode.describe()` returns their descriptors, and" +
+      " `codemode.invoke(name, args)` executes one through the same permission chain as native" +
+      " tool calls. Failed calls throw with the tool's own error text.";
+  }
+  return description;
 }
 
 export function withComputerUseAvailabilityNote(

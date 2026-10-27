@@ -147,5 +147,20 @@ completed),UI 无需新卡片类型;脚本自身的 stdout/错误进 cell 输出
   另案处理;边界守卫的既有违规 `mcpDisabledTools.ts`(单文件传递引入,HEAD 上
   已红)已如实登记进允许面,守卫回绿。
 
-**第三单元(待做)**:观测事件(tools.* 逐调用发与原生工具同构的结构化事件)+
-端到端验收(78 工具会话请求体字节 A/B;脚本死循环被 worker 超时终结)。
+**第三单元(已落地并提交)**:发现面 + 端到端验证。
+
+- 发现面:`resolveJsToolDescription` 增加 `codemodeEnabled` 输入——broker env 已注入时,
+  js 工具描述明确授权并教学 codemode 用法(描述是模型每次选工具都读到的唯一文案,
+  server instructions 不被 MCP 集成消费,必须挂描述);`isToolsBrokerConfigured()`
+  供 server.ts 判定。观测面由构造成立:Port 的 invoke 走 executor.execute,其内部
+  call-runner 照常发 started/result 结构化事件,UI 审计轨迹与原生工具同构。
+- 端到端测试 `codemode-e2e.test.ts` 3 例全绿:真 socket broker peer(协议逐字节
+  共享 schema)+ 真 MCP 运行时(InMemoryTransport + 真 Worker)+ 真 env 注入——
+  实测 `tools/list` 描述含提示、脚本 `codemode.invoke` 拿到工具输出、
+  `codemode.declarations()` 渲染速查。
+- 既有红甄别(stash 实验证明 HEAD 无 codemode 改动即复现,另案):bundle-smoke
+  为本机安全软件对 Temp 新写 .mjs 的写入拦截(环境性);mcp-server 的 CUA 凭据
+  捕获断言为整版合并后既有红。
+
+**状态:MVP 功能闭环完成**。剩余为规模化验收(78 工具会话请求体字节 A/B、
+deferred 工具发现)与发布(随下次介质出包)。
