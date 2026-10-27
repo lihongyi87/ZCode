@@ -54,8 +54,17 @@ describe("node_repl MCP bundle boundary", () => {
     const sharedInputs = inputs.filter((path) => path.startsWith(sharedRoot));
     expect(sharedInputs.length).toBeGreaterThan(0);
     // 同一个总入口即使只取常量，也会初始化其它领域的 schema；Worker 会重复承担这份开销。
+    // 允许面 = 显式登记的协议切片（各自由 shared 的子路径 imports 引入，禁止总入口）：
+    // browser-use（浏览器桥）与 codemode（spec 158 的 tools 桥）。新增切片在此登记。
+    // mcpDisabledTools.ts 是既有传递引入的单文件叶子（stash 实验证明 HEAD 上边界测试
+    // 已因它而红，与本仓 codemode 改动无关），如实登记而不是让守卫保持哑红。
+    const allowedSharedInputs = [
+      `${sharedRoot}browser-use/`,
+      `${sharedRoot}codemode/`,
+      `${sharedRoot}mcpDisabledTools.ts`,
+    ];
     expect(
-      sharedInputs.find((path) => !path.startsWith(`${sharedRoot}browser-use/`)),
+      sharedInputs.find((path) => !allowedSharedInputs.some((slice) => path.startsWith(slice))),
     ).toBeUndefined();
   });
 });

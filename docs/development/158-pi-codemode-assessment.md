@@ -126,15 +126,26 @@ completed),UI 无需新卡片类型;脚本自身的 stdout/错误进 cell 输出
   (`ZCODE_NODE_REPL_TOOLS_INLINE_BUDGET` 可覆写,默认 3000);
   测试 12 例全绿(tools-bindings 7 + tools-bridge 5)。
 
-**第二单元(待做)**:bootstrap 侧 broker 服务端 + 策略预批 Port + 接线。
-落点已侦察清楚:
+**第二单元(已落地并提交)**:bootstrap 侧 broker 服务端 + 策略预批 Port + 接线。
 
-- 服务端镜像 `app/node-repl-browser-broker.ts`(readLine/token 认证/EPIPE
-  收敛全可复用);注入镜像 `injectNodeReplBrowserBroker`。
-- Port 实现挂 **AgentRuntime 的 ToolRegistry + ToolExecutor**(registry:
-  `list()/get(name)`,metadata 含 needsApproval/inputSchema;执行器内部已含
-  permission-flow,策略预批过滤后调用即无审批歧义);工具结果经
-  result-serialization 的文本口径渲染成 invoke 的 `output`。
-- 接线在 `create-app.ts`:broker 需在 runtime config 解析**前**创建(env 注入),
-  而 Port 依赖其后创建的 runtime——用 node.ts:1717 的前向引用模式
-  (holder + 运行时赋值)。
+- 服务端 `app/node-repl-tools-broker.ts`:镜像 browser broker(readLine 1MiB 上限/
+  token 时序安全认证/EPIPE 收敛为取消/uuid 回显);`injectNodeReplToolsBroker`
+  向 node_repl 注入 socket+token env。
+- 策略预批 Port `app/node-repl-tools-port.ts`:包装 **AgentRuntime 的
+  ToolRegistry + ToolExecutor**(`codemodeToolSurface` 只读消费面,core 侧新增
+  getter);describe/invoke 双端过滤 `needsApproval === true`;invoke 经
+  executor.execute(其内部 permission-flow 照常权威裁决),结果取模型可见
+  output 的文本口径(`isError = !success`)。
+- 接线 `create-app.ts`:broker 在 runtime config 解析前创建并注入 env;Port 用
+  `getRuntime()` 前向引用(worker 只在 turn 内调用,彼时 runtime 已就绪);
+  dispose 经 session-facade 资源清理对 `["node_repl_tools_broker", ...]` 注册,
+  启动失败路径同步关闭。
+- 测试 6 例全绿(inject 定向/describe 策略过滤/invoke 往返/审批类拒绝/token
+  拒绝/Port 未绑定)。两例既有红与本仓无关:bundle-smoke(Temp 写入 Access
+  denied,环境性)与 mcp-server 的 CUA 凭据捕获断言——stash 实验证明二者在
+  HEAD(无 codemode 改动)上同形态复现,属整版合并后的既有红(pitfall #8 形态),
+  另案处理;边界守卫的既有违规 `mcpDisabledTools.ts`(单文件传递引入,HEAD 上
+  已红)已如实登记进允许面,守卫回绿。
+
+**第三单元(待做)**:观测事件(tools.* 逐调用发与原生工具同构的结构化事件)+
+端到端验收(78 工具会话请求体字节 A/B;脚本死循环被 worker 超时终结)。

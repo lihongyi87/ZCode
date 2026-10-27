@@ -177,6 +177,14 @@ export class AgentRuntime {
   private modelFactory: AgentRuntimeDeps["modelFactory"];
   private modelIoDir?: string;
   private providerRuntimeHeadersPort?: AgentRuntimeDeps["providerRuntimeHeadersPort"];
+  /**
+   * Codemode tools 桥（spec 158）的只读消费面：bootstrap 的 tools broker Port 用它做
+   * 策略预批过滤（needsApproval !== true）与执行。只暴露 registry/executor 的既有
+   * 公开 API，不新增写入路径；审批语义仍由 executor 内部 permission-flow 权威裁决。
+   */
+  get codemodeToolSurface(): { registry: ToolRegistry; executor: ToolExecutor } {
+    return { registry: this.registry, executor: this.executor };
+  }
   private browserControlPort?: AgentRuntimeDeps["browserControlPort"];
   /** 模型请求准入端口；随每次模型请求进调用上下文。 */
   private modelRequestAdmission?: AgentRuntimeDeps["modelRequestAdmission"];

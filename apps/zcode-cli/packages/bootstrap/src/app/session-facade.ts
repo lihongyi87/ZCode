@@ -111,6 +111,7 @@ interface SessionResourceCloseInput {
   closeExecution?: () => Promise<void> | void;
   closeMcp?: () => Promise<void> | void;
   closeNodeReplBrowserBroker?: () => Promise<void> | void;
+  closeNodeReplToolsBroker?: () => Promise<void> | void;
   closeSessionStore?: () => void;
   logger: Logger;
   timeoutMs?: number;
@@ -124,6 +125,7 @@ interface CreateSessionFacadeDeps {
    */
   closeDynamicWorkflowRuns?: () => Promise<void>;
   closeNodeReplBrowserBroker?: () => Promise<void> | undefined;
+  closeNodeReplToolsBroker?: () => Promise<void> | undefined;
   configResult: ConfigResult;
   configuredMcpServers: Record<string, McpServerConfig>;
   configuredDefaultModelSelection?: ModelSelection;
@@ -333,6 +335,7 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
               : undefined,
           closeMcp: deps.ownsMcpPort && deps.mcpPort ? () => deps.mcpPort?.close() : undefined,
           closeNodeReplBrowserBroker: deps.closeNodeReplBrowserBroker,
+          closeNodeReplToolsBroker: deps.closeNodeReplToolsBroker,
           closeSessionStore: closableSessionStore ? () => closableSessionStore.close() : undefined,
           logger: deps.logger,
         });
@@ -819,6 +822,7 @@ export async function closeSessionResources(input: SessionResourceCloseInput): P
     ["execution", input.closeExecution],
     ["mcp", input.closeMcp],
     ["node_repl_browser_broker", input.closeNodeReplBrowserBroker],
+    ["node_repl_tools_broker", input.closeNodeReplToolsBroker],
   ];
 
   // 旧关闭链串行 await；Browser close 永不 settle 时，Execution/MCP 永远不会执行。

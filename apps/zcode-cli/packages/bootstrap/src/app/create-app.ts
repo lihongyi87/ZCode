@@ -102,6 +102,12 @@ import {
   injectNodeReplBrowserBroker,
   type NodeReplBrowserBroker,
 } from "./node-repl-browser-broker.js";
+import {
+  createNodeReplToolsBroker,
+  injectNodeReplToolsBroker,
+  type NodeReplToolsBroker,
+} from "./node-repl-tools-broker.js";
+import { createNodeReplToolsPort } from "./node-repl-tools-port.js";
 import { resolveBuiltInNodeReplMcpServers } from "./built-in-node-repl.js";
 import { resolveZCodeCustomCommandPrompt } from "../custom-command-prompt.js";
 import { resolveZCodeBuiltinPromptCommandInvocation } from "../builtin-prompt-command.js";
@@ -217,6 +223,8 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
   });
   let nodeReplBrowserBroker: NodeReplBrowserBroker | undefined;
   let ownedNodeReplBrowserBroker: NodeReplBrowserBroker | undefined;
+  let nodeReplToolsBroker: NodeReplToolsBroker | undefined;
+  let ownedNodeReplToolsBroker: NodeReplToolsBroker | undefined;
   let providerModelRuntime: ApiProviderModelRuntime | undefined;
   try {
     const storageRoot = resolvePath(configResult.config.storage.dir);
@@ -321,6 +329,22 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
           runtimeConfig.mcp.servers ?? {},
           nodeReplBrowserBroker,
         ),
+      };
+    }
+    // Codemode tools 桥（spec 158）：broker 需先于 runtime config 解析创建（env 注入），
+    // 而 Port 依赖其后装配的工具面——getRuntime 前向引用在首次请求时才解析
+    // （node_repl Worker 只会在 turn 内调用 codemode，彼时 runtime 早已就绪）。
+    if (runtimeConfig.mcp?.servers?.node_repl?.type === "stdio") {
+      nodeReplToolsBroker = createNodeReplToolsBroker({
+        getToolsPort: () => createNodeReplToolsPort(getRuntime().codemodeToolSurface),
+        logger,
+        platform: options.platform,
+      });
+      ownedNodeReplToolsBroker = nodeReplToolsBroker;
+      configuredMcpServers = injectNodeReplToolsBroker(configuredMcpServers, nodeReplToolsBroker);
+      runtimeConfig.mcp = {
+        ...runtimeConfig.mcp,
+        servers: injectNodeReplToolsBroker(runtimeConfig.mcp.servers ?? {}, nodeReplToolsBroker),
       };
     }
     startupTimer.mark("ZCode runtime configuration resolved", {
@@ -1027,6 +1051,9 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       closeNodeReplBrowserBroker: async () => {
         await ownedNodeReplBrowserBroker?.close();
       },
+      closeNodeReplToolsBroker: async () => {
+        await ownedNodeReplToolsBroker?.close();
+      },
       ownsSessionStore,
       prepareUserExecutionBoundary,
       prepareResume,
@@ -1447,6 +1474,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
     providerModelRuntime?.dispose();
     void modelTelemetry.shutdown().catch(() => undefined);
     void ownedNodeReplBrowserBroker?.close();
+    void ownedNodeReplToolsBroker?.close();
     startupTimer.fail("ZCode app startup failed", error, {
       context: { sessionId, workingDirectory },
       event: "bootstrap.app.startup.failed",
