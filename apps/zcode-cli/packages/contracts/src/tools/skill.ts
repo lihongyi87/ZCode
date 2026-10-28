@@ -75,7 +75,7 @@ export const SKILL_MANAGE_TOOL_NAME = "SkillManage";
 
 export const SKILL_MANAGE_INPUT_SCHEMA = z
   .object({
-    action: z.enum(["create", "patch"]),
+    action: z.enum(["create", "patch", "stage", "pending", "approve", "reject"]),
     /** 技能名(= 用户技能目录名);限小写字母/数字/连字符,目录安全。 */
     name: z
       .string()
@@ -88,6 +88,10 @@ export const SKILL_MANAGE_INPUT_SCHEMA = z
     /** patch:old_text 必须在现有正文中恰好出现一次。 */
     old_text: z.string().min(1).optional(),
     new_text: z.string().optional(),
+    /** stage:探针证据(任务/对比结果/bench 判定;spec 164)——approve 时随条目展示。 */
+    evidence: z.string().min(1).max(2_000).optional(),
+    /** approve/reject:pending 条目 id(pending 列表返回)。 */
+    id: z.string().min(1).max(80).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.action === "create" && (!value.description || !value.body)) {
@@ -95,6 +99,20 @@ export const SKILL_MANAGE_INPUT_SCHEMA = z
     }
     if (value.action === "patch" && (!value.old_text || value.new_text === undefined)) {
       ctx.addIssue({ code: "custom", message: "patch requires old_text and new_text" });
+    }
+    if (value.action === "stage") {
+      const isCreateSemantics = Boolean(value.description && value.body);
+      const isPatchSemantics = Boolean(value.old_text && value.new_text !== undefined);
+      if (!isCreateSemantics && !isPatchSemantics) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            "stage requires description+body (create semantics) or old_text+new_text (patch semantics)",
+        });
+      }
+    }
+    if ((value.action === "approve" || value.action === "reject") && !value.id) {
+      ctx.addIssue({ code: "custom", message: `${value.action} requires id from the pending list` });
     }
   });
 
@@ -104,7 +122,7 @@ export const SkillManageInputJsonSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
   properties: {
-    action: { type: "string", enum: ["create", "patch"] },
+    action: { type: "string", enum: ["create", "patch", "stage", "pending", "approve", "reject"] },
     name: {
       type: "string",
       pattern: "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
