@@ -9,6 +9,7 @@ import {
 } from "../deps.js";
 import type { HookRunner, SessionId, ToolExecutor, TraceContext } from "../deps.js";
 import type { KbSearchInput } from "@zcode/contracts";
+import type { SessionSearchInput, SessionSearchOutput } from "@zcode/contracts";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { AgentRuntimeDeps } from "../types.js";
 import { resolveRuntimeEmbeddedSearchEnabled } from "../methods/embedded-search-branch.js";
@@ -236,6 +237,29 @@ function createRuntimeToolExecutor(
       search: async (query: string, limit?: number) =>
         searchAndActivateDeferredTools(runtime, query, limit),
     },
+    // SessionSearch（spec 162）：跨会话只读检索。生产装配的 SqliteSessionStore 带
+    // searchSessionContent；内存测试 store 没有该方法则端口缺席，handler 诚实报
+    // 「能力不可用」。不进 SessionStorePort，避免全体实现者跟随。
+    ...(runtime.sessionStore &&
+    typeof (runtime.sessionStore as { searchSessionContent?: unknown }).searchSessionContent === "function"
+      ? {
+          sessionHistorySearchPort: {
+            search: (
+              request: SessionSearchInput,
+              context: { currentSessionId?: string; currentDirectory: string },
+            ) =>
+              (runtime.sessionStore as unknown as {
+                searchSessionContent: (
+                  request: SessionSearchInput,
+                  context: { currentSessionId?: string; currentDirectory: string },
+                ) => Promise<SessionSearchOutput>;
+              }).searchSessionContent(request, {
+                ...context,
+                currentSessionId: context.currentSessionId ?? runtime.sessionId,
+              }),
+          },
+        }
+      : {}),
     // KbSearch（140 §P1-5）：与每轮 kb_recall 共用索引与召回缓存；文件系统缺席时
     // 不装配端口，handler 诚实报「能力不可用」。
     ...(deps.fileSystemPort

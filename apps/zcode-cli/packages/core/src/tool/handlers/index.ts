@@ -40,6 +40,7 @@ import {
 import { isSubagentDispatchToolName } from "../compat.js";
 import { skillToolEntry } from "./skill.js";
 import { kbSearchToolEntry } from "./kb-search.js";
+import { sessionSearchToolEntry } from "./session-search.js";
 import { lspCallHierarchyToolEntry } from "./lsp-call-hierarchy.js";
 import { lspDefinitionToolEntry } from "./lsp-definition.js";
 import { lspReferencesToolEntry } from "./lsp-references.js";
@@ -132,6 +133,7 @@ export const builtInTools: ToolEntry[] = [
   taskToolEntry,
   skillToolEntry,
   kbSearchToolEntry,
+  sessionSearchToolEntry,
   jsToolEntry,
   createWorkflowToolEntry,
   amendWorkflowToolEntry,

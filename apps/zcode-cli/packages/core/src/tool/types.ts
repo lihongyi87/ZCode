@@ -1,4 +1,5 @@
 import type { ToolSearchExecutionContext, ModelCallWrapper } from "@zcode/contracts";
+import type { SessionHistorySearchPort } from "@zcode/contracts";
 import type { DangerousCommandPolicy } from "@zcode/shared";
 import type { McpToolUiDescriptor } from "@zcode/shared/mcp-apps";
 // ============================================================
@@ -192,6 +193,8 @@ export interface ToolExecutionContext {
   toolSearchControlPort?: ToolSearchControlPort;
   /** 知识卡检索端口（KbSearch）；runtime 装配，缺席时 handler 诚实失败。 */
   kbSearchControlPort?: KbSearchControlPort;
+  /** 跨会话检索端口（SessionSearch，spec 162）；runtime 装配，缺席时 handler 诚实失败。 */
+  sessionHistorySearchPort?: SessionHistorySearchPort;
   emitEvent?: (event: SessionEvent) => Promise<void>;
   executionPort?: ExecutionPort;
   /** browser-use 控制端口；node_repl 的 agent.browsers.* 经此执行。缺省则 browser 不可用。 */

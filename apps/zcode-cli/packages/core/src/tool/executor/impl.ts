@@ -44,6 +44,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       backgroundTaskControlPort: options.backgroundTaskControlPort,
       toolSearchControlPort: options.toolSearchControlPort,
       kbSearchControlPort: options.kbSearchControlPort,
+      sessionHistorySearchPort: options.sessionHistorySearchPort,
       executionPort: options.executionPort,
       browserControlPort: options.browserControlPort,
       browserDocumentationRoot: options.browserDocumentationRoot,

@@ -18,6 +18,7 @@ export * from "./webfetch.js";
 export * from "./agent.js";
 export * from "./skill.js";
 export * from "./kb-search.js";
+export * from "./session-search.js";
 export * from "./todo.js";
 export * from "./automation.js";
 export * from "./off-peak.js";

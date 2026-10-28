@@ -1,4 +1,5 @@
 import type { ToolSearchExecutionContext } from "@zcode/contracts";
+import type { SessionHistorySearchPort } from "@zcode/contracts";
 import type {
   AgentExecutionTelemetryPort,
   AgentTelemetryActorKind,
@@ -95,6 +96,7 @@ export interface ToolExecutorOptions {
   backgroundTaskControlPort?: BackgroundTaskControlPort;
   toolSearchControlPort?: ToolSearchControlPort;
   kbSearchControlPort?: KbSearchControlPort;
+  sessionHistorySearchPort?: SessionHistorySearchPort;
   executionPort?: ExecutionPort;
   browserControlPort?: BrowserControlPort;
   browserDocumentationRoot?: string;
@@ -215,6 +217,7 @@ export interface ToolExecutorDeps {
   backgroundTaskControlPort?: BackgroundTaskControlPort;
   toolSearchControlPort?: ToolSearchControlPort;
   kbSearchControlPort?: KbSearchControlPort;
+  sessionHistorySearchPort?: SessionHistorySearchPort;
   executionPort?: ExecutionPort;
   browserControlPort?: BrowserControlPort;
   browserDocumentationRoot?: string;

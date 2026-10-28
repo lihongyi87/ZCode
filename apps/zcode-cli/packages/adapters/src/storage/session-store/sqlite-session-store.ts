@@ -47,6 +47,8 @@ import type {
   SessionInputDelivery,
   SessionInputRecord,
   SessionInputStatus,
+  SessionSearchInput,
+  SessionSearchOutput,
   SessionTaskLinkRecord,
   SessionRevert,
   SessionStorePort,
@@ -100,6 +102,7 @@ import * as localSettingsRepository from "./repositories/local-settings.js";
 import * as messageRepository from "./repositories/messages.js";
 import * as proactiveRepository from "./repositories/proactive-orchestration.js";
 import * as scriptWorkflowActivityRepository from "./repositories/script-workflow-activities.js";
+import { searchSessionContent as sessionContentSearchRepository } from "./repositories/session-content-search.js";
 import * as scriptWorkflowRunRepository from "./repositories/script-workflow-runs.js";
 import * as sessionEntryRepository from "./repositories/session-entries.js";
 import * as sessionInputRepository from "./repositories/session-inputs.js";
@@ -644,6 +647,14 @@ export class SqliteSessionStore
 
   async messages(input: { sessionID: SessionId }): Promise<MessageWithParts[]> {
     return messageRepository.messages(this.db, input);
+  }
+
+  /** spec 162:agent 跨会话只读检索(不进 SessionStorePort,避免全体实现者跟随)。 */
+  async searchSessionContent(
+    input: SessionSearchInput,
+    context: { currentSessionId?: string; currentDirectory: string },
+  ): Promise<SessionSearchOutput> {
+    return sessionContentSearchRepository(this.db, input, context);
   }
 
   async saveSessionEntry(input: SessionEntryInfo): Promise<void> {
