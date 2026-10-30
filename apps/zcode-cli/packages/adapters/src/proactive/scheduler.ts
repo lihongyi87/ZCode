@@ -148,6 +148,9 @@ export function createProactiveSchedulerFromEnv(
     ...rest,
     // 信箱根与会话 mailbox 完全同源；这里自建实例只做读（peek），不产生写入方冲突。
     // 消息面关闭时显式传 undefined：调度器因缺少事件源不启动。
+    // spec 154 P3:设置面同意状态由宿主(services/node.ts)翻译成
+    // ZCODE_PROACTIVE_ORCHESTRATION / ZCODE_PROACTIVE_WORKSPACES 注入本进程 env
+    // (telemetryEnabled 同款注入先例)——env 是唯一配置通道,不设双链。
     mailbox: messageEnabled ? createSchedulerMailbox(env) : undefined,
     config: resolveProactiveConfigFromEnv(env),
   });

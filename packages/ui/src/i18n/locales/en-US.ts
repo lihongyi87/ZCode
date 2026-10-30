@@ -340,6 +340,11 @@ const enUS: Record<string, string> = {
   "chat.initialization.failed": "Initialization failed. Sending is unavailable.",
   "chat.initialization.retry": "Retry",
   "chat.officeSuggestions.setting": "Proactive task suggestions",
+  "settings.proactiveOrchestration.label": "Proactive orchestration (cross-session relay)",
+  "settings.proactiveOrchestration.description":
+    "Let sessions in checked workspaces wake up automatically to relay work; only checked workspaces are allowed",
+  "settings.proactiveOrchestration.noWorkspaces":
+    "No recent projects to check yet — they will appear here after you use them",
   "chat.officeSuggestions.settingDescription": "Available only in Office mode.",
   "chat.plugins.browseMarketplace": "Browse plugin marketplace",
   "chat.plugins.loadError": "Could not load plugins. Reopen the menu to try again.",

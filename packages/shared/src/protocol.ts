@@ -361,6 +361,16 @@ export interface AppSettings {
   nativeSearchEnhancementsEnabled?: boolean;
   /** 自适应思考档（experimental，默认关）：工具续跑步降一档；「自动」预设写入。 */
   adaptiveReasoningEnabled?: boolean;
+  /**
+   * spec 154 P3:主动编排逐工作区同意,持久化设置面。undefined=未设置(不注入,
+   * CLI/TUI 保留 env 直配后备);宿主经 node.ts 翻译成
+   * ZCODE_PROACTIVE_ORCHESTRATION / ZCODE_PROACTIVE_WORKSPACES 注入 agent env。
+   * allowedWorkspaceKeys 为工作区目录绝对路径(dispatcher workspaceKey 同源)。
+   */
+  proactiveOrchestrationSettings?: {
+    enabled: boolean;
+    allowedWorkspaceKeys: string[];
+  };
   /** 危险命令策略（缺省即严格）：缺省时按 allowPersistentAuthorization=false + 默认项全开解释。 */
   dangerousCommandPolicy?: DangerousCommandPolicy;
   /** 新建或冷恢复时读取；已有 Runtime 保持原策略。 */

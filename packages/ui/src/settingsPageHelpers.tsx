@@ -35,6 +35,7 @@ import { DataBaseDirControl } from "@/settings/DataBaseDirControl.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useOptionalServices } from "@/hooks/useServices.js";
 import { ProactiveSuggestionsSetting } from "@/settings/ProactiveSuggestionsSetting.js";
+import { ProactiveOrchestrationSetting } from "@/settings/ProactiveOrchestrationSetting.js";
 import { DynamicWorkflowModeSetting } from "@/settings/DynamicWorkflowModeSetting.js";
 import { normalizeInterfaceMode, type InterfaceMode } from "@/lib/interfaceMode.js";
 import {
@@ -870,6 +871,7 @@ export function GeneralSectionContent({
         />
         {/* docs/dynamic-workflow/launch.md「The user's choice」：服务端未提供时整行不渲染。 */}
         {hasServices ? <DynamicWorkflowModeSetting /> : null}
+        {hasServices ? <ProactiveOrchestrationSetting /> : null}
         <SettingsRow
           label={intl.formatMessage({ id: "settings.modelIoFullRetention" })}
           description={intl.formatMessage({

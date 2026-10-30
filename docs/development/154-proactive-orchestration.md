@@ -77,7 +77,13 @@ depth=0)→ settle。
   config 开启)+集成测试。依赖:session_entry 编排状态写入。
 - **P2(~1 天)**:automation_due/task_completed/task_failed 三事件(生命周期
   溯源)+编排模式工具面选型。
-- **P3**:同意开关设置 UI;codex/编辑器联动评估。
+- **P3(已落地)**:同意开关设置链路——shared AppSettings 增
+  `proactiveOrchestrationSettings{enabled,allowedWorkspaceKeys}`(持久化面),
+  宿主 node.ts 翻译成 `ZCODE_PROACTIVE_ORCHESTRATION`/`ZCODE_PROACTIVE_WORKSPACES`
+  注入 agent env(telemetryGate 同款先例;env 是唯一配置通道,不设双链),
+  UI 设置页开关+最近项目勾选(ProactiveOrchestrationSetting,SettingsRow
+  stacked+detail)。workspaceKey=工作区目录绝对路径,与 recentProjects 同形。
+  codex/编辑器联动评估:暂缓(无真实 IDE 驱动需求,与 spec 161 同判据)。
 - 许可:拷贝/改写飞鱼实现须登记 copied-components.json(Apache-2.0)。
 
 ## 落地状态(2026-10-25)
@@ -89,8 +95,8 @@ depth=0)→ settle。
   retry_at/owner_id/lease_until/generation,唯一索引 event+target+subscription)。
 - 契约:`contracts/interfaces/proactive-orchestration.ts` —— 事件/订阅/trigger
   数据形状 + `canProactivelyWake`(来源锚点+深度护栏) + triggerId/commandId 派生
-  + `MAX_PROACTIVE_CAUSAL_DEPTH`/`MAX_PROACTIVE_TRIGGER_ATTEMPTS`/
-  `PROACTIVE_TRIGGER_LEASE_MS`。
+  - `MAX_PROACTIVE_CAUSAL_DEPTH`/`MAX_PROACTIVE_TRIGGER_ATTEMPTS`/
+    `PROACTIVE_TRIGGER_LEASE_MS`。
 - 仓储:`adapters/.../repositories/proactive-orchestration.ts` —— publish(幂等,
   只对 event+sourceId 双匹配的订阅生成 trigger)、claim(owner 租约单消费者,
   过期租约自愈,**按事件工作区过滤**避免跨区认领)、settle(delivered/rejected 终态,
@@ -130,7 +136,7 @@ depth=0)→ settle。
   ProactiveStorePort+编排状态读写能力)→ `createProactiveSchedulerFromEnv`
   (env 解析+同 root mailbox)→ start;shutdown 时先 dispose。
 - 注入路径:`context.sessions.get(sessionId).app.enqueueDeferredInput(prompt,
-  {delivery:"queue"})`;会话不驻留时抛错退避。
+{delivery:"queue"})`;会话不驻留时抛错退避。
 - 订阅工具 `ProactiveSubscribe`(contracts schema + core handler):
   整体替换订阅集合/status 切换/generation 递增;订阅 id 由工具分配。
 - 测试:64 例(仓储 15/mailbox 9/dispatcher 9/policy 6/接线 12+端到端 1/

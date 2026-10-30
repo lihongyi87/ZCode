@@ -2345,6 +2345,19 @@ export function createLocalServices(options: {
       // (CLI telemetry bootstrap 认 ZCODE_MODEL_TELEMETRY_ENABLED)。
       const agentTelemetryGate: Record<string, string> =
         settings.telemetryEnabled === false ? { ZCODE_MODEL_TELEMETRY_ENABLED: "false" } : {};
+      // 主动编排逐工作区同意(spec 154 P3):设置面是用户显式同意的权威来源,
+      // 翻译成 env 注入 agent 子进程(adapters proactive 调度器认这两个变量)。
+      // 未设置(undefined)时不注入——CLI/TUI 链路保留 env 直配的后备语义。
+      const proactiveGate: Record<string, string> = (() => {
+        const proactive = settings.proactiveOrchestrationSettings;
+        if (!proactive) return {};
+        return {
+          ZCODE_PROACTIVE_ORCHESTRATION: proactive.enabled ? "1" : "0",
+          ...(proactive.enabled && proactive.allowedWorkspaceKeys.length > 0
+            ? { ZCODE_PROACTIVE_WORKSPACES: proactive.allowedWorkspaceKeys.join(",") }
+            : {}),
+        };
+      })();
       const cuaPluginEnabled = isCuaEnabledForContext(context);
       let cuaProductHelperEnv: Record<string, string> = {};
       if (cuaPluginEnabled && (process.platform === "darwin" || process.platform === "win32")) {
@@ -2401,6 +2414,7 @@ export function createLocalServices(options: {
         // computer-use MCP server 经 __zcode-plugin-host 恢复 token 后连上 broker。
         ...cuaProductHelperEnv,
         ...agentTelemetryGate,
+        ...proactiveGate,
         ...buildAgentTelemetrySpawnEnv({
           deviceMid: telemetryDeviceMid,
           runtimeSurface: options?.agentTelemetry?.runtimeSurface ?? "remote_workspace_host",

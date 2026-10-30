@@ -308,6 +308,11 @@ const zhCN: Record<string, string> = {
   "chat.initialization.failed": "初始化失败，暂时无法发送",
   "chat.initialization.retry": "重试",
   "chat.officeSuggestions.setting": "主动任务推荐",
+  "settings.proactiveOrchestration.label": "主动编排（跨会话接力）",
+  "settings.proactiveOrchestration.description":
+    "允许已订阅事件的工作区自动唤醒会话接力工作；仅在下方勾选的工作区生效",
+  "settings.proactiveOrchestration.noWorkspaces":
+    "暂无最近项目可勾选——先用一段时间,项目会出现在这里",
   "chat.officeSuggestions.settingDescription": "仅在办公模式下支持。",
   "chat.plugins.browseMarketplace": "浏览插件市场",
   "chat.plugins.loadError": "插件加载失败，请重新打开菜单",

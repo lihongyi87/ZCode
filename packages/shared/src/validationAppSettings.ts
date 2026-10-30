@@ -619,6 +619,14 @@ const appSettingsObjectSchema = z.object({
   nativeSearchEnhancementsEnabled: z.boolean().default(true),
   // 自适应思考档（experimental，默认关）：工具续跑步降一档。缺省即关，不写显式默认值。
   adaptiveReasoningEnabled: z.boolean().optional(),
+  // spec 154 P3:主动编排逐工作区同意,持久化设置面。缺省 undefined=未同意(env
+  // 仍是 CLI/TUI 链路的后备来源);enabled=true 且 allowedWorkspaceKeys 列出才生效。
+  proactiveOrchestrationSettings: z
+    .object({
+      enabled: z.boolean(),
+      allowedWorkspaceKeys: z.array(nonEmptyStringSchema),
+    })
+    .optional(),
   toolSearchMode: appToolSearchModeSchema.default("off"),
   onboardingOccupation: appSettingsOccupationSchema.nullish(),
   proactiveSuggestionsEnabled: z.boolean().optional(),
@@ -740,6 +748,12 @@ export const appSettingsPatchSchema = z.object({
   providerFamilyDomainMigrated: z.boolean().optional(),
   nativeSearchEnhancementsEnabled: z.boolean().optional(),
   adaptiveReasoningEnabled: z.boolean().optional(),
+  proactiveOrchestrationSettings: z
+    .object({
+      enabled: z.boolean(),
+      allowedWorkspaceKeys: z.array(nonEmptyStringSchema),
+    })
+    .optional(),
   toolSearchMode: appToolSearchModeSchema.optional(),
   onboardingOccupation: z
     .enum([
