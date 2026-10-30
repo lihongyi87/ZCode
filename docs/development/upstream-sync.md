@@ -277,6 +277,40 @@ typecheck 0 错。教训入册：**每次整版合并后必须跑全部 wiring �
 试合并 `git merge official/main`：505 冲突（189 UU + 304 UD + 12 其他）。304 个 UD 的主体是
 「上游删除的旧测试」——但**不能批量接受**：需先按目录甄别 CE 特有测试（甄别清单见上）。
 预计裁决量与 3.16.1 合并（141 冲突）同量级或更大，且 304 个 UD 需要的甄别工作量是新增项。
-**执行建议：单开专注会话做，先跑 `git diff --diff-filter=D 3c5b227 official/main` 生成甄别清单，
-再分类：CE 特有测试保留 / 上游迁移的跟随新形态 / 两边都有的取上游新形态。**
-回退时 `git merge --abort` 已验证干净（工作区恢复 c43aee09）。
+**执行建议：单开专注会话做。UD 裁决已闭环可重放（见下方「作业面工具链」）；UU 189 的形态分类与已定案裁决见下方「UU 形态分类与已定案域」。**
+回退时 `git merge --abort` 已两轮验证干净（工作区恢复合并前提交）。
+
+### 作业面工具链（已提交：generate-v3171-\*.mjs + 三份清单）
+
+重放手册（实测两轮，~5 分钟恢复到 UU 阶段）：
+
+1. `git merge official/main -m "Merge official/main (v3.17.1) ..."`（工作区必须干净，.vscode 噪音先 stash）
+2. `node scripts/generate-v3171-ud-resolution.mjs` → 按 `docs/development/v3171-ud-resolution.md` 执行：
+   222 个 `git rm`（跟随删除）+ 82 个 `git checkout --ours && git add`（保留）
+3. 剩 189 UU → 按 `docs/development/v3171-uu-conflicts.txt` 逐域解
+4. `pnpm licenses:refresh`/重生成 third-party 清单 + pnpm-lock 收口 → wiring 护栏 + typecheck + lint
+
+UD 判据三轮迭代的教训（防后人重踩）：ours-diff 非空判据**不可用**——3.16.1 的全仓
+oxfmt 重排（99062adb）让每个上游文件都有格式化 diff；first-parent diff **不可用**——
+会把 3.16.2 合并带入的上游文件误判为 CE 触碰。终判 = `--no-merges` 非 merge 提交
+触碰集合 **+ 排除 fmt 提交**（按提交信息含 fmt/oxfmt/格式 过滤，99062adb 在拓扑
+范围内且正是污染源）。
+
+### UU 形态分类与已定案域（2026-10-30 第二轮侦察，已定案的直接执行）
+
+规模分布：**108 个文件仅 1 个冲突 hunk**（多数为双侧加行并集/import 冲突，手工并快）；
+高冲突集中在生成产物（upstream-snapshot.json 340 hunk / pnpm-lock 100 / inventory.json 27）
+——**这三个不手解，合并提交后走重生成流程**（licenses.mjs notices / pnpm install 对齐 lockfile /
+snapshot 构建产物），与 3.16.1 合并手法一致。
+
+已定案域（侦察实测）：
+
+| 域/文件                                             | 裁决         | 依据                                                                                  |
+| --------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------- |
+| README.md / README.en.md / NOTICE.md                | **取我们**   | CE 产品面（七差异表/披露表跟随 CE 行为：打包版接受 update feed override 是 CE 特性）  |
+| .husky/pre-push                                     | **取我们**   | CE 门禁体系（verify:pre-push fast/slow + ZCODE_PUSH_FAST），AGENTS.md 已文档化        |
+| rule-catalog.md（architecture-governance）          | **取上游**   | 上游删了 catalog 里 "test" 词，跟随上游架构治理规则                                   |
+| import-only 冲突（mailbox/index.ts 型）             | **并集**     | 保留双方 import（CE 用 SessionMailboxAppendInput、上游新 API 类型），typecheck 揪未用 |
+| runner-runtime-headers.ts 型                        | **并集**     | 上游新特性 import（ZCODE_PROVIDER_CONFIG_NETWORK_ERROR）+ CE 既有 import 共存         |
+| schema.ts 型 1-hunk 大块                            | 逐个三方对比 | 头部双侧改动叠加，取基底回补另一侧语义                                                |
+| upstream-snapshot.json / pnpm-lock / inventory.json | 合并后重生成 | 生成产物不手解（340/100/27 hunk）                                                     |
