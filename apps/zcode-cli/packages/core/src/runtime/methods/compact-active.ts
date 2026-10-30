@@ -42,6 +42,7 @@ import {
   hasEnoughRuntimeEntriesToCompact,
   resolveCompactPreserveRecentTokenBudget,
   selectCompactEntries,
+  type CompactEntrySelection,
   selectCompactEntriesAfterPromptTooLong,
   selectCompactEntriesForInitialPromptTooLong,
   throwIfTurnAborted,
@@ -57,7 +58,7 @@ import {
   readApprovedPlanFileReferenceEntry,
 } from "../helpers/index.js";
 import type { CompactTimelineContext, RuntimeModelTextResult } from "../types.js";
-import type { Model } from "../deps.js";
+import type { Model, MessageId } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { CompactAttemptOutcome } from "./turn-loop-state.js";
 import {
@@ -515,6 +516,204 @@ async function compactActiveConversationImpl(
         break;
       }
 
+      return await applyCompactSummaryResult.call(this, {
+        result,
+        entriesForSummary,
+        entriesToSummarize,
+        currentSelection,
+        preservedEntries,
+        activeEntries,
+        useMidConversationSystem,
+        compactModel,
+        customInstructions,
+        compactTimeline,
+        attempt,
+        maxAttempts,
+        trigger,
+        phase,
+        compactReason,
+        preCompactTokenCount,
+        lastSummarizedMessageId,
+        turnTraceContext,
+        events,
+        modelTraceContext,
+        options,
+      });
+    } catch (error) {
+      if (
+        trigger === CompactTrigger.Auto &&
+        attempt < maxAttempts &&
+        !isTurnCancellationError(error, options.abortSignal) &&
+        isAutoCompactRetryableError(error)
+      ) {
+        attempt += 1;
+        const retryPayload = this.buildCompactTimelinePayload(compactTimeline, {
+          attempt,
+          maxAttempts,
+          reason: compactFailureReasonFromError(error),
+          status: CompactTimelineStatus.Retrying,
+        });
+        // 自动 compact 的中间失败不能提前落成 failed 横线。
+        // 这里在同一个 operation 上发 retrying，直到第 3 次仍失败才写最终 failed。
+        await persistCompactTimelineEvent(
+          this,
+          SessionEventType.CompactStarted,
+          retryPayload,
+          turnTraceContext,
+          events,
+        );
+        this.logger?.warn("Auto compact retrying", {
+          ...traceContextToLogContext(turnTraceContext),
+          attempt,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          event: "compact.auto.retrying",
+          maxAttempts,
+          module: "core.runtime",
+          timelineStatus: CompactTimelineStatus.Retrying,
+        });
+        currentSelection = initialSelection;
+        preservedEntries = currentSelection.preservedEntries;
+        entriesForSummary = initialEntriesForSummary;
+        entriesToSummarize = getRuntimeEntriesToSummarize(entriesForSummary);
+        continue;
+      }
+      await this.finishCompactTimelineFailure({
+        abortSignal: options.abortSignal,
+        attempt,
+        error,
+        events,
+        maxAttempts: maxAttempts > 1 ? maxAttempts : undefined,
+        timeline: compactTimeline,
+        traceContext: turnTraceContext,
+      });
+      throw error;
+    }
+  }
+}
+
+function isAutoCompactRetryableError(error: unknown): boolean {
+  return isCoreError(error) ? error.retryable : true;
+}
+
+/** 从被总结条目里找上一次压缩的摘要文本（取最新一条；无则 undefined）。 */
+function extractPreviousCompactSummaryText(
+  entries: readonly RuntimeMessageEntry[],
+): string | undefined {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (!entry || entry.kind === "attachment") continue;
+    if (entry.message.role !== "user") continue;
+    const text = modelMessageContentToText(entry.message.content);
+    if (isPreviousCompactSummaryMessage(text)) return text;
+  }
+  return undefined;
+}
+
+function canUseCompactSummaryTruncationFallback(trigger: CompactTrigger): boolean {
+  return trigger !== CompactTrigger.Auto && trigger !== CompactTrigger.Reactive;
+}
+
+function selectInitialCompactEntriesForActiveConversation(input: {
+  activeEntries: readonly RuntimeMessageEntry[];
+  initialPromptTooLongCause?: unknown;
+  trigger: CompactTrigger;
+  useMidConversationSystem?: boolean;
+  preserveRecentTokenBudget?: number;
+}) {
+  const baseSelection = selectCompactEntries({
+    entries: input.activeEntries,
+    trigger: input.trigger,
+    preserveRecentTokenBudget: input.preserveRecentTokenBudget,
+  });
+  if (input.initialPromptTooLongCause === undefined) {
+    return baseSelection;
+  }
+
+  return (
+    selectCompactEntriesForInitialPromptTooLong({
+      entries: input.activeEntries,
+      promptTooLongCause: input.initialPromptTooLongCause,
+      trigger: input.trigger,
+      useMidConversationSystem: input.useMidConversationSystem,
+      preserveRecentTokenBudget: input.preserveRecentTokenBudget,
+    }) ?? baseSelection
+  );
+}
+
+function capCompactSummaryMaxOutputTokens(model: Model): number {
+  // Compact 是独立执行链，在这里显式选择模型上限与 summary 20K 上限中的较小值。
+  const desired = Math.min(
+    resolveNormalRequestMaxOutputTokens({
+      modelMaxOutputTokens: model.optionSpecs.maxOutputTokens.max,
+    }),
+    MAX_OUTPUT_TOKENS_FOR_SUMMARY,
+  );
+  return Math.min(desired, model.optionSpecs.maxOutputTokens.max);
+}
+
+/**
+ * 摘要换入段(spec 166 第 1 步纯重构):从 compactActiveConversationImpl 提取的
+ * 「摘要之后的一切」——收缩校验/文件清单 annex/事件落库/历史替换。原序原语义
+ * 迁移;precompute 换入(spec 166 第 2 步)将复用此入口。
+ */
+async function applyCompactSummaryResult(
+  this: AgentRuntimeInternal,
+  input: {
+    result: RuntimeModelTextResult;
+    entriesForSummary: readonly RuntimeMessageEntry[];
+    entriesToSummarize: readonly RuntimeMessageEntry[];
+    currentSelection: CompactEntrySelection;
+    preservedEntries: readonly RuntimeMessageEntry[];
+    activeEntries: readonly RuntimeMessageEntry[];
+    useMidConversationSystem: boolean;
+    compactModel: Model;
+    customInstructions: string | undefined;
+    compactTimeline: CompactTimelineContext;
+    attempt: number;
+    maxAttempts: number;
+    trigger: CompactTrigger;
+    phase: CompactPhase;
+    compactReason: CompactReason;
+    preCompactTokenCount: number;
+    lastSummarizedMessageId: MessageId | undefined;
+    turnTraceContext: TraceContext;
+    events: SessionEvent[];
+    modelTraceContext: TraceContext;
+    options: {
+      abortSignal?: AbortSignal;
+      autoCompactThreshold?: number;
+      activeEntries?: readonly RuntimeMessageEntry[];
+    };
+  },
+): Promise<{
+  displayText: string;
+  entries: readonly RuntimeMessageEntry[];
+  outcome: Extract<CompactAttemptOutcome, "compacted" | "skipped">;
+  tokenCount: number;
+}> {
+  const {
+    result,
+    entriesForSummary,
+    entriesToSummarize,
+    currentSelection,
+    preservedEntries,
+    activeEntries,
+    useMidConversationSystem,
+    compactModel,
+    customInstructions,
+    compactTimeline,
+    attempt,
+    maxAttempts,
+    trigger,
+    phase,
+    compactReason,
+    preCompactTokenCount,
+    lastSummarizedMessageId,
+    turnTraceContext,
+    events,
+    modelTraceContext,
+    options,
+  } = input;
       const summary = formatCompactSummaryOrThrow(this, result);
       // 文件清单随摘要累积（吸收 pi compaction/utils.ts:16-84）：本次总结范围内的
       // Read/Edit/Write 调用 + 上次摘要已累积的清单（继承），一并挂到持久化摘要之后。
@@ -697,114 +896,4 @@ async function compactActiveConversationImpl(
         outcome: "compacted",
         tokenCount: providerPostCompactTokenCount,
       };
-    } catch (error) {
-      if (
-        trigger === CompactTrigger.Auto &&
-        attempt < maxAttempts &&
-        !isTurnCancellationError(error, options.abortSignal) &&
-        isAutoCompactRetryableError(error)
-      ) {
-        attempt += 1;
-        const retryPayload = this.buildCompactTimelinePayload(compactTimeline, {
-          attempt,
-          maxAttempts,
-          reason: compactFailureReasonFromError(error),
-          status: CompactTimelineStatus.Retrying,
-        });
-        // 自动 compact 的中间失败不能提前落成 failed 横线。
-        // 这里在同一个 operation 上发 retrying，直到第 3 次仍失败才写最终 failed。
-        await persistCompactTimelineEvent(
-          this,
-          SessionEventType.CompactStarted,
-          retryPayload,
-          turnTraceContext,
-          events,
-        );
-        this.logger?.warn("Auto compact retrying", {
-          ...traceContextToLogContext(turnTraceContext),
-          attempt,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          event: "compact.auto.retrying",
-          maxAttempts,
-          module: "core.runtime",
-          timelineStatus: CompactTimelineStatus.Retrying,
-        });
-        currentSelection = initialSelection;
-        preservedEntries = currentSelection.preservedEntries;
-        entriesForSummary = initialEntriesForSummary;
-        entriesToSummarize = getRuntimeEntriesToSummarize(entriesForSummary);
-        continue;
-      }
-      await this.finishCompactTimelineFailure({
-        abortSignal: options.abortSignal,
-        attempt,
-        error,
-        events,
-        maxAttempts: maxAttempts > 1 ? maxAttempts : undefined,
-        timeline: compactTimeline,
-        traceContext: turnTraceContext,
-      });
-      throw error;
-    }
-  }
-}
-
-function isAutoCompactRetryableError(error: unknown): boolean {
-  return isCoreError(error) ? error.retryable : true;
-}
-
-/** 从被总结条目里找上一次压缩的摘要文本（取最新一条；无则 undefined）。 */
-function extractPreviousCompactSummaryText(
-  entries: readonly RuntimeMessageEntry[],
-): string | undefined {
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    const entry = entries[index];
-    if (!entry || entry.kind === "attachment") continue;
-    if (entry.message.role !== "user") continue;
-    const text = modelMessageContentToText(entry.message.content);
-    if (isPreviousCompactSummaryMessage(text)) return text;
-  }
-  return undefined;
-}
-
-function canUseCompactSummaryTruncationFallback(trigger: CompactTrigger): boolean {
-  return trigger !== CompactTrigger.Auto && trigger !== CompactTrigger.Reactive;
-}
-
-function selectInitialCompactEntriesForActiveConversation(input: {
-  activeEntries: readonly RuntimeMessageEntry[];
-  initialPromptTooLongCause?: unknown;
-  trigger: CompactTrigger;
-  useMidConversationSystem?: boolean;
-  preserveRecentTokenBudget?: number;
-}) {
-  const baseSelection = selectCompactEntries({
-    entries: input.activeEntries,
-    trigger: input.trigger,
-    preserveRecentTokenBudget: input.preserveRecentTokenBudget,
-  });
-  if (input.initialPromptTooLongCause === undefined) {
-    return baseSelection;
-  }
-
-  return (
-    selectCompactEntriesForInitialPromptTooLong({
-      entries: input.activeEntries,
-      promptTooLongCause: input.initialPromptTooLongCause,
-      trigger: input.trigger,
-      useMidConversationSystem: input.useMidConversationSystem,
-      preserveRecentTokenBudget: input.preserveRecentTokenBudget,
-    }) ?? baseSelection
-  );
-}
-
-function capCompactSummaryMaxOutputTokens(model: Model): number {
-  // Compact 是独立执行链，在这里显式选择模型上限与 summary 20K 上限中的较小值。
-  const desired = Math.min(
-    resolveNormalRequestMaxOutputTokens({
-      modelMaxOutputTokens: model.optionSpecs.maxOutputTokens.max,
-    }),
-    MAX_OUTPUT_TOKENS_FOR_SUMMARY,
-  );
-  return Math.min(desired, model.optionSpecs.maxOutputTokens.max);
 }
