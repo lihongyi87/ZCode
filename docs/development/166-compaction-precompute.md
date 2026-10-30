@@ -1,6 +1,6 @@
 # 166 · Compaction Precompute——后台预热式自动压缩(spec 165 #2 的实现批次)
 
-状态:设计定稿,待实现
+状态:第 1 步(拆换入段)已实现(3ac68b6c,applyCompactSummaryResult);第 2-4 步(预热/换入/观测)待实现
 来源:OpenCode `session/compaction.ts` 的 precompute 语义(吸收目标);对照发现我们的 keep 窗口已存在,缺口收窄为「预热」单项。
 
 ## 问题
@@ -20,7 +20,9 @@
 
 ## 设计(四件套)
 
-### 1. 拆换入段(实现第一步,纯重构)
+### 1. 拆换入段(实现第一步,纯重构)——✅ 已完成(3ac68b6c)
+
+行为不变已验证:compact 全量套件改动前后失败集合完全一致(14 个既有 Windows 本地失败,与 CI 无关)。
 
 把 `compactActiveConversationImpl` 中从 `formatCompactSummaryOrThrow` 起到函数尾的段落提为:
 
