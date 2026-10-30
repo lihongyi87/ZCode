@@ -25,6 +25,8 @@ export {
   getAutoCompactThreshold,
   getEffectiveContextWindowSize,
   shouldAutoCompact,
+  shouldPrecomputeCompact,
+  AUTOCOMPACT_PRECOMPUTE_PERCENT,
 } from "./policy.js";
 export {
   DEFAULT_MICROCOMPACT_COMPACTABLE_TOOLS,

@@ -15,6 +15,12 @@ export const DEFAULT_AUTOCOMPACT_THRESHOLD_PERCENT = 100;
 export const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3;
 /** body-after-prefix 口径的全量硬顶比例（吸收 codex effective_context_window_percent）。 */
 export const AUTOCOMPACT_HARD_CAP_PERCENT = 0.95;
+/**
+ * spec 166:预热阈值(占 effectiveContextWindow 比例)。上下文越过此线即后台
+ * 预生成压缩摘要(OpenCode precompute 语义),到 compact 阈值时直接换入成品,
+ * 免去同步摘要等待。0 = 关闭预热。
+ */
+export const AUTOCOMPACT_PRECOMPUTE_PERCENT = 0.85;
 
 export interface AutoCompactPolicyConfig {
   enabled?: boolean;
@@ -49,6 +55,10 @@ export interface AutoCompactPolicyConfig {
    */
   preserveRecentTokenBudget?: number;
   preserveRecentTokenBudgetByModel?: Record<string, number>;
+  /**
+   * spec 166:预热阈值覆盖(0=关闭预热);缺省 AUTOCOMPACT_PRECOMPUTE_PERCENT(85%)。
+   */
+  precomputePercent?: number;
 }
 
 /** P4：项目级域包与运行时 /compact 参数合并（均非空时以空行分隔，域包在前）。 */
@@ -131,6 +141,32 @@ export function getAutoCompactThreshold(config: AutoCompactPolicyConfig = {}): n
   const effectiveContextWindow = getEffectiveContextWindowSize(config);
   const buffer = positiveInt(config.bufferTokens) ?? AUTOCOMPACT_BUFFER_TOKENS;
   return Math.max(0, effectiveContextWindow - buffer);
+}
+
+/**
+ * spec 166 预热判定:tokenCount 越过预热线(85% 有效窗口)且尚未到压缩判定面
+ * (shouldCompact=false 才需要预热;shouldCompact=true 时直接压缩,预热无意义)。
+ * 返回 undefined 表示不预热;返回值为预热线 token 数(观测用)。
+ * 熔断/禁用/消息不足与 shouldAutoCompact 同源——复用同一份 config 事实。
+ */
+export function shouldPrecomputeCompact(
+  decision: AutoCompactDecision,
+  config: AutoCompactPolicyConfig = {},
+): number | undefined {
+  if (decision.shouldCompact) return undefined;
+  // 只在「未达压缩面但上下文已可观」时预热;禁用/熔断/已超阈都不预热。
+  if (decision.reason !== "below_threshold" && decision.reason !== "not_enough_messages") {
+    return undefined;
+  }
+  const percent =
+    config.precomputePercent ?? AUTOCOMPACT_PRECOMPUTE_PERCENT;
+  if (!(percent > 0)) return undefined;
+  const precomputeTokens = Math.floor(decision.effectiveContextWindow * percent);
+  const counted =
+    decision.scope === "body-after-prefix" ? decision.bodyTokens : decision.tokenCount;
+  if (counted < precomputeTokens) return undefined;
+  if (decision.tokenCount >= decision.hardCapTokens) return undefined;
+  return precomputeTokens;
 }
 
 export function shouldAutoCompact(input: {

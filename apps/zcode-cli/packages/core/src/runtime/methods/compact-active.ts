@@ -596,7 +596,7 @@ function isAutoCompactRetryableError(error: unknown): boolean {
 }
 
 /** 从被总结条目里找上一次压缩的摘要文本（取最新一条；无则 undefined）。 */
-function extractPreviousCompactSummaryText(
+export function extractPreviousCompactSummaryText(
   entries: readonly RuntimeMessageEntry[],
 ): string | undefined {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
@@ -640,7 +640,7 @@ function selectInitialCompactEntriesForActiveConversation(input: {
   );
 }
 
-function capCompactSummaryMaxOutputTokens(model: Model): number {
+export function capCompactSummaryMaxOutputTokens(model: Model): number {
   // Compact 是独立执行链，在这里显式选择模型上限与 summary 20K 上限中的较小值。
   const desired = Math.min(
     resolveNormalRequestMaxOutputTokens({
@@ -656,7 +656,7 @@ function capCompactSummaryMaxOutputTokens(model: Model): number {
  * 「摘要之后的一切」——收缩校验/文件清单 annex/事件落库/历史替换。原序原语义
  * 迁移;precompute 换入(spec 166 第 2 步)将复用此入口。
  */
-async function applyCompactSummaryResult(
+export async function applyCompactSummaryResult(
   this: AgentRuntimeInternal,
   input: {
     result: RuntimeModelTextResult;

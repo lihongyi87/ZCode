@@ -11,6 +11,8 @@ import {
   estimateMessageTokens,
   hasEnoughMessagesToCompact,
   shouldAutoCompact,
+  shouldPrecomputeCompact,
+  resolveCompactPreserveRecentTokenBudget,
 } from "../deps.js";
 import type {
   AutoCompactPolicyConfig,
@@ -32,6 +34,10 @@ import type { Model } from "../deps.js";
 import type { ProviderContextUsageSnapshot } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { autoCompactDecisionLogContext } from "./compact-log-context.js";
+import {
+  startCompactPrecompute,
+  takeValidPrecomputedCompact,
+} from "./compact-precompute.js";
 import { resolveNormalRequestMaxOutputTokens } from "./model-token-limits.js";
 import type {
   AutoCompactLoopContext,
@@ -218,6 +224,23 @@ export async function autoCompactIfNeeded(
   });
 
   if (!decision.shouldCompact) {
+    // spec 166:未达压缩面但越过预热线(默认 85%)→ fire-and-forget 后台预生成
+    // 摘要;到点换入,消除同步摘要等待。永不等待、失败静默(spec 166 设计)。
+    const precomputeTokens = shouldPrecomputeCompact(decision, config);
+    if (precomputeTokens !== undefined) {
+      startCompactPrecompute(this, {
+        activeEntries,
+        model: context.model,
+        useMidConversationSystem:
+          this.config.midConversationSystem?.mode === "force" ||
+          context.model.properties.supportsMidConversationSystem,
+        preserveRecentTokenBudget: resolveCompactPreserveRecentTokenBudget({
+          config: this.config.compact,
+          modelId: context.model.modelId,
+        }),
+        trigger: "auto",
+      });
+    }
     this.logger?.debug("Auto compact skipped", {
       ...traceContextToLogContext(turnTraceContext),
       event: "compact.auto.skipped",
@@ -261,6 +284,40 @@ export async function autoCompactIfNeeded(
   });
 
   try {
+    // spec 166:预热换入优先——快照一致则跳过同步摘要生成;任何异常(含预热
+    // 结果不合法)降级到 compactActiveConversation,正确性由同步路径兜底。
+    try {
+      const swapped = await this.consumePrecomputedCompact({
+        decision,
+        activeEntries,
+        model: context.model,
+        turnTraceContext,
+        events,
+        abortSignal,
+        agentListingTools,
+      });
+      if (swapped) {
+        context.turnRequestState.entries = swapped.entries;
+        this.autoCompactConsecutiveFailures = 0;
+        this.logger?.info("Auto compact completed (precomputed)", {
+          ...traceContextToLogContext(turnTraceContext),
+          event: "compact.auto.completed",
+          compactReason: context.compactReason,
+          modelStepIndex: context.modelStepIndex,
+          module: "core.runtime",
+          phase: context.phase,
+          precomputed: true,
+        });
+        return "compacted";
+      }
+    } catch (precomputeError) {
+      this.logger?.debug("Precomputed compact swap-in failed; falling back to sync", {
+        ...traceContextToLogContext(turnTraceContext),
+        event: "compact.precompute.swap_fallback",
+        module: "core.runtime",
+        error: precomputeError instanceof Error ? precomputeError.message : String(precomputeError),
+      });
+    }
     const compactResult = await this.compactActiveConversation(
       undefined,
       turnTraceContext,

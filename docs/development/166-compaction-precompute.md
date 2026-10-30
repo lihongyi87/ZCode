@@ -1,6 +1,6 @@
 # 166 · Compaction Precompute——后台预热式自动压缩(spec 165 #2 的实现批次)
 
-状态:第 1 步(拆换入段)已实现(3ac68b6c,applyCompactSummaryResult);第 2-4 步(预热/换入/观测)待实现
+状态:已实现(默认开启;`precomputePercent: 0` 或 `AUTOCOMPACT_PRECOMPUTE_PERCENT` 调低可关)。第 1 步 3ac68b6c,第 2-4 步(policy 预热判定/后台预热执行器/换入消费+观测)同批落地
 来源:OpenCode `session/compaction.ts` 的 precompute 语义(吸收目标);对照发现我们的 keep 窗口已存在,缺口收窄为「预热」单项。
 
 ## 问题
@@ -40,7 +40,9 @@ async function applyCompactSummary(
 
 行为不变,现有 compact 测试套件(compact-persistence-selection / compact-policy / compact-preserved-inputs 等)全量兜底。
 
-### 2. 预热触发(policy 扩展)
+### 2. 预热触发(policy 扩展)——✅ 已实现(shouldPrecomputeCompact)
+
+实现备注:预热判定消费 shouldAutoCompact 的 decision(只在 below_threshold/not_enough_messages 且 tokenCount 越过 85% 线时预热);触发点在 autoCompactIfNeeded 的 skipped 分支(fire-and-forget,永不等待)。
 
 `shouldAutoCompact` 之外新增 `shouldPrecomputeCompact`:达到 **预热阈值**(默认 85%,`AUTOCOMPACT_PRECOMPUTE_PERCENT`)、低于 compact 阈值、且当前无在途/已就绪预热时为真。turn-loop 在 autoCompact 判定处(`turn-loop.ts` `autoCompactIfNeeded` 调用点旁)fire-and-forget 启动预热,**永不等待**(OpenCode 语义:Never waits for it)。
 
@@ -60,7 +62,9 @@ interface PrecomputedCompact {
 - 预热走与摘要相同的 media/投影管线,保证「预热摘要 = 正常摘要」产物一致。
 - abort:turn 结束不取消预热(跨 turn 有效正是其价值);runtime 关闭时丢弃。
 
-### 3. 换入(autoCompactIfNeeded 消费)
+### 3. 换入(autoCompactIfNeeded 消费)——✅ 已实现(consumePrecomputedCompact)
+
+实现备注:快照校验用链式内容指纹(compactEntriesChainHash,seed+逐条 role+文本头 256,与 spec 157 同手法——RuntimeMessageEntry 无稳定 per-entry id);换入任何异常降级同步路径(compact.precompute.swap_fallback debug 日志);预热请求不落轨迹事件/不带 compactTools(摘要无工具用途),与同步路径的差异登记于此。
 
 到点 `shouldCompact` 时:
 

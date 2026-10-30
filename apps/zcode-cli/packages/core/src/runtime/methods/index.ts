@@ -138,6 +138,12 @@ import { autoCompactIfNeeded } from "./compact.js";
 import { microcompactIfNeeded } from "./microcompact.js";
 import { reactiveCompactAfterContextExceeded } from "./compact.js";
 import { compactActiveConversation } from "./compact-active.js";
+import {
+  consumePrecomputedCompact,
+  preparePrecomputeCompactSummary,
+  startCompactPrecompute,
+  takeValidPrecomputedCompact,
+} from "./compact-precompute.js";
 import { executeRewindCommand } from "./rewind.js";
 import { formatRewindStatus } from "./rewind.js";
 import { rewindWorkspaceToCheckpoint } from "./rewind.js";
@@ -349,6 +355,8 @@ export function installAgentRuntimeMethods(ctor: AgentRuntimeConstructor): void 
   proto.microcompactIfNeeded = microcompactIfNeeded;
   proto.reactiveCompactAfterContextExceeded = reactiveCompactAfterContextExceeded;
   proto.compactActiveConversation = compactActiveConversation;
+  proto.preparePrecomputeCompactSummary = preparePrecomputeCompactSummary;
+  proto.consumePrecomputedCompact = consumePrecomputedCompact;
   proto.executeRewindCommand = executeRewindCommand;
   proto.formatRewindStatus = formatRewindStatus;
   proto.rewindWorkspaceToCheckpoint = rewindWorkspaceToCheckpoint;

@@ -1,5 +1,9 @@
 import type { BackgroundBashOutputResult } from "@zcode/shared";
-import type { ModelToolContract, RuntimeInputPresentation } from "@zcode/contracts";
+import type {
+  ModelToolContract,
+  RuntimeInputPresentation,
+} from "@zcode/contracts";
+import type { RuntimeModelTextResult } from "./types.js";
 import type {
   CompactPhase,
   CompactReason,
@@ -177,6 +181,30 @@ export interface AgentRuntimeTurnMethods {
     abortSignal: AbortSignal | undefined,
     context: AutoCompactLoopContext,
   ): Promise<AutoCompactOutcome>;
+  consumePrecomputedCompact(input: {
+    decision: {
+      threshold: number;
+      tokenCount: number;
+      contextWindow: number;
+      tokenSource: "estimate" | "provider_usage";
+    };
+    activeEntries: readonly RuntimeMessageEntry[];
+    model: Model;
+    turnTraceContext: TraceContext;
+    events: SessionEvent[];
+    abortSignal: AbortSignal | undefined;
+    agentListingTools: unknown;
+  }): Promise<{ entries: readonly RuntimeMessageEntry[] } | undefined>;
+  preparePrecomputeCompactSummary(input: {
+    activeEntries: readonly RuntimeMessageEntry[];
+    model: Model;
+    useMidConversationSystem: boolean;
+    preserveRecentTokenBudget: number;
+    trigger: "auto";
+  }): Promise<{
+    result: RuntimeModelTextResult;
+    entriesForSummary: readonly RuntimeMessageEntry[];
+  } | undefined>;
   microcompactIfNeeded(
     turnTraceContext: TraceContext,
     events: SessionEvent[],

@@ -308,8 +308,10 @@ export {
   hasEnoughMessagesToCompact,
   maybeLocalMicrocompactMessages,
   shouldAutoCompact,
+  shouldPrecomputeCompact,
   buildDefaultMicrocompactThreshold,
 } from "../compact/index.js";
+export { resolveCompactPreserveRecentTokenBudget } from "../runtime/helpers/compact.js";
 export type { AutoCompactPolicyConfig } from "../compact/index.js";
 export type { AutoCompactTokenOverride } from "../compact/index.js";
 export type { LocalMicrocompactPolicyConfig } from "../compact/index.js";
