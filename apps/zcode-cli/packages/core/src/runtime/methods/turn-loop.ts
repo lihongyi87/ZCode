@@ -294,6 +294,32 @@ export async function runRegularTurnLoop(
         });
       }
     }
+    // spec 165（吸收 OpenCode runner/max-steps）：maxTurns 步数上限软着陆——达到上限时
+    // 不硬断，注入一次「只准文本总结」提醒并关闭本轮工具面（tools 不进 provider 请求，
+    // 模型物理上无法再调工具），产出已完成/未完成/建议的收尾后自然 break。
+    // undefined = 不限制（子代理历史默认 4 从未生效过，本字段自本版起才真正有读者）。
+    const stepLimit = this.config.maxTurns;
+    const stepLimitReached =
+      stepLimit !== undefined &&
+      !outputTokenRecoveryActive &&
+      state.modelStepCount >= stepLimit;
+    if (stepLimitReached && state.stepLimitNotified !== true) {
+      state.stepLimitNotified = true;
+      commitTurnRequestEntries(this, state.turnRequestState, [
+        systemReminderAttachmentEntry(
+          "max_turns_reached",
+          [
+            "步骤预算已用完。本轮禁止调用任何工具（工具已对你关闭）。",
+            "请只用文本总结：已完成什么、还有什么没做、下一步建议是什么。",
+          ].join(""),
+        ),
+      ]);
+      this.logger?.info("[max-turns] 步数上限软着陆：工具面已关闭，等待文本收尾", {
+        ...traceContextToLogContext(state.turnTraceContext),
+        modelStep: state.modelStepCount,
+        maxTurns: stepLimit,
+      });
+    }
     // 任务再锚定：每 15 个模型步在尾部重申最初任务（防长会话漂移）。
     if (
       !outputTokenRecoveryActive &&
@@ -364,7 +390,8 @@ export async function runRegularTurnLoop(
       sourceEntries: providerProjection.sourceEntries,
       requestEntries,
       recordedMessages: recordableProjection.messages,
-      tools,
+      // 软着陆轮工具面置空：工具声明不进 provider 请求，模型物理上无法再调工具。
+      tools: stepLimitReached ? [] : tools,
     });
 
     if (result === "break") {

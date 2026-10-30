@@ -343,7 +343,10 @@ export function createDefaultSubagentPort(
               ...(agentsMdInstructions ? { userInstructions: agentsMdInstructions } : {}),
             },
             agentName: `zcode-${request.agentType}`,
-            maxTurns: request.maxTurns ?? this.config.subagents?.maxTurns ?? 4,
+            // spec 165:maxTurns 自本版起在 turn-loop 有真实读者(软着陆);
+            // 默认不限制(undefined)——历史默认 4 从未生效,现在补生效会让所有
+            // 子代理在 4 轮被截断。显式配置才约束。
+            maxTurns: request.maxTurns ?? this.config.subagents?.maxTurns,
             parentSessionId: this.sessionId,
             taskType: "subagent_child",
             // 动态工作流灰度门必须结构性继承：

@@ -137,6 +137,11 @@ export interface AgentRuntimeConfig {
   streamingToolExecution?: "off" | "readOnly";
   /** Session 创建时固定；缺省使用共享的模型上下文预算默认策略。 */
   modelContextBudgetStrategy?: "legacy" | "preflight-v1";
+  /**
+   * 单次 query 的模型步数上限；undefined = 不限制。自 spec 165 起在 turn-loop
+   * 有真实生效点：达到上限时软着陆（注入一次 max_turns_reached 提醒并关闭该轮
+   * 工具面，产出文本收尾后自然退出），不硬断。子代理缺省不限制。
+   */
   maxTurns?: number;
   permissionTimeoutMs?: number;
   compact?: AutoCompactPolicyConfig;

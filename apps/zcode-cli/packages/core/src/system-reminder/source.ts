@@ -62,6 +62,8 @@ export const SYSTEM_REMINDER_PER_REQUEST_SOURCES = [
   "model_anomaly",
   "prompt_attachment",
   "diagnostics",
+  // spec 165:maxTurns 软着陆提醒（步数耗尽时注入一次，工具面同轮关闭）。
+  "max_turns_reached",
 ] as const;
 
 export type SystemReminderPrefixSource = (typeof SYSTEM_REMINDER_PREFIX_SOURCES)[number];
@@ -137,6 +139,8 @@ const SYSTEM_REMINDER_DESCRIPTORS: Record<SystemReminderSource, DescriptorShape>
   todo_reminder: descriptor("current_turn", "per_current_turn", true, "sr.todo_reminder"),
   // 任务再锚定：长会话每 N 个模型步在尾部重申最初任务（防漂移）。
   task_reanchor: descriptor("current_turn", "runtime_local", true, "sr.task_reanchor"),
+  // spec 165:maxTurns 软着陆（步数耗尽 → 文本总结收尾轮）。
+  max_turns_reached: descriptor("current_turn", "runtime_local", true, "sr.max_turns_reached"),
   // 用户指令热更新：AGENTS.md 等会话中途被修改时以 per-request 注入新版
   // （前缀不动保缓存，吸收 codex agents_md_manager）。
   user_instructions_update: descriptor(
