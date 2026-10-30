@@ -26,11 +26,12 @@
 | 上游开源仓库 main                    | 停在 `v3.14.3` = `29628c9`（2026-09-24 起无新提交，fetch 复核）                                                                                                                            | 2026-10-04      |
 | 上游开源仓库 main（2026-10-12 复核） | **已到 `v3.15.1` = `aac4756`**（整版 squash：3.14.3→3.15.1 一次跳版，core 252 文件 +10K 行；见下方 v3.15.1 节）                                                                            | 2026-10-12      |
 | 上游开源仓库 main（2026-10-20 复核） | **已到 `v3.16.1` = `0a1fc56d`**（2026-10-19 整版 sync 提交，Source-Commit `1f4d7f01`；**未打 tag**——tags 仍只有 v3.14.3 / v3.15.1；4502 文件 +356K/-122K，已整版合并，见下方 v3.16.1 节）  | 2026-10-20      |
-| 上游开源仓库 main（2026-10-24 复核） | **已到 `v3.16.2` = `3c5b227`**（2026-10-20 14:23 sync 提交；**仍未打 tag**——tags 仍只有 v3.14.3 / v3.15.1；263 文件 +10.5K/-4K，已整版合并，见下方 v3.16.2 节）                            | 2026-10-24      |
-| 上游开源仓库最新 tag                 | `v3.15.1` = `aac4756`（开源仓库 tags 共两个：v3.14.3 / v3.15.1，2026-10-24 复核）                                                                                                          | 2026-10-24      |
+| 上游开源仓库 main（2026-10-24 复核） | **已到 `v3.16.2` = `3c5b227`**（2026-10-20 14:23 sync 提交；263 文件 +10.5K/-4K，已整版合并，见下方 v3.16.2 节）                                                                           | 2026-10-24      |
+| 上游开源仓库 main（2026-10-30 复核） | **已到 `v3.17.1` = `a60ba6a7`**（2026-10-30 sync；**表面 300 文件，实际 2070 文件删除 + 1007 新增——上游测试架构大迁移**，未合并，见下方 v3.17.1 节）                                       | 2026-10-30      |
+| 上游开源仓库最新 tag                 | **`v3.17.1` = `a60ba6a7`**（2026-10-30 sync 直接带 tag——上游自 3.17 起给 sync 提交打版本；tags 共三个：v3.14.3 / v3.15.1 / v3.17.1；2026-10-30 复核）                                      | 2026-10-30      |
 | 上游 feature 分支                    | `feat/ui-plugin` = `662c30b`（2026-09-29，UI plugins + Gen UI，426 文件 / +55671 行，**未发版**；新增带 patch 的 `@open-pencil/core@0.14.0`）—— **未跟进**（未发版分支，等进 main 再评估） | 2026-10-04 复核 |
 | 上游闭源发行包                       | `ZCode-3.14.4-linux-x64.deb` —— 逐字节对比 = 3.14.3 + 阿里云验证码健壮性补丁 + 版本号                                                                                                      | 2026-10-03 到手 |
-| 我们领先 / 落后                      | 落后 **0** 提交（v3.16.2 已整版合并，`git rev-list HEAD...official/main` 复核）；领先 **532** 提交（CE 线全部自研与吸收历史计入）                                                          | 2026-10-24      |
+| 我们领先 / 落后                      | **落后 1** 提交（`a60ba6a7`/v3.17.1，侦察完成未合并——见 v3.17.1 节裁决要点）；领先 CE 线全部提交。上次领先计数 532（2026-10-24 复核口径）                                                  | 2026-10-30      |
 
 > 复算方式：`git fetch upstream --tags && git merge-base HEAD upstream/main && git rev-list --left-right --count HEAD...upstream/main`。
 > **注意**：上游 `v3.14.3` 的**唯一父提交**就是开源提交 `872ad96`，因此"v3.14.3 新增"与"开源基线就有"可以精确切分 —— 比只看一棵树可靠。
@@ -240,3 +241,42 @@ proxy。运行日志实测 `Unknown channel: workspace-registry` → 侧栏
 验收：三道护栏 + thoughtLevelOptions + composer-toolbar-layout + toolCallBlocks 共 148 项全绿；
 typecheck 0 错。教训入册：**每次整版合并后必须跑全部 wiring 护栏**（三道护栏当时都红，
 但被误读为「标记从未存在」——用 `git log -S` 追添加/丢失历史即可避免误判）。
+
+## v3.17.1（来源：开源仓库 main，2026-10-30 侦察完成，**未合并**）
+
+> 整版提交 `a60ba6a7`（2026-10-30「chore: sync ZCode source」，**首次给 sync 打 tag `v3.17.1`**）。
+> merge-base `3c5b227`（v3.16.2 已合并）。**表面 300 文件 +12.5K/-2.2K 是 GitHub compare API 的截断视图**
+> （files[] 上限 300）；本地 `git diff --diff-filter=D` 复核真实差量：**删除 2070 + 新增 1007**。
+
+### 真实形态：上游测试架构大迁移
+
+- **删除 2070**：`packages/ui/test`(1057) / `packages/desktop/test`(300) / `packages/services/test`(288) /
+  `packages/shared/test`(148) / `server`/`zcode-server-cli`/`client`/`web`(合计 ~85) 等——**旧 Vitest 单测面被整体撤除**。
+- **新增 1007**：`packages/ui/test/browser/manual-review/pending/*`（browser 测试新形态，与本仓
+  `packages/desktop/test/e2e/conversation-session/manual-review/pending/` 同源同构）、
+  `apps/zcode-cli/packages/*/tests`（adapters/git-snapshot-hardening、mcp-node-fallback、
+  provider-builtin-tool-compat 等新能力测试）、`packages/desktop/test/e2e/*`(365, 上游吸收了与 CE 平行的 E2E 体系)。
+- 上游删除清单里混有 **CE 自研测试**（spec 155 toolCallProgressBytes、memoryService、zcodeProtocol CE keys 等）
+  ——合并时**不能盲目接受上游删除**，须逐目录甄别 CE 特有测试并保留/迁移。
+
+### 功能面（合并时的新能力入口）
+
+| 域                                                   | 入口                                                                        | 备注                                                                                 |
+| ---------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| MCP node-fallback                                    | `adapters/src/mcp/node-fallback.ts` + `docs/design/v2/mcp-node-fallback.md` | 新设计文档                                                                           |
+| provider-builtin-tool-compat                         | `adapters/src/model/provider-builtin-tool-compat/`（contract/module 形态）  | 模型内置工具兼容层，与 CE provider 线同域                                            |
+| session-data-files                                   | `adapters/src/storage/session-data-files/`（contract 形态）                 | 会话数据文件新仓储                                                                   |
+| session-features-header                              | `docs/design/v2/model/session-features-header.md`                           | 模型请求新 header                                                                    |
+| node-repl-call-ledger                                | `docs/design/v2/tool/20-node-repl-call-ledger.md`                           | 与 CE Codemode 线（spec 158）同域，合并时对照                                        |
+| git-snapshot                                         | `adapters/src/context/git-snapshot.ts` +363                                 | 快照能力扩充                                                                         |
+| session-store schema                                 | `schema.baseline.sql` +548 / `repositories/sessions.ts` +191                | **按 session-management skill 纪律处理**（migration 四处同步/逐表哈希单测/只加不删） |
+| session-lifecycle / workspace-mcp-trust / local-ttft | `bootstrap/src/` 多目录 contract 形态                                       | 合并时重点对照 CE 的 server.ts/session-facade 接线                                   |
+
+### 合并裁决预演（2026-10-30 试合并后回退，结论保留）
+
+试合并 `git merge official/main`：505 冲突（189 UU + 304 UD + 12 其他）。304 个 UD 的主体是
+「上游删除的旧测试」——但**不能批量接受**：需先按目录甄别 CE 特有测试（甄别清单见上）。
+预计裁决量与 3.16.1 合并（141 冲突）同量级或更大，且 304 个 UD 需要的甄别工作量是新增项。
+**执行建议：单开专注会话做，先跑 `git diff --diff-filter=D 3c5b227 official/main` 生成甄别清单，
+再分类：CE 特有测试保留 / 上游迁移的跟随新形态 / 两边都有的取上游新形态。**
+回退时 `git merge --abort` 已验证干净（工作区恢复 c43aee09）。
