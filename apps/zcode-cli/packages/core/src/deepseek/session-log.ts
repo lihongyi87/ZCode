@@ -33,6 +33,15 @@ export function isDeepSeekSessionLogProvider(providerId: string): boolean {
   return providerId.toLowerCase().includes("deepseek");
 }
 
+/**
+ * Session affinity(spec 165 吸收 OpenCode):子会话带 parentSession 上传,
+ * 服务端把同族会话聚到同一缓存域——派单并发时子代理共享父会话的 KV 预热。
+ * 渠道:subagent.ts spawn 传 config.parentSessionId,runtime 装配处读出。
+ */
+export interface DeepSeekSessionLogAffinity {
+  readonly parentSessionId?: string;
+}
+
 function resolveSessionLogMaxBytes(): number {
   const parsed = Number(process.env.ZCODE_DEEPSEEK_SESSION_LOG_MAX_BYTES);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 8 * 1024 * 1024;
@@ -47,6 +56,8 @@ export function createDeepSeekSessionLogTransaction(input: {
   sessionId: string;
   providerId: string;
   messages: readonly ModelInputMessage[];
+  /** 子会话的父会话 ID(spec 165 session affinity);wire header parentSession 落这里。 */
+  parentSessionId?: string;
 }): DeepSeekSessionLogRequestTransaction | undefined {
   if (!isDeepSeekSessionLogEnabled()) return undefined;
   if (!isDeepSeekSessionLogProvider(input.providerId)) return undefined;
@@ -56,6 +67,7 @@ export function createDeepSeekSessionLogTransaction(input: {
     messages: input.messages,
     watermark: watermarks.get(input.sessionId),
     maxBytes: resolveSessionLogMaxBytes(),
+    parentSessionId: input.parentSessionId,
   });
   if (!built) return undefined;
 

@@ -166,6 +166,8 @@ export async function runModelTextRequest(
     sessionId: this.sessionId,
     providerId: model.providerId,
     messages: projectedOptions.messages,
+    // spec 165 session affinity:子会话带 parentSession,服务端按家族聚合缓存域。
+    parentSessionId: this.config.parentSessionId,
   });
   const modelRequest = {
     messages: projectedOptions.messages,

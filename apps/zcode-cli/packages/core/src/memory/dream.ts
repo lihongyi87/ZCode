@@ -221,12 +221,16 @@ function resolveTouchedPath(
 ): string | undefined {
   if (!filePath.endsWith(".md")) return undefined;
   try {
-    return resolveContainedMemoryFilePath({
+    const resolved = resolveContainedMemoryFilePath({
       filePath,
       rootDir: input.rootDir,
       workingDirectory: input.workingDirectory,
       workspaceRoot: input.workspaceRoot,
     });
+    if (resolved === undefined) return undefined;
+    // touched-paths 是审计记录,可能跨平台读;path.resolve 在 Windows 产出反斜杠,
+    // 统一归一 POSIX 分隔符,避免同一文件以两种形态出现在集合里。
+    return resolved.replaceAll("\\", "/");
   } catch {
     return undefined;
   }

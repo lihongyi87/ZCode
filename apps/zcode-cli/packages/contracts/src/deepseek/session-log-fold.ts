@@ -163,8 +163,10 @@ export function buildDeepSeekSessionLog(input: {
   messages: readonly ModelInputMessage[];
   watermark: DeepSeekSessionLogWatermark | undefined;
   maxBytes: number;
+  /** 子会话的父会话 ID(spec 165 session affinity);wire parentSession 字段,服务端按它聚合缓存域。 */
+  parentSessionId?: string;
 }): BuiltDeepSeekSessionLog | undefined {
-  const { sessionId, messages, watermark, maxBytes } = input;
+  const { sessionId, messages, watermark, maxBytes, parentSessionId } = input;
   // 水印匹配锚定「前 watermark.messageCount 条」的链式指纹:追加新消息不影响旧前缀,
   // 增量续传成立;前缀变异/收缩(compact、rewind)则链值不同,自动全量重发。
   const watermarkMatches =
@@ -185,7 +187,12 @@ export function buildDeepSeekSessionLog(input: {
   if (pending.length === 0) return undefined;
 
   const packed = packDeepSeekSessionLog({
-    session: { version: 1, id: sessionId, createdAt: effectiveWatermark.createdAt },
+    session: {
+      version: 1,
+      id: sessionId,
+      createdAt: effectiveWatermark.createdAt,
+      ...(parentSessionId !== undefined ? { parentSession: parentSessionId } : {}),
+    },
     sessionFormatVersion: 1,
     afterSeq: Math.max(0, afterSeq),
     pending,

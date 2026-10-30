@@ -71,11 +71,17 @@ export const get = (session) => session.parentID ?? session.fork?.sessionID ?? s
 - #2(precompute)是 spec 155 等待可见性的天然续章:「压缩不再卡等待」正是用户抱怨过的「卡很久」族问题。
 - #4(soft landing)与 goal 时长控制(session-target)同族,可并成一个 spec 批次。
 
+## 落地状态(2026-10-30 同日第二批)
+
+- **#1 session affinity:已落地**。`buildDeepSeekSessionLog` 新增 `parentSessionId` 入参 → wire header `parentSession`(协议字段本来就有的可选位);core 装配处从 `this.config.parentSessionId` 读出——子代理 spawn(methods/subagent.ts)与 workflow child(script-workflow-child-runtime.ts)都已传该字段,零新接线。单测:affinity 落 header + 根会话不写两例。
+- **#3 max-steps 软着陆:已落地(memory-agent-loop)**。调研发现主循环无 maxTurns 强制(`AgentRuntimeConfig.maxTurns` 是**死字段**:methods/subagent.ts 与 script-workflow-child-runtime.ts 都写入,core 全仓无读者——子代理 4 轮默认限制实际不生效,这是既有状态,登记待议);真实受 maxTurns 约束的循环是 memory-agent-loop(提取/梦幻共用)。软着陆=步数耗尽且最后模型响应仍带 toolCalls 时,追加一轮 `tools: []` 的文本总结请求(user 指令「已完成/未完成/建议」),产出收尾而非静默蒸发。单测 50/50(新增触发/不触发两例,旧两例断言随行为更新)。
+- **#2 compaction precompute:立独立批次,本轮不落**。摘要生成与事件记录/重试/媒体投影/compact 工具目录深度耦合在 compact-active.ts 的 810 行函数里,precompute 需要拆摘要管线 + keep 窗口 + 快照偏移 + 失败回退,压在核心稳定性链路上,仓促落地风险大于收益。
+- **#4 MCP catalog 渐进披露:已有等价,不建**。MCP 工具注册已带 `shouldDefer: true` + `alwaysLoad` + `searchHint`(core/src/mcp/index.ts)——defer 目录 + 按需加载就是渐进披露,与 OpenCode catalog+search 模式同构。
+- 顺手修:`collectDreamTouchedPaths` 的 touched-paths 在 Windows 上产出反斜杠路径(path.resolve 平台行为),统一归一 POSIX 分隔符——审计记录跨平台一致,修复前 dream 测试在 Windows 本地必炸。
+
 ## 建议立项顺序
 
-1. **session affinity 进 spec 157 后续**(0.5 天,多代理缓存共享)
-2. **compaction precompute + keep 窗口**(1.5-2.5 天,长会话体验最大单项)
-3. **max-steps 软着陆**(0.5 天,可并入任意批次)
-4. **MCP 工具 catalog 渐进披露**(0.5-1 天,重 MCP 用户受益;轻 MCP 用户可缓)
-
-合计约 3-4.5 天,全部 MIT 合规(逐字节搬运登记 copied-components,语义重写登记 spec)。
+1. ~~session affinity~~ 已落地
+2. **compaction precompute + keep 窗口**(1.5-2.5 天,长会话体验最大单项;独立批次)
+3. ~~max-steps 软着陆~~ 已落地(memory loop;主循环死字段问题另议)
+4. ~~MCP catalog~~ 已有等价

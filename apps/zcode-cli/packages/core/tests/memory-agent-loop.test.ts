@@ -69,17 +69,20 @@ describe("runMemoryAgentLoop", () => {
       workspaceRoot: "/workspace",
     });
 
-    expect(requests).toHaveLength(5);
+    // 软着陆(spec 165):5 轮全部想继续调工具 → 额外一轮禁工具的文本收尾。
+    expect(requests).toHaveLength(6);
     expect(executeTool).toHaveBeenCalledTimes(5);
     expect(executeTool).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: "write-last", name: "Write" }),
       expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
     );
     expect(requests[0]?.messages).toEqual(initialMessages);
-    expect(requests.every((request) => request.tools === tools)).toBe(true);
+    // 正常轮保留完整工具目录;软着陆收尾轮禁工具(切片排除最后一轮)。
+    expect(requests.slice(0, 5).every((request) => request.tools === tools)).toBe(true);
+    expect(requests[5]?.tools).toEqual([]);
     expect(requests.every((request) => request.toolSearchEnabled === false)).toBe(true);
-    expect(requests.every((request) => request.options?.reasoningLevel === "low")).toBe(true);
-    expect(requests.every((request) => request.options?.maxOutputTokens === 5_000)).toBe(true);
+    expect(requests.slice(0, 5).every((request) => request.options?.reasoningLevel === "low")).toBe(true);
+    expect(requests.slice(0, 5).every((request) => request.options?.maxOutputTokens === 5_000)).toBe(true);
     expect(requests[1]?.messages.slice(-2)).toEqual([
       expect.objectContaining({
         role: "assistant",
@@ -94,10 +97,11 @@ describe("runMemoryAgentLoop", () => {
         isError: false,
       }),
     ]);
-    expect(result.turns).toBe(5);
+    expect(result.turns).toBe(6);
+    // 软着陆收尾:追加 user 指令 + 文本-only assistant 总结。
     expect(result.messages.slice(-2)).toEqual([
-      expect.objectContaining({ role: "assistant", content: "last turn" }),
-      expect.objectContaining({ role: "tool", toolCallId: "write-last", isError: false }),
+      expect.objectContaining({ role: "user" }),
+      expect.objectContaining({ role: "assistant", toolCalls: [] }),
     ]);
   });
 
@@ -312,12 +316,88 @@ describe("runMemoryAgentLoop", () => {
       workspaceRoot: "/workspace",
     });
 
-    expect(result.turns).toBe(50);
+    // 软着陆(spec 165):50 轮全部想继续调工具 → turns 含收尾轮。
+    expect(result.turns).toBe(51);
     expect(executeTool).toHaveBeenCalledTimes(50);
     expect(executeTool).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: "write-fiftieth", name: "Write" }),
       expect.any(Object),
     );
+  });
+
+  it("soft landing: turn budget exhausted mid tool-call gets a final text-only summary turn (spec 165)", async () => {
+    const requests: ModelRequest[] = [];
+    const executeTool = vi.fn(async (call) => executionResult(call.id, call.name, "ok"));
+    const model = generateOnlyModel(async (request) => {
+      requests.push(request);
+      // 每轮都想继续调工具——步数耗尽时不应静默蒸发。
+      return modelResult({
+        text: `turn ${requests.length}`,
+        toolCalls: [{ id: `read-${requests.length}`, name: "Read", input: {} }],
+      });
+    });
+
+    const result = await runMemoryAgentLoop({
+      executeTool,
+      maxTurns: 2,
+      request: {
+        messages: [{ content: "extract", role: "user" }],
+        tools: [tool("Read", true, "none")],
+        toolSearchEnabled: false,
+      },
+      model,
+      rootDir: memoryRoot,
+      workingDirectory: "/workspace",
+      workspaceRoot: "/workspace",
+    });
+
+    // 正常轮 2 + 软着陆收尾轮 1
+    expect(requests).toHaveLength(3);
+    expect(executeTool).toHaveBeenCalledTimes(2);
+    const summaryRequest = requests[2];
+    expect(summaryRequest?.tools).toEqual([]);
+    expect(summaryRequest?.toolSearchEnabled).toBe(false);
+    const lastMessage = summaryRequest?.messages[summaryRequest.messages.length - 1];
+    expect(lastMessage?.role).toBe("user");
+    expect(String(lastMessage?.content)).toContain("步骤预算已用完");
+    const summaryMessage = result.messages[result.messages.length - 1];
+    expect(summaryMessage.role).toBe("assistant");
+    expect(summaryMessage.toolCalls ?? []).toEqual([]);
+    expect(result.turns).toBe(3);
+  });
+
+  it("no soft landing: loop ends because model stopped calling tools (spec 165)", async () => {
+    const requests: ModelRequest[] = [];
+    const executeTool = vi.fn(async (call) => executionResult(call.id, call.name, "ok"));
+    const model = generateOnlyModel(async (request) => {
+      requests.push(request);
+      if (requests.length === 1) {
+        return modelResult({
+          text: "working",
+          toolCalls: [{ id: "read-1", name: "Read", input: {} }],
+        });
+      }
+      return modelResult({ text: "done", toolCalls: [] });
+    });
+
+    const result = await runMemoryAgentLoop({
+      executeTool,
+      maxTurns: 5,
+      request: {
+        messages: [{ content: "extract", role: "user" }],
+        tools: [tool("Read", true, "none")],
+        toolSearchEnabled: false,
+      },
+      model,
+      rootDir: memoryRoot,
+      workingDirectory: "/workspace",
+      workspaceRoot: "/workspace",
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(result.turns).toBe(2);
+    expect(result.messages[result.messages.length - 1]?.toolCalls ?? []).toEqual([]);
   });
 });
 

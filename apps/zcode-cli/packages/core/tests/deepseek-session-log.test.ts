@@ -76,6 +76,25 @@ describe("createDeepSeekSessionLogTransaction", () => {
     expect(next?.value.events.length).toBe(1);
   });
 
+  it("session affinity:parentSessionId 落 wire header parentSession(spec 165)", () => {
+    resetSessionLogSwitch();
+    const tx = createDeepSeekSessionLogTransaction({
+      sessionId: "child-1",
+      providerId: "deepseek",
+      messages,
+      parentSessionId: "parent-9",
+    });
+    expect(tx).toBeDefined();
+    expect(tx?.value.session.parentSession).toBe("parent-9");
+    // 无父会话(根会话)时不写该字段。
+    const root = createDeepSeekSessionLogTransaction({
+      sessionId: "root-1",
+      providerId: "deepseek",
+      messages,
+    });
+    expect(root?.value.session.parentSession).toBeUndefined();
+  });
+
   it("无新增事件:undefined(请求不携带字段)", () => {
     resetSessionLogSwitch();
     expect(
