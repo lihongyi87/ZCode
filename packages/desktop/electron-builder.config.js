@@ -303,7 +303,9 @@ function resolveRequiredAsarRuntimeModules() {
     merged.push(moduleName);
   }
   if (detected.length > 0) {
-    console.log(`[afterPack] required runtime modules resolved=${merged.length} detected=${detected.length}`);
+    console.log(
+      `[afterPack] required runtime modules resolved=${merged.length} detected=${detected.length}`,
+    );
   }
   return merged;
 }

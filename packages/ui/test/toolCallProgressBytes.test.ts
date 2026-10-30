@@ -33,9 +33,7 @@ describe("长等待可见性(spec 155)", () => {
   });
 });
 
-function renderIndicator(
-  progress: Parameters<typeof ToolCallProgressIndicator>[0]["progress"],
-) {
+function renderIndicator(progress: Parameters<typeof ToolCallProgressIndicator>[0]["progress"]) {
   return render(
     createElement(
       ZCodeIntlProvider,

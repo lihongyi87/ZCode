@@ -4,12 +4,7 @@ import { join } from "node:path";
 
 // 只扫描会以 Node ESM/CJS 身份运行的产物目录：renderer 由 vite 打成浏览器包，
 // plugin-sandbox 是 IIFE，它们里面的裸 import 不需要出现在 app.asar 的 node_modules。
-const NODE_OUTPUT_DIRS = [
-  "out/main",
-  "out/host",
-  "out/scheduler",
-  "out/preload",
-];
+const NODE_OUTPUT_DIRS = ["out/main", "out/host", "out/scheduler", "out/preload"];
 
 // 产物以 ESM 为主，但也含 preload 的 .cjs。这里只匹配真正的模块说明符位置，
 // 不能用裸的 /\bfrom\s*["']/：压缩产物里的 Array.from("文") 会被误判成包依赖。
@@ -27,8 +22,7 @@ const NODE_BUILTINS = new Set([
 ]);
 
 // npm 包名规范；用来把压缩代码里的碎片匹配挡在外面。
-const VALID_PACKAGE_NAME =
-  /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u;
+const VALID_PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u;
 
 function packageNameOf(specifier) {
   const parts = specifier.split("/");
