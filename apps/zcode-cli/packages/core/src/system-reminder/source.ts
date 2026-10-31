@@ -205,7 +205,6 @@ const SYSTEM_REMINDER_DESCRIPTORS: Record<SystemReminderSource, DescriptorShape>
     true,
     "sr.plan_file_reference",
   ),
-  plan_file_reference: descriptor("current_turn", "resume_history", true, "sr.plan_file_reference"),
   resume_goal_state: descriptor(
     "history_continuity",
     "resume_history",

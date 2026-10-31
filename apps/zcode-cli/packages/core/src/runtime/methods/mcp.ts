@@ -155,7 +155,7 @@ export async function initializeMcp(
     await refreshWorkspaceTrustAdmission(this, traceContext);
     const snapshot = await startup;
     this.shutdownSignal.throwIfAborted();
-    const registered = registerMcpTools(this.registry, mcpPort, snapshot.tools, {
+    const { registered } = registerMcpTools(this.registry, mcpPort, snapshot.tools, {
       allowedTools: this.config.toolAllowlist,
       disallowedTools: this.config.toolDisallowlist,
       officialCuaServerNames: computeOfficialCuaServerNames(
@@ -238,7 +238,7 @@ export async function refreshMcpToolsIfChanged(
   if (this.mcpToolsSignature === signature) return;
   const previous = new Set(this.registeredMcpToolNames ?? []);
   for (const name of previous) this.registry.unregister(name);
-  const registered = registerMcpTools(this.registry, mcpPort, descriptors, {
+  const { registered } = registerMcpTools(this.registry, mcpPort, descriptors, {
     allowedTools: this.config.toolAllowlist,
     disallowedTools: this.config.toolDisallowlist,
     officialCuaServerNames: computeOfficialCuaServerNames(

@@ -231,3 +231,71 @@ function fitStringToBytes(value: string, maxBytes: number, direction: "head" | "
     ? chars.slice(chars.length - low).join("")
     : chars.slice(0, low).join("");
 }
+
+export interface HookStringProjection {
+  content: string;
+  truncated: boolean;
+}
+
+export function appendHookWithoutReorderingStructuredContent(
+  serialization: ToolResultSerialization,
+  hookContext: string,
+  suffix: string,
+  maxModelBytes: number,
+): ToolResultSerialization {
+  const modelContent = serialization.modelContent ?? serialization.content;
+  if (!Array.isArray(modelContent)) return serialization;
+
+  const currentBytes = Buffer.byteLength(serialization.content, "utf8");
+  const remainingBytes = Math.max(0, maxModelBytes - currentBytes);
+  const separator = "\n\n";
+  const separatorBytes = Buffer.byteLength(separator, "utf8");
+  const fittedHookContext =
+    remainingBytes > separatorBytes
+      ? fitStringToBytes(hookContext, remainingBytes - separatorBytes, "head")
+      : "";
+  const fittedSuffix = fittedHookContext.length > 0 ? `${separator}${fittedHookContext}` : "";
+  const hookTruncated = Buffer.byteLength(suffix, "utf8") > remainingBytes;
+  const content = `${serialization.content}${fittedSuffix}`;
+
+  return {
+    ...serialization,
+    content,
+    // 只能在原始块之后追加 hook。这样 raster 仍然是首块、image_ref 仍紧随其后，
+    // 即使 hook 超出预算也不会把文本搬到图片前或用字符串替换图片。
+    modelContent:
+      fittedHookContext.length > 0
+        ? [...modelContent, { type: "text", text: fittedHookContext }]
+        : modelContent,
+    // returnedBytes 已包含受保护 raster；追加 hook 只增加实际新增的文本 bytes，
+    // 避免重新拆分文本/媒体并维护第二份计量状态。
+    returnedBytes: serialization.returnedBytes + Buffer.byteLength(fittedSuffix, "utf8"),
+    truncated: serialization.truncated || hookTruncated,
+  };
+}
+export function appendHookToStringContent(
+  content: string,
+  suffix: string,
+  maxBytes: number,
+  previewDirection: "head" | "tail",
+): HookStringProjection {
+  const augmentedContent = `${content}${suffix}`;
+  if (Buffer.byteLength(augmentedContent, "utf8") <= maxBytes) {
+    return { content: augmentedContent, truncated: false };
+  }
+  return {
+    content: fitContentWithSuffix(content, maxBytes, suffix, previewDirection),
+    truncated: true,
+  };
+}
+export function appendHookToPersistedArtifactPreview(
+  content: string,
+  suffix: string,
+  maxHookBytes: number,
+): HookStringProjection {
+  const fittedSuffix = fitStringToBytes(suffix, maxHookBytes, "head");
+  return {
+    content: `${content}${fittedSuffix}`,
+    truncated: Buffer.byteLength(suffix, "utf8") > maxHookBytes,
+  };
+}

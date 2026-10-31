@@ -94,7 +94,6 @@ import { runModelTextRequest } from "./model.js";
 // 重植（3.15.1 升级冲掉 proto 绑定）：空闲轮缓存保活请求入口（turn.ts 的
 // scheduleCacheKeepAlive 定时器经 internal 接口调用本实现）。
 import { sendCacheKeepAliveRequestImpl } from "./cache-keep-alive.js";
-import type { AgentRuntimeInternal } from "../internal.js";
 import { emitModelStreamingEvent } from "./model-streaming-event.js";
 import { createModelStatusSink } from "./model-status.js";
 import { logModelNetworkStatus } from "./model-status.js";
