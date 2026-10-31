@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  existsSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
@@ -16,6 +17,8 @@ import { runCommand } from "./spawn-command.mjs";
 // Bugfix: Windows GNU tar（Git Bash）会把绝对路径里的盘符冒号（C:）当成远程主机名，
 // 反斜杠路径也会被 MSYS 参数转换破坏。tar 参数统一转正斜杠，归档路径优先改用
 // 相对 cwd 的形式避开盘符冒号；对 bsdtar 与 Linux/macOS CI 无影响。
+const SYSTEM32_TAR = "C:/Windows/System32/tar.exe";
+
 function toTarPosixPath(pathValue) {
   return pathValue.replaceAll("\\", "/");
 }
@@ -55,8 +58,14 @@ export function extractPrebuiltArchive({ archivePath, archiveExt, extractDir, cw
   }
 
   const tarCwd = cwd ?? process.cwd();
+  // 修复原因：Windows 上 Git Bash 的 GNU tar(/usr/bin/tar)位于 PATH 前列时，会把
+  // "D:/..." 形态的归档参数当成远程主机名(Cannot connect to D:)。bsdtar
+  // (System32	ar.exe)无此语义且本仓归档路径均为 Windows 盘符绝对路径——
+  // win32 下显式优先 System32 tar，找不到再退回 PATH 的 tar（非 Windows 不受影响）。
+  const tarCommand =
+    process.platform === "win32" ? (existsSync(SYSTEM32_TAR) ? SYSTEM32_TAR : "tar") : "tar";
   runCommand(
-    "tar",
+    tarCommand,
     ["-xzf", resolveTarArchiveArg(archivePath, tarCwd), "-C", toTarPosixPath(extractDir)],
     { cwd: tarCwd },
   );

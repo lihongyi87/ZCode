@@ -16,6 +16,10 @@ import { basename, dirname, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { runCommand } from "../../../scripts/spawn-command.mjs";
+import {
+  isSharpRequiredByComputerUse,
+  stageSharpIntoBundledAgents,
+} from "./sharp-package-assets.mjs";
 import { stageCuaDriverIntoBundledAgents } from "./cua-driver-package-assets.mjs";
 import { stageOfficeNodePayloads as stageOfficeNodePayloadsIntoGlm } from "./office-node-payload-assets.mjs";
 import { stagePdfNodePayloads as stagePdfNodePayloadsIntoGlm } from "./pdf-node-payload-assets.mjs";
@@ -557,6 +561,17 @@ function stageOfficialPlugins() {
 }
 
 // Electron 生产包只带 resources/glm/zcode.cjs 时，app-server 进程的
+const bundledSkillPack = {
+  relativePath: "apps/zcode-cli/packages/bundled-skills",
+  requiredPaths: [
+    "skills/dynamic-workflows/SKILL.md",
+    "skills/dynamic-workflows/patterns.md",
+    "skills/dynamic-workflows/examples.md",
+  ],
+  stagedPath: "packages/bundled-skills",
+  topLevelPaths: ["README.md", "skills"],
+};
+
 function stageBundledSkillPack() {
   const sourceRoot = resolve(repoRoot, bundledSkillPack.relativePath);
   const targetRoot = resolve(glmDir, bundledSkillPack.stagedPath);
