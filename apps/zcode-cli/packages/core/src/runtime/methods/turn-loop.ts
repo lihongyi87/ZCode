@@ -62,6 +62,7 @@ import {
   commitTurnRequestEntries,
   filterOutputTokenContinuationEntries,
 } from "./turn-output-token-continuation.js";
+import { buildToolSearchAnnouncement } from "../../tool/search/exposure.js";
 import { recordSessionFeatureFromToolSearchExposure } from "../session-features/contract.js";
 
 export async function runRegularTurnLoop(
@@ -171,16 +172,6 @@ export async function runRegularTurnLoop(
       recordCompactHistoryRound(state);
     }
     throwIfTurnAborted(state.turnAbortSignal);
-
-    const finishMcp = beginLocalTurnPreparation(state.turnTraceContext, "mcp");
-    await this.initializeMcp(state.turnTraceContext);
-    // tools/list_changed 只在回合开始前生效。
-    await this.refreshMcpToolsIfChanged(state.turnTraceContext);
-    finishMcp();
-    throwIfTurnAborted(state.turnAbortSignal);
-    const finishTools = beginLocalTurnPreparation(state.turnTraceContext, "tools");
-    const tools = getTurnTools(this, state);
-    finishTools();
     if (!outputTokenRecoveryActive) {
       await appendRuntimeAgentListing(this, state.turnRequestState, tools, state.turnTraceContext);
     }
@@ -389,7 +380,7 @@ export async function runRegularTurnLoop(
     const memoryUpdate = outputTokenRecoveryActive
       ? undefined
       : consumePendingProjectMemoryUpdate(this);
-    const requestEntries = memoryUpdate ? [...providerEntries, memoryUpdate] : providerEntries;
+    let requestEntries = memoryUpdate ? [...providerEntries, memoryUpdate] : providerEntries;
     // 请求前公告在 compaction 之后运行，
     // 不受输入附件跳过规则影响；按类型对历史去重，通常为空。
     await appendRequestAnnouncements(
@@ -398,27 +389,29 @@ export async function runRegularTurnLoop(
       state.turnTraceContext,
       state.turnAbortSignal,
     );
-    const requestEntries = [...state.turnRequestState.entries];
-    const prepared = prepareRuntimeProviderRequest(this, {
+    // 上游 persistAnnouncements 不写 state.entries(实测体),重读为空操作;保留 CE
+    // 单声明形态,避免无意义的数组拷贝。
+    // 上游 v3.17.1 的 ToolSearch 曝光探测+会话能力标签:buildToolExposure 与 CE 的
+    // providerProjection 是两套投影,CE 主循环保持 providerProjection;能力标签用
+    // buildToolSearchAnnouncement 同源判定(exposure.ts),行为等价不引入第二套投影。
+    const toolSearchExposure = buildToolSearchAnnouncement({
       model: state.model,
+      mode: this.config.toolSearch?.mode,
       tools,
       registry: this.getToolRegistry(),
       entries: requestEntries,
-      applyCacheControl: true,
     });
     this.logger?.debug("ToolSearch request exposure", {
       event: "tool.search.exposure",
-      enabled: prepared.toolSearch.enabled,
-      mode: prepared.toolSearch.mode,
-      reason: prepared.reason,
-      catalogSize: prepared.toolSearch.catalog.length,
-      schemaCount: prepared.request.tools.length,
+      enabled: toolSearchExposure !== undefined,
+      reason: toolSearchExposure ? "native" : "off",
     });
     // 能力标签取本次主循环请求的生效模式，在模型调用前打，本次请求就带上。请求准备环节本身不写状态，
     // 所以在调用方打；compact、目标校验、Memory 的请求准备不经过这里。
+    // exposure 形状对齐:上游 buildToolExposure 的 enabled/mode 语义与 announcement 存在性等价。
     recordSessionFeatureFromToolSearchExposure.call(
       this,
-      prepared.toolSearch,
+      { enabled: toolSearchExposure !== undefined, mode: toolSearchExposure ? "native" : "off" },
       state.turnTraceContext,
     );
     // 修复原因：provider-visible user ordering projection 会改变最终 latest user 落点，
