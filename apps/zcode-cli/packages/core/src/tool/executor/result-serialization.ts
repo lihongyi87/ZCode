@@ -11,9 +11,6 @@ import { OFFICIAL_CUA_FRAME_MODEL_CONTENT_PROTECTION } from "@zcode/zcode-cua/fr
 import type { ToolEntry, ToolResultSerialization } from "../types.js";
 import { formatGenericPersistedOutputContent } from "../result-persistence-format.js";
 import {
-  appendHookToPersistedArtifactPreview,
-  appendHookToStringContent,
-  appendHookWithoutReorderingStructuredContent,
   fitContentHeadTailWithSuffix,
   fitContentWithSuffix,
   isEmptyModelContent,
