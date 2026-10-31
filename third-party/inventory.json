@@ -241,6 +241,13 @@
     "apps/zcode-cli/packages/debug/package.json": "0cf03ea1dd384546319e8f301e99c2b668c7c15271f5d38d5a3b0526c24a3279",
     "apps/zcode-cli/packages/documents-plugin/.zcode-plugin/plugin.json": "8cfc3cab357c219ae1b3c7e0f83d1a9e84345b34c2bd7263b817b2372e6e5227",
     "apps/zcode-cli/packages/documents-plugin/agents/visual-judge.md": "fc6b9fc1b45a949998f62c767a205d25c3725268f84bcea9824bf782f68099cf",
+    "apps/zcode-cli/packages/documents-plugin/dist/LICENSE": "e5c04526c473c044ed897a169d4185089a36b787944710bef1e74bb7d7d11176",
+    "apps/zcode-cli/packages/documents-plugin/dist/server.mjs": "6faffbd110463ff7c06ee019b75047f87318ea28aa9e8d130dab45f3cf983935",
+    "apps/zcode-cli/packages/documents-plugin/dist/THIRD_PARTY_NOTICES.txt": "7cf5b994a4240dc4ab76cd99a17a6079536b40daa27b04fa260b93b3f8709a68",
+    "apps/zcode-cli/packages/documents-plugin/dist/ui/assets.json": "758470e31a9d504bb6eef72f7148d9d64aea0b464f07cc3a175c19a3cb430cb8",
+    "apps/zcode-cli/packages/documents-plugin/dist/ui/bundle-0.txt": "243003779739590b2e37a0bd881c29f8ef1aa5e47aac5da907414727e6e475f0",
+    "apps/zcode-cli/packages/documents-plugin/dist/ui/panel.css": "a47ca1f5285c1cd5f972b86a7787fc1215030421140c5b4f1ec10a76fad08889",
+    "apps/zcode-cli/packages/documents-plugin/dist/ui/panel.html": "6dc3d4488469cb9bc9d0c4716b85a338f367abf27f47e2f0fc092064e3a0a6ea",
     "apps/zcode-cli/packages/documents-plugin/LICENSE.dsh": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
     "apps/zcode-cli/packages/documents-plugin/package.json": "f5b6a69654fdcda61f87357b0204405864413482866bcfa6cfc759f8a0336e20",
     "apps/zcode-cli/packages/documents-plugin/scripts/check_office.mjs": "a12311cbb12d56a42369d9effc3ccdea1160497908fa91a79a5df986bb7d79f1",
@@ -322,6 +329,13 @@
     "apps/zcode-cli/packages/plugin-creator-plugin/test/scaffold.test.mjs": "f250d747a67c1a16f885de08e0ab4ec1b07f5aa0374fb61eafc179772e91fe3f",
     "apps/zcode-cli/packages/presentations-plugin/.zcode-plugin/plugin.json": "78275901f165a741a625db71d2fd55df9f8a1937d3896ec385c27772233a0290",
     "apps/zcode-cli/packages/presentations-plugin/agents/visual-judge.md": "fc6b9fc1b45a949998f62c767a205d25c3725268f84bcea9824bf782f68099cf",
+    "apps/zcode-cli/packages/presentations-plugin/dist/LICENSE": "e5c04526c473c044ed897a169d4185089a36b787944710bef1e74bb7d7d11176",
+    "apps/zcode-cli/packages/presentations-plugin/dist/server.mjs": "a6f3dbafc7ba1df343ca874e0b459d168e28d0b1ed902e3f51c5ccd98e29bcee",
+    "apps/zcode-cli/packages/presentations-plugin/dist/THIRD_PARTY_NOTICES.txt": "15c5afbe26935156dfd47de2ae912928ca9ddabc5a2418d9ee4765d26f36fd0d",
+    "apps/zcode-cli/packages/presentations-plugin/dist/ui/assets.json": "1541bc447a4ae06661a197faeab7bee33b382d733cc714b8a46f7aabea22dcb2",
+    "apps/zcode-cli/packages/presentations-plugin/dist/ui/bundle-0.txt": "b97c18353d14e5c4eca9d22a7fa4192d5f5496767d92bd501402f94f19478ed6",
+    "apps/zcode-cli/packages/presentations-plugin/dist/ui/panel.css": "a47ca1f5285c1cd5f972b86a7787fc1215030421140c5b4f1ec10a76fad08889",
+    "apps/zcode-cli/packages/presentations-plugin/dist/ui/panel.html": "417b2b3018782d215958d78aa0c3f7ed2c41ac9f70986eea313eb076f2a24921",
     "apps/zcode-cli/packages/presentations-plugin/LICENSE.dsh": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
     "apps/zcode-cli/packages/presentations-plugin/package.json": "db0fd0a1c80c93e78113a671fe9b41dcb1bf17fbc86828d29f7cbfb2ec3394eb",
     "apps/zcode-cli/packages/presentations-plugin/scripts/check_office.mjs": "a12311cbb12d56a42369d9effc3ccdea1160497908fa91a79a5df986bb7d79f1",
@@ -351,6 +365,15 @@
     "apps/zcode-cli/packages/skill-creator-plugin/skills/skill-creator/SKILL.md": "ff88909f5cda2cf4d16fc7622a74a2678e09ef350721d5e22fdeb23e17a13458",
     "apps/zcode-cli/packages/spreadsheets-plugin/.zcode-plugin/plugin.json": "b7e15b0b7b0c0ae598cd94ce9149736a3451b18ad77ad7d47eade68cf6d361ac",
     "apps/zcode-cli/packages/spreadsheets-plugin/agents/visual-judge.md": "fc6b9fc1b45a949998f62c767a205d25c3725268f84bcea9824bf782f68099cf",
+    "apps/zcode-cli/packages/spreadsheets-plugin/dist/LICENSE": "e5c04526c473c044ed897a169d4185089a36b787944710bef1e74bb7d7d11176",
+    "apps/zcode-cli/packages/spreadsheets-plugin/dist/server.mjs": "e2bb16b01e5f2bb49c6a818bec1bdcc2279cb6b2d5e6059fe7f98ad095a86721",
+    "apps/zcode-cli/packages/spreadsheets-plugin/dist/THIRD_PARTY_NOTICES.txt": "714f45453f7763f5321574deb6571d05a7c51aa7689e14c218e907e7bf5f42ad",
+    "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/assets.json": "7e2de9855ab2f6eae0b0af6482b2b550643a808bd85c6c26e91f871dae42c902",
+    "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/bundle-0.txt": "6dac2e2fdca230472bd0ac96e7164f6a16e2a1bad934d84581171564ecfbb38e",
+    "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/panel.css": "a47ca1f5285c1cd5f972b86a7787fc1215030421140c5b4f1ec10a76fad08889",
+    "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/panel.html": "a2e01b6625e07fac448a4f125cae877228f752c743e2c7d0b5723cb8a4ebbb01",
+    "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/sheets.wasm": "610c37636c19c625255454ae41d1d26592d494cb097cd5d5c79fb4cf5538dc2f",
+    "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/xlsx-worker.js": "e2773ae8d285388e43a8dd943870a4d04ae0dd2eb7c50f89a141d8b98b958c1e",
     "apps/zcode-cli/packages/spreadsheets-plugin/LICENSE.dsh": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
     "apps/zcode-cli/packages/spreadsheets-plugin/package.json": "48302eb53a26ee231bd214af447075d304998c548c8d2697e43db338e41558b5",
     "apps/zcode-cli/packages/spreadsheets-plugin/scripts/check_office.mjs": "a12311cbb12d56a42369d9effc3ccdea1160497908fa91a79a5df986bb7d79f1",
@@ -3230,7 +3253,7 @@
     "third-party/native-search/licenses/f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af.txt": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af",
     "third-party/native-search/licenses/f9c375a1be4a41f7b70301dd83c91cb89e41567478859b77eef375a52d782505.txt": "f9c375a1be4a41f7b70301dd83c91cb89e41567478859b77eef375a52d782505",
     "third-party/native-search/sources.json": "3ed43433e5a4c684c0d751bc03facc3f020d5077d8ffd299156a54b51a1ec6d9",
-    "third-party/npm-overrides.json": "a5edf914c60acafab2fdb0e1ea8397072c8c8d002c8c4025e5e7a2cbc644fab7",
+    "third-party/npm-overrides.json": "353f6a00a73ddc69d18c692e4f9f60d6531766bb705ea3c539390be3ea456386",
     "third-party/runtime/node-22.16.0-LICENSE.txt": "1ae62e2015784ba438db7b04ebd33f3c4ff3efdb824c111c4ececd99945fd52d",
     "third-party/runtime/node-24.14.0-LICENSE.txt": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18",
     "third-party/runtime/sources.json": "b27bc8d81aeb71108e523602364ffbb6a1b19c2d5d47733fd43094b769006741",
@@ -30558,6 +30581,34 @@
           "sha256": "fc6b9fc1b45a949998f62c767a205d25c3725268f84bcea9824bf782f68099cf"
         },
         {
+          "file": "apps/zcode-cli/packages/documents-plugin/dist/LICENSE",
+          "sha256": "e5c04526c473c044ed897a169d4185089a36b787944710bef1e74bb7d7d11176"
+        },
+        {
+          "file": "apps/zcode-cli/packages/documents-plugin/dist/THIRD_PARTY_NOTICES.txt",
+          "sha256": "5e691fa7d84be62a05738b4b1546f3cc4927156c924c4105108aee30d4e7df74"
+        },
+        {
+          "file": "apps/zcode-cli/packages/documents-plugin/dist/server.mjs",
+          "sha256": "6faffbd110463ff7c06ee019b75047f87318ea28aa9e8d130dab45f3cf983935"
+        },
+        {
+          "file": "apps/zcode-cli/packages/documents-plugin/dist/ui/assets.json",
+          "sha256": "758470e31a9d504bb6eef72f7148d9d64aea0b464f07cc3a175c19a3cb430cb8"
+        },
+        {
+          "file": "apps/zcode-cli/packages/documents-plugin/dist/ui/bundle-0.txt",
+          "sha256": "243003779739590b2e37a0bd881c29f8ef1aa5e47aac5da907414727e6e475f0"
+        },
+        {
+          "file": "apps/zcode-cli/packages/documents-plugin/dist/ui/panel.css",
+          "sha256": "a47ca1f5285c1cd5f972b86a7787fc1215030421140c5b4f1ec10a76fad08889"
+        },
+        {
+          "file": "apps/zcode-cli/packages/documents-plugin/dist/ui/panel.html",
+          "sha256": "6dc3d4488469cb9bc9d0c4716b85a338f367abf27f47e2f0fc092064e3a0a6ea"
+        },
+        {
           "file": "apps/zcode-cli/packages/documents-plugin/package.json",
           "sha256": "f5b6a69654fdcda61f87357b0204405864413482866bcfa6cfc759f8a0336e20"
         },
@@ -30798,6 +30849,34 @@
           "sha256": "fc6b9fc1b45a949998f62c767a205d25c3725268f84bcea9824bf782f68099cf"
         },
         {
+          "file": "apps/zcode-cli/packages/presentations-plugin/dist/LICENSE",
+          "sha256": "e5c04526c473c044ed897a169d4185089a36b787944710bef1e74bb7d7d11176"
+        },
+        {
+          "file": "apps/zcode-cli/packages/presentations-plugin/dist/THIRD_PARTY_NOTICES.txt",
+          "sha256": "15c5afbe26935156dfd47de2ae912928ca9ddabc5a2418d9ee4765d26f36fd0d"
+        },
+        {
+          "file": "apps/zcode-cli/packages/presentations-plugin/dist/server.mjs",
+          "sha256": "a6f3dbafc7ba1df343ca874e0b459d168e28d0b1ed902e3f51c5ccd98e29bcee"
+        },
+        {
+          "file": "apps/zcode-cli/packages/presentations-plugin/dist/ui/assets.json",
+          "sha256": "1541bc447a4ae06661a197faeab7bee33b382d733cc714b8a46f7aabea22dcb2"
+        },
+        {
+          "file": "apps/zcode-cli/packages/presentations-plugin/dist/ui/bundle-0.txt",
+          "sha256": "b97c18353d14e5c4eca9d22a7fa4192d5f5496767d92bd501402f94f19478ed6"
+        },
+        {
+          "file": "apps/zcode-cli/packages/presentations-plugin/dist/ui/panel.css",
+          "sha256": "a47ca1f5285c1cd5f972b86a7787fc1215030421140c5b4f1ec10a76fad08889"
+        },
+        {
+          "file": "apps/zcode-cli/packages/presentations-plugin/dist/ui/panel.html",
+          "sha256": "417b2b3018782d215958d78aa0c3f7ed2c41ac9f70986eea313eb076f2a24921"
+        },
+        {
           "file": "apps/zcode-cli/packages/presentations-plugin/package.json",
           "sha256": "db0fd0a1c80c93e78113a671fe9b41dcb1bf17fbc86828d29f7cbfb2ec3394eb"
         },
@@ -30868,6 +30947,42 @@
         {
           "file": "apps/zcode-cli/packages/spreadsheets-plugin/agents/visual-judge.md",
           "sha256": "fc6b9fc1b45a949998f62c767a205d25c3725268f84bcea9824bf782f68099cf"
+        },
+        {
+          "file": "apps/zcode-cli/packages/spreadsheets-plugin/dist/LICENSE",
+          "sha256": "e5c04526c473c044ed897a169d4185089a36b787944710bef1e74bb7d7d11176"
+        },
+        {
+          "file": "apps/zcode-cli/packages/spreadsheets-plugin/dist/THIRD_PARTY_NOTICES.txt",
+          "sha256": "714f45453f7763f5321574deb6571d05a7c51aa7689e14c218e907e7bf5f42ad"
+        },
+        {
+          "file": "apps/zcode-cli/packages/spreadsheets-plugin/dist/server.mjs",
+          "sha256": "e2bb16b01e5f2bb49c6a818bec1bdcc2279cb6b2d5e6059fe7f98ad095a86721"
+        },
+        {
+          "file": "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/assets.json",
+          "sha256": "7e2de9855ab2f6eae0b0af6482b2b550643a808bd85c6c26e91f871dae42c902"
+        },
+        {
+          "file": "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/bundle-0.txt",
+          "sha256": "6dac2e2fdca230472bd0ac96e7164f6a16e2a1bad934d84581171564ecfbb38e"
+        },
+        {
+          "file": "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/panel.css",
+          "sha256": "a47ca1f5285c1cd5f972b86a7787fc1215030421140c5b4f1ec10a76fad08889"
+        },
+        {
+          "file": "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/panel.html",
+          "sha256": "a2e01b6625e07fac448a4f125cae877228f752c743e2c7d0b5723cb8a4ebbb01"
+        },
+        {
+          "file": "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/sheets.wasm",
+          "sha256": "ab475856ab69ce1c29866d8961952578c488804bc4ca6bc13a6db13eb09e20de"
+        },
+        {
+          "file": "apps/zcode-cli/packages/spreadsheets-plugin/dist/ui/xlsx-worker.js",
+          "sha256": "e2773ae8d285388e43a8dd943870a4d04ae0dd2eb7c50f89a141d8b98b958c1e"
         },
         {
           "file": "apps/zcode-cli/packages/spreadsheets-plugin/package.json",
