@@ -88,6 +88,7 @@ import { SegmentPill } from "@/settings/PluginStoreListView.js";
 import { PluginsSection } from "@/settings/PluginsSection.js";
 import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
+import { RemoteAssetsSetting } from "@/settings/RemoteAssetsSetting.js";
 import { MemorySettingsSection } from "@/settings/MemorySettingsSection.js";
 import { PersonalizationSection } from "@/settings/PersonalizationSection.js";
 import { BrowserSettingsSection } from "@/settings/BrowserSettingsSection.js";
@@ -2246,6 +2247,8 @@ export function SettingsPage({
                               workspacePath={activeWorkspacePath}
                               workspaceIdentity={activeWorkspaceIdentity}
                             />
+                          ) : activeSection === "remoteAssets" ? (
+                            <RemoteAssetsSetting />
                           ) : activeSection === "browser" ? (
                             <BrowserSettingsSection
                               isDesktop={Boolean(isDesktop)}
