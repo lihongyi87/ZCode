@@ -1,3 +1,4 @@
+import { isHighspeedProviderId } from "@zcode/shared";
 import { normalizeGenUiInput } from "@zcode/core";
 // 会话流命令组：sendText / stop（模式样板）。
 // 每个命令组一个文件：handler 纯函数 (host, envelope) → CommandResult|undefined，
@@ -15,7 +16,11 @@ import { parseProviderQualifiedModelSelection } from "../../../app/provider-regi
 import type { TurnAttachment } from "@zcode/core";
 import { mapAttachmentRefsToTurnAttachments } from "../attachment-refs.js";
 import { inputIntentMetadata } from "../input-intent.js";
-import { startPromptTurn, turnBackgroundAttributionOf } from "../prompt-turn.js";
+import {
+  resolveTurnAutomationId,
+  startPromptTurn,
+  turnBackgroundAttributionOf,
+} from "../prompt-turn.js";
 import { resetHeldQueueAfterModelSelectionChange } from "../../queue-held-reset.js";
 import { requireRecord } from "../record-access.js";
 import type { V4CommandCoreHost, V4SessionRecordView } from "../types.js";
@@ -203,8 +208,6 @@ async function sendText(
   const sessionSelectionBeforeSubmit = record.app.runtime?.getSessionModelSelection?.();
   const attachments = await mapAttachmentRefsToTurnAttachments(record.app, payload.attachments);
   const submittedExecutionState = resolveSubmittedExecutionState(record, payload);
-  const submissionIntent = (options: Parameters<typeof inputIntentMetadata>[1]) =>
-    inputIntentMetadata(envelope, { ...options, ...submittedExecutionState });
   const activeAutomationId = resolveTurnAutomationId({
     automationId: rawPayload.automationId,
   });
@@ -215,7 +218,7 @@ async function sendText(
     activeAutomationId !== undefined &&
     (rawPayload.highspeedMeta !== undefined ||
       isHighspeedProviderId(rawPayload.modelSelection?.providerId));
-  const payload: CommandPayloadMap["sendText"] = dropsHighspeed
+  const sanitizedPayload: CommandPayloadMap["sendText"] = dropsHighspeed
     ? {
         ...rawPayload,
         highspeedMeta: undefined,
@@ -224,14 +227,12 @@ async function sendText(
       }
     : rawPayload;
   // canonical intent 必须和 admission 看同一份净荷，否则 transcript 会留下没有凭据的加速标记。
-  const intentEnvelope = { ...envelope, payload } as CommandEnvelope;
-  const attachments = await mapAttachmentRefsToTurnAttachments(record.app, payload.attachments);
-  const submittedExecutionState = resolveSubmittedExecutionState(record, payload);
+  const intentEnvelope = { ...envelope, payload: sanitizedPayload } as CommandEnvelope;
   const submissionIntent = (options: Parameters<typeof inputIntentMetadata>[1]) =>
     inputIntentMetadata(intentEnvelope, {
       ...options,
       ...submittedExecutionState,
-      genUiContext: payload.genUiContext,
+      genUiContext: sanitizedPayload.genUiContext,
     });
   const routingMode = host.getInputRoutingMode?.(envelope.sessionId ?? "") ?? null;
   const forceStartNow = payload.requestedDelivery === "startNow";

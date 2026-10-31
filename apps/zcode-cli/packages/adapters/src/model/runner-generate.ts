@@ -54,7 +54,7 @@ import type {
 } from "./runner-runtime.js";
 import { resolveModelForAttempt, RuntimeHeadersRefreshError } from "./runner-runtime-headers.js";
 import { CaptchaRequestRetry } from "./captcha-retry.js";
-import { retryAllowedByFailurePolicy } from "./workflow-model-failure-policy.js";
+import { AccountRequestRetry } from "./account-request-retry.js";
 import {
   nextUnrecognizedCodeStreak,
   retryAllowedByFailurePolicy,
@@ -100,6 +100,7 @@ export async function runGenerateText(input: {
   // start-plan 的 3007 验证码挑战单次重试额度（spec §4.5，对齐官方 CaptchaRequestRetry）。
   // 每次模型请求新建，不跨请求复用 ⇒ 「每个模型请求最多重试一次」。
   const captchaRetry = new CaptchaRequestRetry(input.request, input.resolved);
+  const authRetry = new AccountRequestRetry(input.request, input.resolved, input.logger);
   // 不认识的业务码在本次请求里连续出现的次数：workflow 策略表据此停下，见 workflow-model-failure-policy.ts。
   let unrecognizedCodeStreak = 0;
 

@@ -240,6 +240,13 @@ function tryWriteOfficialPluginRuntimeManifest(input: {
   }
 }
 
+/** 入口文件目录与 bundle 自身目录，不含 cwd：随包运行时资产（如 npm）不能被工作区同名目录顶替。 */
+export function bundleBaseDirs(): string[] {
+  const candidates = listEntrypointCandidateBaseDirs();
+  // 枚举器末位是 cwd；bundleBaseDirs 语义要求不含 cwd（上游 bundled-plugins 副本同语义）。
+  return candidates.filter((dir) => dir !== process.cwd());
+}
+
 export function resolveOfficialPluginRoots(input: {
   env?: NodeJS.ProcessEnv;
   extraRoots?: string[];

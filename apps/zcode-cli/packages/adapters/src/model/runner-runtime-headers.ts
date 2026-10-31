@@ -1,6 +1,6 @@
 import type { ModelRequestAuth, ProviderRuntimeHeadersRequestReason } from "@zcode/contracts";
 import { ZCODE_PROVIDER_CONFIG_NETWORK_ERROR, type RequestVerificationReason } from "@zcode/shared";
-import type { ModelRequestAuth } from "@zcode/contracts";
+import type {  } from "@zcode/contracts";
 import { ModelErrorCode, ModelProtocolError } from "@zcode/contracts";
 import type { AiSdkModelTextRequest, ResolvedAiSdkModel } from "./runner-runtime.js";
 

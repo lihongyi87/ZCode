@@ -127,7 +127,6 @@ import {
   resolveV4InteractionRegistryOptionsFromEnv,
 } from "../zcode-protocol-v4/interaction-registry.js";
 import { createConversationV4Gateway } from "./v4-bridge.js";
-import { createSessionResidentPoolHost } from "./session-residency.js";
 import type { ProactiveStorePort } from "@zcode/contracts";
 import type { ProactiveScheduler } from "@zcode/adapters/proactive";
 import { createProactiveSchedulerFromEnv } from "@zcode/adapters/proactive";

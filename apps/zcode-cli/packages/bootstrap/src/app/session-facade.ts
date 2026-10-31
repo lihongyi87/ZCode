@@ -124,6 +124,7 @@ interface CreateSessionFacadeDeps {
    * run service 的 `close()`。缺席即本装配没有 dwf 端口（journal 窄化失败、测试装配）。
    */
   closeDynamicWorkflowRuns?: () => Promise<void>;
+  closeScriptWorkflowRuns?: () => Promise<void>;
   closeNodeReplBrowserBroker?: () => Promise<void> | undefined;
   closeNodeReplToolsBroker?: () => Promise<void> | undefined;
   configResult: ConfigResult;
@@ -317,6 +318,20 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
               {
                 errorMessage: error instanceof Error ? error.message : String(error),
                 event: "dynamic_workflow.service.close_failed",
+                module: "bootstrap.app",
+              },
+            );
+          }
+        }
+        if (deps.closeScriptWorkflowRuns !== undefined) {
+          try {
+            await deps.closeScriptWorkflowRuns();
+          } catch (error: unknown) {
+            deps.logger?.warn?.(
+              "Closing script workflow runs failed; continuing to close resources",
+              {
+                errorMessage: error instanceof Error ? error.message : String(error),
+                event: "script_workflow.service.close_failed",
                 module: "bootstrap.app",
               },
             );
