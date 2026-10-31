@@ -77,14 +77,17 @@ describe("runMemoryAgentLoop", () => {
       workspaceRoot: "/workspace",
     });
 
-    expect(requests).toHaveLength(5);
+    // 软着陆(spec 165):5 轮全部想继续调工具 → 额外一轮禁工具的文本收尾。
+    expect(requests).toHaveLength(6);
     expect(executeToolCalls).toHaveBeenCalledTimes(5);
     expect(executeToolCalls).toHaveBeenLastCalledWith(
       [expect.objectContaining({ id: "write-last", name: "Write" })],
       expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
     );
     expect(requests[0]?.messages).toEqual(initialMessages);
-    expect(requests.every((request) => request.tools === tools)).toBe(true);
+    // 正常轮保留完整工具目录;软着陆收尾轮禁工具(切片排除最后一轮)。
+    expect(requests.slice(0, 5).every((request) => request.tools === tools)).toBe(true);
+    expect(requests[5]?.tools).toEqual([]);
     expect(requests.every((request) => request.toolSearchEnabled === false)).toBe(true);
     expect(requests.every((request) => request.options?.reasoningLevel === "low")).toBe(true);
     expect(requests.every((request) => request.options?.maxOutputTokens === 5_000)).toBe(true);
@@ -102,10 +105,11 @@ describe("runMemoryAgentLoop", () => {
         isError: false,
       }),
     ]);
-    expect(result.turns).toBe(5);
+    expect(result.turns).toBe(6);
+    // 软着陆收尾:追加 user 指令 + 文本-only assistant 总结。
     expect(messagesOf(result.entries).slice(-2)).toEqual([
-      expect.objectContaining({ role: "assistant", content: "last turn" }),
-      expect.objectContaining({ role: "tool", toolCallId: "write-last", isError: false }),
+      expect.objectContaining({ role: "user" }),
+      expect.objectContaining({ role: "assistant", toolCalls: [] }),
     ]);
   });
 
@@ -322,7 +326,8 @@ describe("runMemoryAgentLoop", () => {
       workspaceRoot: "/workspace",
     });
 
-    expect(result.turns).toBe(50);
+    // 软着陆(spec 165):50 轮全部想继续调工具 → turns 含收尾轮。
+    expect(result.turns).toBe(51);
     expect(executeToolCalls).toHaveBeenCalledTimes(50);
     expect(executeToolCalls).toHaveBeenLastCalledWith(
       [expect.objectContaining({ id: "write-fiftieth", name: "Write" })],

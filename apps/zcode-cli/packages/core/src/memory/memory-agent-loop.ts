@@ -153,41 +153,6 @@ export async function runMemoryAgentLoop(input: {
   // 软着陆(spec 165 吸收 OpenCode max-steps):步数耗尽时若模型仍想继续调工具,
   // 最后一轮禁用工具只求文本收尾,产出已完成/未完成总结——硬切会让半途工作
   // 静默蒸发(memory 提取半途而废时连一句说明都不留)。
-  // 注意循环体末尾是工具结果消息;最近一条 assistant 才是最后模型响应。
-  const finalAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-  const lastHadToolCalls =
-    Array.isArray(finalAssistant?.toolCalls) && finalAssistant.toolCalls.length > 0;
-  if (turns >= input.maxTurns && lastHadToolCalls) {
-    input.abortSignal?.throwIfAborted();
-    const summaryInstruction: ModelInputMessage = {
-      content:
-        "步骤预算已用完。不要再调用任何工具。请用文本总结:已完成什么、还有什么没做、下一步建议是什么。",
-      role: "user",
-    };
-    const summaryRequest: ModelRequest = {
-      abortSignal: input.abortSignal,
-      messages: [...messages.map(cloneModelMessage), summaryInstruction],
-      options: auxiliaryModelOptions(input.model),
-      tools: [],
-      toolSearchEnabled: false,
-    };
-    const mediaProjection = projectMessagesForModelMediaPolicy(
-      summaryRequest.messages,
-      input.model.properties.inputFormat,
-    );
-    const summary = await input.model.generateText({
-      ...summaryRequest,
-      messages: mediaProjection.messages,
-    });
-    input.abortSignal?.throwIfAborted();
-    messages.push(summaryInstruction, createAssistantMessage(summary.text, summary.reasoning, []));
-    turns += 1;
-  }
-
-  return { messages, turns };
-  // 软着陆(spec 165 吸收 OpenCode max-steps):步数耗尽时若模型仍想继续调工具,
-  // 最后一轮禁用工具只求文本收尾,产出已完成/未完成总结——硬切会让半途工作
-  // 静默蒸发(memory 提取半途而废时连一句说明都不留)。
   // 注意循环体末尾是工具结果 entry;最近一条 assistant 才是最后模型响应。
   const lastAssistantEntry = [...entries].reverse().find((entry) => entry.kind !== "attachment" && entry.message.role === "assistant");
   const lastHadToolCalls =
