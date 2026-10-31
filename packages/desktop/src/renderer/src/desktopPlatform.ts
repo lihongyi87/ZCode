@@ -1,5 +1,10 @@
 import { recordArmsCustomEventForE2E } from "@zcode/ui";
-import { DesktopCommandIds, buildLocalMediaPreviewUrl, type IPlatformService } from "@zcode/shared";
+import {
+  DesktopCommandIds,
+  buildLocalMediaPreviewUrl,
+  unwrapRemoteWorkspaceBindResult,
+  type IPlatformService,
+} from "@zcode/shared";
 
 import { desktopBrowserPlatformBridge } from "./desktopBrowserPlatformBridge.js";
 import { createDesktopPluginSandboxPlatform } from "./plugin-sandbox/desktopPluginSandboxPlatform.js";
@@ -40,9 +45,15 @@ export function createDesktopPlatform(options: {
       Promise.reject(new Error("Source settings attachment bridge unavailable")),
     cancelPendingRemoteConnection: (requestId) =>
       window.zcode.cancelPendingRemoteConnection?.(requestId) ?? Promise.resolve(),
-    bindRemoteWorkspaceSessionContext: (context) =>
-      window.zcode.bindRemoteWorkspaceSessionContext?.(context) ??
-      Promise.reject(new Error("Desktop bindRemoteWorkspaceSessionContext bridge unavailable")),
+    bindRemoteWorkspaceSessionContext: async (context) => {
+      if (!window.zcode.bindRemoteWorkspaceSessionContext) {
+        throw new Error("Desktop bindRemoteWorkspaceSessionContext bridge unavailable");
+      }
+      // preload 返回结构化结果，在页面一侧还原错误才能保留 code/retryable。
+      return unwrapRemoteWorkspaceBindResult(
+        await window.zcode.bindRemoteWorkspaceSessionContext(context),
+      );
+    },
     startWebRemoteControl: (context) => window.zcode.startWebRemoteControl(context),
     stopWebRemoteControl: () => window.zcode.stopWebRemoteControl(),
     getWebRemoteControlStatus: () => window.zcode.getWebRemoteControlStatus(),
@@ -82,6 +93,7 @@ export function createDesktopPlatform(options: {
     onPaymentCallback: (callback) => window.zcode.onPaymentCallback(callback),
     onShareImport: (callback) => window.zcode.onShareImport?.(callback) ?? (() => {}),
     notifyRendererReady: () => window.zcode.notifyRendererReady(),
+    syncTelemetryContext: (context) => window.zcode.syncTelemetryContext(context),
     reportTelemetryEvent: (payload) => window.zcode.reportTelemetryEvent(payload),
     reportArmsCustomEvent: (payload) => {
       recordArmsCustomEventForE2E(payload);
@@ -106,6 +118,8 @@ export function createDesktopPlatform(options: {
       window.zcode.syncWebRemoteControlWorkspaces?.(workspaces),
     onWebRemoteControlReconnectWorkspace: (handler) =>
       window.zcode.onWebRemoteControlReconnectWorkspace?.(handler) ?? (() => {}),
+    onWebRemoteControlRendererAction: (handler) =>
+      window.zcode.onWebRemoteControlRendererAction?.(handler) ?? (() => {}),
     syncWindowUnreadCount: (count) => window.zcode.syncWindowUnreadCount(count),
     syncActiveTaskSession: (sessionId) => window.zcode.syncActiveTaskSession(sessionId),
     syncAppSettings: (patch) => window.zcode.syncAppSettings?.(patch),
@@ -194,6 +208,14 @@ export function createDesktopPlatform(options: {
     skipUpdateVersion: (version) => window.zcode.skipUpdateVersion?.(version) ?? Promise.resolve(),
     quitAndInstallUpdate: () => window.zcode.quitAndInstallUpdate(),
     getInstalledEditors: (filePath) => window.zcode.getInstalledEditors(filePath),
+    getFileApplications: (target) =>
+      window.zcode.getFileApplications?.(target) ?? Promise.resolve([]),
+    openFileWithApplication: async (applicationId, target) => {
+      const result = await window.zcode.openFileWithApplication?.(applicationId, target);
+      return typeof result === "object" && result !== null && "success" in result
+        ? (result as { success: boolean; error?: string })
+        : { success: true };
+    },
     getApplicationIcon: (bundleId) =>
       window.zcode.getApplicationIcon?.(bundleId) ?? Promise.resolve(null),
     openInEditor: (editorId, path, editorOptions) =>

@@ -1,4 +1,5 @@
 import { DatabaseStartupAdmission } from "./databaseStartupAdmission.js";
+import { initializeDesktopLocalTtft } from "./local-ttft/contract.js";
 import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
 import {
@@ -297,7 +298,10 @@ function handleServicePortMessage(event: MessageEvent): void {
 
 function initializeBusinessRoot(port: MessagePort): void {
   appInitialized = true;
-  const services = connectViaMessagePort(port);
+  const services = connectViaMessagePort(port, {
+    sourceServerManagementService: true,
+    deviceSyncStateService: true,
+  });
   baseServicesForRemoteSessions = services;
   registerBaseWorkspaceServices(services);
   flushPendingRemoteWorkspaceServicePorts();

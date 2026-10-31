@@ -1,6 +1,6 @@
 # R3 合并后远程自动化实际测试方案
 
-导出边界：`harness/remote/**` 是内部远程测试部署设施，不进入开源树；直接依赖它的 `r3RemoteMobileSite`、`r3RemoteProcess`、`r3RemoteProfiles`、`r3RemoteScheduler`、`r3RemoteSource`、`r3RemoteSpecInventory`、`r3RemoteVpn` 单测同步排除。公共远程实现与独立 E2E 保留，排除合同见 `opensource/README.md`。
+导出边界：`harness/remote/**` 是内部远程测试部署设施，不进入开源树；直接依赖它的 `r3RemoteMobileSite`、`r3RemoteProcess`、`r3RemoteProfiles`、`r3RemoteScheduler`、`r3RemoteSource`、`r3RemoteVpn` 单测同步排除。公共远程实现与独立 E2E 保留，排除合同见 `opensource/README.md`。
 
 当前范围与验收标准。2026-09-07 确认的完整验收目标继续保留；早期分支名、环境准备过程和执行缺口属于历史记录，不能作为当前运行结果。
 执行命令、环境准入和资源隔离由 [harness README](../../harness/remote/README.md)维护；
@@ -104,15 +104,15 @@ Mobile replayable -------+                 +-> 独立 mobile gap/snapshot
 
 ## 3. 环境、材料与隔离
 
-| 环境      | 本轮用途                                                                    | 真实程度 / 验收边界                                                                                              |
-| --------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| E-SSH     | 当前 macOS Desktop → linux-amd64-dev 的 Linux x64 SSH                       | 密码、真实 sshd、archive、Server/Agent、开发入口；实测该 alias 指向本机 Docker 暴露的 SSH，不能宣称跨机 WAN 验证 |
-| E-ISO-A/B | 新建独立 SSH 容器，两个独立 Source，相同绝对项目路径                        | 配置删除/损坏、版本切换、kill Core/Agent、配额/权限/网络故障；每轮可重建                                         |
-| E-SVC     | 带可用 user service manager 的独立目标                                      | systemd 成功、缺 bus 环境恢复、真实注册失败；当前 E-SSH 仅有 detached 能力                                       |
-| E-DKR     | Desktop Docker transport → 独立 Linux 容器                                  | 真正 Docker proxy-stdio 代表，不用“SSH 到 Docker 容器”替代                                                       |
-| E-MOB     | 移动 viewport 浏览器 + 本地 web + 显式匹配环境的外部 relay + 已有 SSH scope | 真实配对/attachment/恢复；browser 自动化不是 iOS/Android 实机证据                                                |
-| E-WSL     | Windows Desktop + WSL2                                                      | 平台执行包准备，缺 Windows 时 BLOCKED；不降低跨 transport 发布门禁                                               |
-| E-OLD     | 认证的旧 Desktop / Server / 数据 fixture                                    | 三者单独记录版本、来源、SHA、schema 与可运行性                                                                   |
+| 环境      | 本轮用途                                                                    | 真实程度 / 验收边界                                                                                                                     |
+| --------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| E-SSH     | 当前 macOS Desktop → linux-amd64-dev 的 Linux x64 SSH                       | 密码、真实 sshd、archive、Server/Agent、开发入口；实测该 alias 指向本机 Docker 暴露的 SSH，不能宣称跨机 WAN 验证                        |
+| E-ISO-A/B | 新建独立 SSH 容器，两个独立 Source，相同绝对项目路径                        | 配置删除/损坏、版本切换、kill Core/Agent、配额/权限/网络故障；每轮可重建                                                                |
+| E-SVC     | 带可用 user service manager 的独立目标                                      | systemd 成功、缺 bus 环境恢复、真实注册失败；E-SSH 仅有 detached 能力。本机 `run-local-docker.mjs --systemd` 提供该目标，服务器队列尚无 |
+| E-DKR     | Desktop Docker transport → 独立 Linux 容器                                  | 真正 Docker proxy-stdio 代表，不用“SSH 到 Docker 容器”替代                                                                              |
+| E-MOB     | 移动 viewport 浏览器 + 本地 web + 显式匹配环境的外部 relay + 已有 SSH scope | 真实配对/attachment/恢复；browser 自动化不是 iOS/Android 实机证据                                                                       |
+| E-WSL     | Windows Desktop + WSL2                                                      | 平台执行包准备，缺 Windows 时 BLOCKED；不降低跨 transport 发布门禁                                                                      |
+| E-OLD     | 认证的旧 Desktop / Server / 数据 fixture                                    | 三者单独记录版本、来源、SHA、schema 与可运行性                                                                                          |
 
 隔离要求：
 

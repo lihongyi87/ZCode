@@ -733,11 +733,6 @@
     "acceptedMissingNotice": "rrweb 家族（@arms/rum-browser 的传递依赖）：tarball 仅含 package.json 与 README，无 LICENSE 文件；package.json 的 license 字段为 MIT。同上按「接受缺失上游文本」登记。"
   },
   {
-    "package": "keyv@4.5.4",
-    "license": "MIT",
-    "acceptedMissingNotice": "keyv（rrweb 传递依赖）：tarball 仅含 package.json 与 README（README 亦无 License 段），无 LICENSE 文件；package.json 的 license 字段为 MIT。按「接受缺失上游文本」登记。"
-  },
-  {
     "package": "rrdom@2.1.7",
     "license": "MIT",
     "acceptedMissingNotice": "rrweb 家族（@arms/rum-browser 的传递依赖）：tarball 仅含 package.json 与 README，无 LICENSE 文件；package.json 的 license 字段为 MIT。同上按「接受缺失上游文本」登记。"

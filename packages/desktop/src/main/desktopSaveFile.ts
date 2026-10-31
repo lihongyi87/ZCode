@@ -1,6 +1,6 @@
 import { copyFile, mkdtemp, open, rm, writeFile } from "node:fs/promises";
-import type { LookupAddress } from "node:dns";
 import { lookup } from "node:dns/promises";
+import type { LookupAddress } from "node:dns";
 import { BlockList } from "node:net";
 import type { LookupFunction } from "node:net";
 import { tmpdir } from "node:os";
@@ -10,8 +10,8 @@ import { PlatformChannels } from "@zcode/shared";
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import { Agent, fetch as undiciFetch } from "undici";
 
-const MAX_SAVE_FILE_BYTES = 50 * 1024 * 1024;
-const REMOTE_DOWNLOAD_TIMEOUT_MS = 30_000;
+export const MAX_SAVE_FILE_BYTES = 50 * 1024 * 1024;
+export const REMOTE_DOWNLOAD_TIMEOUT_MS = 30_000;
 const MAX_REMOTE_REDIRECTS = 5;
 
 const blockedRemoteAddresses = new BlockList();
@@ -65,8 +65,6 @@ async function resolvePublicRemoteUrl(url: URL): Promise<LookupAddress[]> {
   if (hostname === "localhost" || hostname.endsWith(".localhost")) {
     throw new SaveFileError("remote_address_not_allowed");
   }
-  // 显式写成数组类型：ReturnType<typeof lookup> 取的是最后一个重载（all?: false → 单个地址），
-  // 会让 { all: true } 的返回类型被误判成 LookupAddress。
   let addresses: LookupAddress[];
   try {
     addresses = await lookup(hostname, { all: true, verbatim: true });
@@ -192,16 +190,13 @@ export function registerDesktopSaveFileIpcHandler(logger: { warn: (...args: unkn
       }
       const suggestedName = basename(payload.suggestedName.trim()).slice(0, 120);
       const sourceUrl = parseRemoteImageUrl(payload.sourceUrl);
-      // 先取出局部常量：payload.data 是可选字段，instanceof 收窄必须作用在局部变量上才有效。
-      const data = payload.data;
-      const hasData = data instanceof ArrayBuffer;
+      const hasData = payload.data instanceof ArrayBuffer;
+      const data = hasData ? payload.data : undefined;
       if (!suggestedName || (sourceUrl === null && !hasData)) {
         return { success: false, error: "invalid_file_payload" };
       }
-      if (hasData && data.byteLength === 0) {
-        return { success: false, error: "invalid_file_payload" };
-      }
-      if (hasData && data.byteLength > MAX_SAVE_FILE_BYTES) {
+      // 通用“另存为”必须保留零字节原文件；远程下载仍单独拒绝空响应。
+      if (data && data.byteLength > MAX_SAVE_FILE_BYTES) {
         return { success: false, error: "file_too_large" };
       }
 
@@ -217,7 +212,7 @@ export function registerDesktopSaveFileIpcHandler(logger: { warn: (...args: unkn
       try {
         if (sourceUrl) {
           await downloadRemoteFile(sourceUrl, result.filePath);
-        } else if (hasData) {
+        } else if (data) {
           await writeFile(result.filePath, new Uint8Array(data));
         }
         return { success: true, path: result.filePath };

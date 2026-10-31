@@ -14,6 +14,8 @@ export function protocolMcpServersToRuntimeMcpConfig(
     if ("command" in server) {
       runtimeServers[server.name] = {
         type: "stdio",
+        ...(server.scope ? { source: { kind: server.scope } } : {}),
+        ...(server.cwd ? { cwd: server.cwd } : {}),
         command: server.command,
         args: server.args,
         env: Object.fromEntries(server.env.map(({ name, value }) => [name, value])),
@@ -33,6 +35,7 @@ export function protocolMcpServersToRuntimeMcpConfig(
     }
     runtimeServers[server.name] = {
       type: server.type,
+      ...(server.scope ? { source: { kind: server.scope } } : {}),
       url: server.url,
       headers: Object.fromEntries(server.headers.map(({ name, value }) => [name, value])),
       ...(server.oauth !== undefined ? { oauth: server.oauth } : {}),

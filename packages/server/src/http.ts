@@ -7,7 +7,10 @@ import { readFile, stat } from "node:fs/promises";
 import type { Duplex } from "node:stream";
 import type { IncomingMessage } from "node:http";
 import { basename, extname, relative, resolve, sep } from "node:path";
+import * as nodePath from "node:path";
 import { hostname } from "node:os";
+import { resolveServerOsUser } from "@zcode/shared/node";
+
 import { Hono, type Context } from "hono";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
@@ -36,6 +39,7 @@ import {
   formatZodError,
   remoteTargetSchema,
   SERVER_REMOTE_PROTOCOL_VERSION,
+  ZCODE_COMPATIBILITY_MANIFEST,
   ZCODE_RPC_HOST_CAPABILITY_HEADER,
   ZCODE_VERSION,
   type ServerRemoteInfo,
@@ -252,6 +256,8 @@ function generateId(): string {
 }
 
 export interface HttpServerOptions {
+  /** v3.17.1：上次路径迁移失败的条目数（serverInfo 报告用）。 */
+  migrationFailedPathCount?: number;
   /** 反向资源返回路由（官方）：desktop-continuous 连接的资源 peer 登记面。 */
   topicResourcePeers?: TopicResourcePeers;
   serverId?: string;
@@ -363,12 +369,12 @@ function fallbackServerWorkspaces(): ServerRemoteWorkspaceInfo[] {
  */
 async function resolveServerWorkspaces(
   options: HttpServerOptions,
-  services: ServiceCollection,
+  services?: ServiceCollection,
 ): Promise<ServerRemoteWorkspaceInfo[]> {
   if (options.workspaces) {
     return options.workspaces;
   }
-  const registry = services.getOptional(IWorkspaceRegistryService);
+  const registry = services?.getOptional(IWorkspaceRegistryService);
   if (!registry) {
     return fallbackServerWorkspaces();
   }
@@ -404,10 +410,14 @@ async function createServerInfo(
     protocolVersion: SERVER_REMOTE_PROTOCOL_VERSION,
     authRequired: options.authRequired ?? Boolean(readTrimmedEnv("ZCODE_SERVER_TOKEN")),
     workspaces: await resolveServerWorkspaces(options, services),
+    compatibility: ZCODE_COMPATIBILITY_MANIFEST,
+    migration: { failedPathCount: options.migrationFailedPathCount ?? 0 },
+    identity: { osUser: resolveServerOsUser(), hostname: hostname() },
     capabilities: {
       desktopContinuous: true,
       websocketRpc: true,
       processResourceTelemetry: true,
+      remoteConversationTelemetry: true,
     },
   };
 }

@@ -55,6 +55,10 @@ import type {
 import { resolveModelForAttempt, RuntimeHeadersRefreshError } from "./runner-runtime-headers.js";
 import { CaptchaRequestRetry } from "./captcha-retry.js";
 import { retryAllowedByFailurePolicy } from "./workflow-model-failure-policy.js";
+import {
+  nextUnrecognizedCodeStreak,
+  retryAllowedByFailurePolicy,
+} from "./workflow-model-failure-policy.js";
 import { modelFailureStatusFields, providerRequestIdFromHeaders } from "./runner-telemetry.js";
 import { repairReasoningHistoryAfterSignatureRejection } from "./reasoning-history-normalization.js";
 import { admitAttempt, type AttemptAdmission } from "./request-admission.js";
@@ -96,6 +100,8 @@ export async function runGenerateText(input: {
   // start-plan 的 3007 验证码挑战单次重试额度（spec §4.5，对齐官方 CaptchaRequestRetry）。
   // 每次模型请求新建，不跨请求复用 ⇒ 「每个模型请求最多重试一次」。
   const captchaRetry = new CaptchaRequestRetry(input.request, input.resolved);
+  // 不认识的业务码在本次请求里连续出现的次数：workflow 策略表据此停下，见 workflow-model-failure-policy.ts。
+  let unrecognizedCodeStreak = 0;
 
   for (
     let attempt = 1;
@@ -363,7 +369,7 @@ export async function runGenerateText(input: {
       const classified = classifyModelFailure(error, input.request.abortSignal);
       if (error instanceof RuntimeHeadersRefreshError) {
         classified.message = error.message;
-        classified.retryable = false;
+        classified.retryable = error.retryable;
       }
       // off-peak 特判（仅 idle plan provider，见 offpeak-retry.ts）：排队 429 豁免预算、
       // 3102（兼容旧 3001）以稳定标记落败触发 desktop 侧续跑。
@@ -382,6 +388,12 @@ export async function runGenerateText(input: {
           : offPeak?.kind === "queued"
             ? { ...classified, retryable: true, retryReason: ModelRetryReason.OffpeakQueued }
             : classified;
+      const providerCode = inspectProviderFailure(error).providerErrorCode;
+      unrecognizedCodeStreak = nextUnrecognizedCodeStreak(
+        unrecognizedCodeStreak,
+        failure,
+        providerCode,
+      );
       const responseHeaders = sanitizeModelNetworkHeaders(
         getResponseHeaders(unwrapRetryError(error)),
       );
@@ -417,6 +429,9 @@ export async function runGenerateText(input: {
       // skip 的口径对齐官方：请求还没发出去（prepare 阶段）时重试没有意义。
       const retryWithCaptchaRefresh = captchaRetry.claim(error, options === undefined);
       if (retryWithCaptchaRefresh) {
+            retryAllowedByFailurePolicy(failure, retryBudget, providerCode, unrecognizedCodeStreak);
+      const retryWithAuth = authRetry.claim(error, options === undefined);
+      if (retryWithAuth)
         statusContext = {
           ...statusContext,
           maxAttempts: statusMaxAttempts(
@@ -478,6 +493,7 @@ export async function runGenerateText(input: {
         });
         throw toAdapterError(error, failure, statusContext, attempt, {
           errorPhase: requestInvocationCompleted ? "response" : "prepare",
+          unrecognizedCodeStreak,
         });
       }
 

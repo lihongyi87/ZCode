@@ -34,6 +34,8 @@ import type {
   WebRemoteControlContext,
   WebRemoteControlReconnectWorkspaceRequest,
   WebRemoteControlReconnectWorkspaceResult,
+  WebRemoteControlRendererActionRequest,
+  WebRemoteControlRendererActionResult,
   WebRemoteControlStartOperationResult,
   WebRemoteControlStatus,
   WebRemoteControlWorkspaceTarget,
@@ -109,13 +111,17 @@ declare global {
       requestSourceSettingsAttachment?(sourceServerId: string): Promise<{ attachmentId: string }>;
       /** 取消当前窗口尚未建立完成的远程连接 */
       cancelPendingRemoteConnection?(requestId?: string): Promise<void>;
-      /** 绑定远程 logical session 的 canonical workspace context */
+      /**
+       * 绑定远程 logical session 的 canonical workspace context。
+       * 失败时不 reject，而是返回 `{ success: false, reasonCode }`：preload 抛出的 Error 跨
+       * contextBridge 会丢失 code/retryable。调用方必须用 `unwrapRemoteWorkspaceBindResult` 还原。
+       */
       bindRemoteWorkspaceSessionContext?(context: {
         remoteSessionId: string;
         workspacePath?: string;
         workspaceIdentity?: string;
         confirmSourceServerInstall?: boolean;
-      }): Promise<import("@zcode/shared").BindRemoteWorkspaceSessionContextResult>;
+      }): Promise<import("@zcode/shared").BindRemoteWorkspaceSessionContextIpcResult>;
       /** 订阅远程 workspace session 自动重连换代事件（Source 恢复预算内换新 sessionId） */
       onRemoteSessionReconnected?(
         handler: (event: import("@zcode/shared").RemoteSessionReconnectedEvent) => void,
@@ -160,6 +166,13 @@ declare global {
       printPageToPdf?(): Promise<import("@zcode/shared").PrintPageToPdfResult>;
       /** 从系统拖拽/文件输入得到的 Web File 解析真实本地路径 */
       getPathForFile?(file: unknown): string | null;
+      getFileApplications?(
+        target: import("@zcode/shared").FileApplicationTarget,
+      ): Promise<import("@zcode/shared").FileApplicationInfo[]>;
+      openFileWithApplication?(
+        applicationId: string,
+        target: import("@zcode/shared").FileApplicationTarget,
+      ): Promise<unknown>;
       /** dwf 产物「作为文件打开」：把某一版的字节落成本机副本，返回其路径 */
       materializeWorkflowArtifactFile(
         payload: import("@zcode/shared").MaterializeWorkflowArtifactFileRequest,
@@ -201,6 +214,12 @@ declare global {
           request: WebRemoteControlReconnectWorkspaceRequest,
         ) => Promise<WebRemoteControlReconnectWorkspaceResult>,
       ): () => void;
+      /** 注册手机远控动作（置顶/归档/新建本地项目）的回调 */
+      onWebRemoteControlRendererAction?(
+        handler: (
+          request: WebRemoteControlRendererActionRequest,
+        ) => Promise<WebRemoteControlRendererActionResult>,
+      ): () => void;
       /** 同步当前窗口的未读 task 数到 main 进程 */
       syncWindowUnreadCount(count: number): void;
       syncActiveTaskSession(sessionId: string | null): void;
@@ -234,6 +253,9 @@ declare global {
       resetEmbeddedBrowserSitePermission?(
         request: EmbeddedBrowserSitePermissionResetRequest,
       ): Promise<EmbeddedBrowserSitePermissionsSnapshot>;
+      onBrowserViewDownloadStarted?(
+        callback: (payload: { webContentsId: number; urls: string[] }) => void,
+      ): () => void;
       onBrowserViewReady?(
         handler: (payload: {
           workspaceKey: string;

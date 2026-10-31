@@ -48,7 +48,7 @@ export class V4GoalCompactRejectedError extends Error {
 const manualCompactControllers = new WeakSet<AbortController>();
 
 /**
- * compact：手动上下文压缩（v4 payload 为空对象，无 instructions 变体）。
+ * compact：手动上下文压缩，模型选择固定在命令接收边界，无 instructions 变体。
  *
  * barrier 语义：
  * 1. running/goal verifier/goal continuation/tool work → typed compact intent 入 FIFO。
@@ -82,12 +82,19 @@ async function compact(
     throw new V4GoalCompactRejectedError("restoreWarning", record.restoreWarning.message);
   }
 
+  // 旧 compact 没有携带选择，导致菜单 B 被忽略；旧客户端也在此固定会话选择，
+  // 不能等模型就绪或排队结束后再读可变 Session。只取模型，不消费草稿模式/Plan。
+  const payload = envelope.payload as CommandPayloadMap["compact"];
+  const modelSelection = structuredClone(
+    resolveSubmittedExecutionState(record, payload).modelSelection,
+  );
   const routingMode = host.getInputRoutingMode?.(record.app.sessionId) ?? null;
   const busy = Boolean(record.activeAbortController) || Boolean(activeTurn);
   if (busy || routingMode === "enqueue" || routingMode === "guide" || routingMode === "choice") {
     const intent = inputIntentMetadata(envelope, {
       requestedDelivery: "queue",
       text: "/compact",
+      modelSelection,
     });
     const queueOptions = {
       commandKind: "compact" as const,
@@ -115,7 +122,14 @@ async function compact(
     return undefined;
   }
 
-  await startManualCompact(host, record, envelope.commandId);
+  await startManualCompact(host, record, {
+    inputId: envelope.commandId,
+    intent: inputIntentMetadata(envelope, {
+      requestedDelivery: "startNow",
+      text: "/compact",
+      modelSelection,
+    }),
+  });
   return undefined;
 }
 
@@ -123,8 +137,11 @@ async function compact(
 export async function startManualCompact(
   host: V4CommandCoreHost,
   record: V4SessionRecordView,
-  inputId: string,
-  foregroundPromotionLeaseId?: string,
+  params: {
+    inputId: string;
+    intent: NonNullable<SubmitPromptOptions["intent"]>;
+    foregroundPromotionLeaseId?: string;
+  },
 ): Promise<void> {
   if (record.restoreWarning) {
     throw new V4GoalCompactRejectedError("restoreWarning", record.restoreWarning.message);
@@ -139,9 +156,8 @@ export async function startManualCompact(
   manualCompactControllers.add(abortController);
   void runWithSessionResidencyFinalization(record, () =>
     runCompactTurnInBackground(host, record, {
+      ...params,
       abortController,
-      foregroundPromotionLeaseId,
-      inputId,
     }),
   ).catch(() => {
     // 后台 compact 的错误经事件流（CompactStarted/终态 marker）降级上报；兜底防 unhandled rejection。
@@ -155,6 +171,7 @@ async function runCompactTurnInBackground(
     abortController: AbortController;
     foregroundPromotionLeaseId?: string;
     inputId: string;
+    intent: NonNullable<SubmitPromptOptions["intent"]>;
   },
 ): Promise<void> {
   const startedAt = Date.now();
@@ -169,6 +186,7 @@ async function runCompactTurnInBackground(
     await record.app.submitPrompt("/compact", {
       abortSignal: params.abortController.signal,
       inputId: params.inputId,
+      intent: params.intent,
     });
   } catch (error) {
     lifecycleStatus = params.abortController.signal.aborted ? "cancelled" : "failed";

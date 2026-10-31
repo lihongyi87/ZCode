@@ -42,3 +42,7 @@ patchedDependencies:
   "@ai-sdk/anthropic@3.0.81": "patches/@ai-sdk__anthropic@3.0.81.patch"
   "wdio-electron-service@9.2.1": "patches/wdio-electron-service@9.2.1.patch"
   "@arms/rum-electron@0.0.3": "patches/@arms__rum-electron@0.0.3.patch"
+  # v3.17.1：office 预览链补丁（react-xlsx 链接出口/pptx 渲染器/collapsible；上游 vitest@4.1.7 patch 不适用本仓 4.1.11）
+  "@extend-ai/react-xlsx@0.16.0": "patches/@extend-ai__react-xlsx@0.16.0.patch"
+  "@aiden0z/pptx-renderer@1.2.4": "patches/@aiden0z__pptx-renderer@1.2.4.patch"
+  "@radix-ui/react-collapsible@1.1.12": "patches/@radix-ui__react-collapsible@1.1.12.patch"

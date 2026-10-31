@@ -2,7 +2,23 @@ import { posix } from "node:path";
 
 export const REMOTE_AGENT_OFFICIAL_PLUGIN_DIR_NAME = "packages";
 
-export const REMOTE_AGENT_OFFICIAL_PLUGIN_PACKAGE_NAMES = ["browser-use-plugin"] as const;
+export const REMOTE_AGENT_OFFICIAL_PLUGIN_PACKAGE_NAMES = [
+  "android-emulator-plugin",
+  "browser-use-plugin",
+  "zcode-cua-plugin",
+  "documents-plugin",
+  "pdf-plugin",
+  "presentations-plugin",
+  "spreadsheets-plugin",
+  "image-search-plugin",
+  "ios-simulator-plugin",
+  "restore-legacy-sessions-plugin",
+  "skill-creator-plugin",
+  "plugin-creator-plugin",
+  "zcode-guide-plugin",
+  "visualize-plugin",
+  "zcode-site-plugin",
+] as const;
 
 export const REMOTE_AGENT_OFFICIAL_PLUGIN_INCLUDED_TOP_LEVEL_PATHS = [
   ".mcp.json",
@@ -37,21 +53,33 @@ export const REMOTE_AGENT_OFFICIAL_PLUGIN_REQUIRED_RELATIVE_PATHS = [
   // 这里只能列 browser-use **自己产出**的资产。node_repl 宿主抽成 @zcode/node-repl-host 后
   // browser-use 不再产出 dist/mcp/server.js；
   // 本清单里指向不存在的文件，会让远端资产校验对着幽灵路径报缺失。
-  //
-  // 远端口径（2026-10-04 校准，C34）：
-  // - 远端 glm 组件随包带 browser-use 插件正文与 node_repl 宿主（prepare-prebuilds.mjs
-  //   每次必 stage，宿主的 dist/mcp/server.js 由 staging 侧的可复用完整性清单兜底）；
-  // - 不承载 bua/cua 的能力：浏览器操作依赖桌面宿主注入的 browserControlPort（远端
-  //   SSH/Docker 链路不提供），电脑控制还需要 CUA Helper / 原生驱动与 zcode-cua-plugin
-  //   资产（全部不进远端）；
-  // - 这份合同是下限（minimum）：只钉必须即刻满足的 browser-use 内容；宿主与其余
-  //   内容插件（office / pdf / 纯内容插件 / bundled-skills）staging 侧已 stage，
-  //   由 remoteOfficialPluginRequiredPaths 的完整性判据兜底，不在此重复要求。
-  //
-  // PACKAGE_NAMES 同时是开发态远端 staging 的驱动（zcodeAgentDevDeploy 逐名拷贝插件
-  // 源码并按本清单断言资产）：把 node-repl-host 加进来会让 dev 部署要求本地先构建宿主
-  // dist，属口径变更——等“远端承载 bua/cua”的产品口径变化时再动（F3-1 §9.2 第 2 条），
-  // 而不是把宿主产物挂回 browser-use 名下。
+  // 远程工作区当前不承载 Browser Use / Computer Use，因此宿主 runtime 不进这份远端合同——
+  // 要支持远程 bua/cua 时，应把 node-repl-host 补进上面的 PACKAGE_NAMES 并在此声明它的
+  // dist/mcp/server.js，而不是把宿主产物挂回 browser-use 名下。
+  "visualize-plugin/skills/visualize/SKILL.md",
+  "visualize-plugin/skills/visualize/references/api.md",
+  "visualize-plugin/skills/visualize/references/styles.md",
+  "visualize-plugin/skills/visualize/tweak.md",
+  "visualize-plugin/skills/visualize/LICENSE.md",
+  "visualize-plugin/skills/visualize/scripts/render.py",
+  "visualize-plugin/skills/visualize/assets/visualize.css",
+  "visualize-plugin/skills/visualize/assets/visualize.html",
+  "visualize-plugin/skills/visualize/assets/calendar.js",
+  "visualize-plugin/skills/visualize/assets/runtime-manifest.json",
+  "visualize-plugin/skills/visualize/scripts/vendor.py",
+  "visualize-plugin/skills/visualize/assets/vendor/manifest.json",
+  "visualize-plugin/skills/visualize/assets/vendor/floating-ui-core-1.7.3.min.js",
+  "visualize-plugin/skills/visualize/assets/vendor/floating-ui-core-1.7.3.min.js.LICENSE",
+  "visualize-plugin/skills/visualize/assets/vendor/floating-ui-dom-1.7.4.min.js",
+  "visualize-plugin/skills/visualize/assets/vendor/floating-ui-dom-1.7.4.min.js.LICENSE",
+  "visualize-plugin/skills/visualize/assets/vendor/lucide-1.17.0.js",
+  "visualize-plugin/skills/visualize/assets/vendor/lucide-1.17.0.js.LICENSE",
+  "visualize-plugin/skills/visualize/assets/vendor/d3-7.9.0.min.js",
+  "visualize-plugin/skills/visualize/assets/vendor/d3-7.9.0.min.js.LICENSE",
+  "visualize-plugin/skills/visualize/assets/standalone-host-bridge.js",
+  "visualize-plugin/skills/visualize/assets/standalone-shell.js",
+  "visualize-plugin/skills/visualize/widgets/calendar.md",
+  "visualize-plugin/skills/visualize/examples/calendar.html",
   "browser-use-plugin/docs/api.json",
   "browser-use-plugin/docs/documents.json",
   "browser-use-plugin/docs/overview.md",
@@ -61,7 +89,36 @@ export const REMOTE_AGENT_OFFICIAL_PLUGIN_REQUIRED_RELATIVE_PATHS = [
   "browser-use-plugin/scripts/browser-client.mjs",
   "browser-use-plugin/skills/control-browser/SKILL.md",
   "browser-use-plugin/skills/web-gui-tester/SKILL.md",
-  // 仅校验 manifest 无法发现文档插件缺少技能正文或视觉评审 Agent。
+  // 修复原因：仅校验 manifest 无法发现文档插件缺少技能正文或视觉评审 Agent。
+  // 文档插件 0.2.0 起带查看面板，远端还必须有 office-runtime 构建出的 server 与面板资源。
+  "image-search-plugin/.mcp.json",
+  "documents-plugin/agents/visual-judge.md",
+  "documents-plugin/skills/docx/SKILL.md",
+  "documents-plugin/skills/docx-viewer/SKILL.md",
+  "documents-plugin/dist/server.mjs",
+  "documents-plugin/dist/ui/assets.json",
+  "documents-plugin/dist/ui/panel.html",
+  "pdf-plugin/agents/visual-judge.md",
+  "pdf-plugin/skills/pdf/SKILL.md",
+  "pdf-plugin/skills/pdf-viewer/SKILL.md",
+  "pdf-plugin/dist/server.mjs",
+  "pdf-plugin/dist/ui/assets.json",
+  "pdf-plugin/dist/ui/panel.html",
+  "presentations-plugin/agents/visual-judge.md",
+  "presentations-plugin/skills/pptx/SKILL.md",
+  "presentations-plugin/skills/pptx-viewer/SKILL.md",
+  "presentations-plugin/dist/server.mjs",
+  "presentations-plugin/dist/ui/assets.json",
+  "presentations-plugin/dist/ui/panel.html",
+  "spreadsheets-plugin/agents/visual-judge.md",
+  "spreadsheets-plugin/skills/xlsx/SKILL.md",
+  "spreadsheets-plugin/skills/xlsx-viewer/SKILL.md",
+  "spreadsheets-plugin/dist/server.mjs",
+  "spreadsheets-plugin/dist/ui/assets.json",
+  "spreadsheets-plugin/dist/ui/panel.html",
+  "zcode-cua-plugin/docs/computer-use.md",
+  "zcode-cua-plugin/scripts/computer-use-client.mjs",
+  "zcode-cua-plugin/skills/computer-use/SKILL.md",
 ] as const;
 
 export function buildRemoteAgentOfficialPluginDir(remoteProviderDir: string): string {

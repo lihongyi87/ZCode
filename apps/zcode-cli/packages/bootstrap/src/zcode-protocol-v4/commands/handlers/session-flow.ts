@@ -1,3 +1,4 @@
+import { normalizeGenUiInput } from "@zcode/core";
 // 会话流命令组：sendText / stop（模式样板）。
 // 每个命令组一个文件：handler 纯函数 (host, envelope) → CommandResult|undefined，
 // 决策逻辑直驱 core，环境能力走 host 钩子（见 ../types.ts 的过渡标注）。
@@ -187,6 +188,11 @@ async function sendText(
   envelope: CommandEnvelope,
 ): Promise<CommandResult | undefined> {
   const payload = envelope.payload as CommandPayloadMap["sendText"];
+  const originalPayload = envelope.payload as CommandPayloadMap["sendText"];
+  const rawPayload = {
+    ...originalPayload,
+    ...normalizeGenUiInput(originalPayload.text, originalPayload.genUiContext),
+  };
   const record = requireRecord(host, envelope.sessionId);
   // 旧校验只看正文，UI 已允许的 attachment-only query 会在 CLI 被误判为空。
   if (!hasPromptInput(payload.text, payload.attachments)) {
@@ -199,11 +205,38 @@ async function sendText(
   const submittedExecutionState = resolveSubmittedExecutionState(record, payload);
   const submissionIntent = (options: Parameters<typeof inputIntentMetadata>[1]) =>
     inputIntentMetadata(envelope, { ...options, ...submittedExecutionState });
+  const activeAutomationId = resolveTurnAutomationId({
+    automationId: rawPayload.automationId,
+  });
+  // Bug 根因：Highspeed admission 与 automation 派发来自不同上游；契约漂移时可能把
+  // automationId、highspeedMeta 和加速执行材料同时送到同一轮。定时执行身份必须优先：
+  // 既不能拿加速卡凭据发请求，也不能把普通模型输出持久化成 Highspeed 消息。
+  const dropsHighspeed =
+    activeAutomationId !== undefined &&
+    (rawPayload.highspeedMeta !== undefined ||
+      isHighspeedProviderId(rawPayload.modelSelection?.providerId));
+  const payload: CommandPayloadMap["sendText"] = dropsHighspeed
+    ? {
+        ...rawPayload,
+        highspeedMeta: undefined,
+        modelSelection: undefined,
+        modelExecution: undefined,
+      }
+    : rawPayload;
+  // canonical intent 必须和 admission 看同一份净荷，否则 transcript 会留下没有凭据的加速标记。
+  const intentEnvelope = { ...envelope, payload } as CommandEnvelope;
+  const attachments = await mapAttachmentRefsToTurnAttachments(record.app, payload.attachments);
+  const submittedExecutionState = resolveSubmittedExecutionState(record, payload);
+  const submissionIntent = (options: Parameters<typeof inputIntentMetadata>[1]) =>
+    inputIntentMetadata(intentEnvelope, {
+      ...options,
+      ...submittedExecutionState,
+      genUiContext: payload.genUiContext,
+    });
   const routingMode = host.getInputRoutingMode?.(envelope.sessionId ?? "") ?? null;
   const forceStartNow = payload.requestedDelivery === "startNow";
   const foregroundPromotionLeaseId = forceStartNow ? `send-now:${envelope.commandId}` : undefined;
   let foregroundPromotionLeaseAcquired = false;
-  let preempted = false;
   const releaseForegroundPromotionLease = () => {
     if (!foregroundPromotionLeaseAcquired || !foregroundPromotionLeaseId) return;
     record.app.runtime.releaseForegroundPromotionLease(foregroundPromotionLeaseId);
@@ -234,7 +267,7 @@ async function sendText(
         payload.heldQueueDisposition,
         payload.expectedHeldQueueItemIds,
       );
-      preempted = await preemptActiveTurnAndWait(host, record, {
+      await preemptActiveTurnAndWait(host, record, {
         abortMessage: "v4 sendText startNow preempts active turn",
         goalPausedMutationReason: "send_now_goal_paused",
         preserveQueueAutoDrainOnCancel: true,
@@ -272,9 +305,9 @@ async function sendText(
         ? { browserAmbientContext: payload.browserAmbientContext }
         : {}),
       inputId: envelope.commandId,
-      // 立即发送切换了 runtime turn，导致运行中用户输入遗漏 human 提示。
-      // 只按 Core 的实际抢占回执标记纯文本；空闲及附件输入保留原路径。
-      ...(preempted && !attachments?.length ? { inputPresentation: "user_steer" as const } : {}),
+      // 立即发送是用户的新指令：抢占后与空闲时一样按普通用户消息开新一轮，不加中途提示。
+      // 修复原因：原来抢占后标成 user_steer，模型看到"在当前轮继续"的提示；MCS 关时这段提示
+      // 还并入上一次请求已发出的 tool_result，改写了那次请求写入的缓存。
       intent,
       ...(payload.context_refs ? { sharedContextRefs: payload.context_refs } : {}),
       ...turnBackgroundAttributionOf(payload),
@@ -458,7 +491,6 @@ async function waitForSessionIdle(record: V4SessionRecordView): Promise<void> {
   }
 }
 
-/** 等待旧执行释放，返回 Core 是否实际取消了前台执行。 */
 export async function preemptActiveTurnAndWait(
   host: V4CommandCoreHost,
   record: V4SessionRecordView,
@@ -467,7 +499,7 @@ export async function preemptActiveTurnAndWait(
     goalPausedMutationReason: string;
     preserveQueueAutoDrainOnCancel?: boolean;
   },
-): Promise<boolean> {
+): Promise<void> {
   const bootstrapAbortController = record.activeAbortController;
   // background notification 的 model-only turn 由 Core runtime command
   // 独立持有 foreground authority，不会创建 Bootstrap activeAbortController。
@@ -486,7 +518,6 @@ export async function preemptActiveTurnAndWait(
     }
   }
   await waitForSessionIdle(record);
-  return runtimeStop?.kind === "stopped";
 }
 
 export const sessionFlowHandlers = { sendText, stop };

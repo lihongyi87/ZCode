@@ -14,8 +14,8 @@
 import { generateThirdPartyNotices } from "./generate-third-party-notices.mjs";
 import { readVerifiedNotices } from "./third-party-notices.mjs";
 import {
+  isAllowedLicenseIdentifier,
   isReviewedLegacyLicense,
-  isReviewedBundledFontLicense,
   legacyLicenseIdentifier,
 } from "./license-identifiers.mjs";
 import { readFile } from "node:fs/promises";
@@ -48,6 +48,8 @@ const MANUAL_LICENSE = {
   semaphore: "MIT", // 包内 README License 段
   "css-value": "MIT", // 包内 Readme License 段
   "@fig/autocomplete-helpers": "MIT", // 包内 LICENSE
+  // react-scan 开发依赖链；license 字段缺失，包内 LICENSE 为 Aiden Bai 的标准 MIT。
+  "@react-grab/cli": "MIT",
 };
 function normLicense(value) {
   if (typeof value === "string") return value.trim();
@@ -80,7 +82,7 @@ function classify(raw) {
     .split(/\s+OR\s+/i)
     .map((x) => x.trim())
     .filter(Boolean);
-  if (or.length > 1 && or.some((x) => GREEN.test(x))) return "green";
+  if (or.length > 1 && or.some((x) => isAllowedLicenseIdentifier(x))) return "green";
   const and = s
     .split(/\s+AND\s+/i)
     .map((x) => x.trim())
@@ -107,7 +109,8 @@ function classify(raw) {
       .sort((a, b) => AND_RANK.indexOf(b) - AND_RANK.indexOf(a))[0];
     return worst;
   }
-  const t = or[0] || s;
+  if (and.length > 1 && and.every((x) => isAllowedLicenseIdentifier(x))) return "green";
+  const t = or[0] || and[0] || s;
   if (/\bAGPL/i.test(t)) return "red-agpl";
   if (/\bLGPL/i.test(t)) return "yellow-lgpl";
   if (/\bGPL/i.test(t)) return "red-gpl";
@@ -115,12 +118,21 @@ function classify(raw) {
   if (/^(BUSL|BSL|Elastic|SSPL|PolyForm|FSL|CAL-1)/i.test(t)) return "red-semiopen";
   if (/^CC-BY-NC/i.test(t)) return "red-nc";
   if (/^CC-BY-(ND|SA)/i.test(t)) return "yellow-cc";
-  return GREEN.test(t) ? "green" : "review";
+  return isAllowedLicenseIdentifier(t) ? "green" : "review";
 }
 for (const r of installed.values()) r.bucket = classify(r.license);
 
 // ---------- 构建工具许可标识复核（不是二进制发行义务豁免） ----------
-const WEAK_ALLOW = [[/^lightningcss/, "当前仅构建依赖；进入生产图时需重新核对 MPL 源码提供义务"]];
+const WEAK_ALLOW = [
+  [/^lightningcss/, "当前仅构建依赖；进入生产图时需重新核对 MPL 源码提供义务"],
+  // react-scan 开发依赖链。license 字段为 SEE LICENSE IN LICENSE，包内实际为 Modified MIT：
+  // 在 MIT 基础上附加“禁止用作 ML 训练数据”“禁止转卖为付费托管服务”两条用途限制。
+  // 当前仅在本地/CI 作为开发态诊断工具运行，不随产品分发、不落入受限用途；进入生产图时需重新评审。
+  [
+    /react-doctor$/,
+    "仅开发态 react-scan 诊断工具；Modified MIT 的用途限制不影响内部使用，不随产品分发",
+  ],
+];
 /**
  * 生产图内的弱 copyleft 依赖：已人工复核，登记结论。
  *
@@ -131,6 +143,7 @@ const WEAK_ALLOW = [[/^lightningcss/, "当前仅构建依赖；进入生产图�
  * 并提供对应源码。这些包原样分发（未修改），源码由 pinned 上游 tag 提供，
  * 许可材料已登记在 third-party/npm-overrides.json。
  */
+// ---------- 生产依赖的逐项复核结论：按包名登记并绑定许可类别，许可变化后重新阻断 ----------
 const PROD_WEAK_ALLOW = [
   [
     /^@ubjs\/(?:core|node)(?:-|$)/,
@@ -167,8 +180,10 @@ function weakAllowReason(r) {
 if (command === "check") {
   const bad = [];
   for (const r of installed.values()) {
-    if (r.bucket === "green" || isReviewedLegacyLicense(r) || isReviewedBundledFontLicense(r))
-      continue;
+    if (r.bucket === "green" || isReviewedLegacyLicense(r)) continue;
+    // 已登记 WEAK_ALLOW 复核结论的构建依赖允许 missing/unresolved 桶：这类包的 license 字段
+    // 常缺失或写成 SEE LICENSE IN <file>，无法自动归入 yellow；人工复核记录本身就是放行结论。
+    if (!r.isProd && weakAllowReason(r)) continue;
     if (r.bucket.startsWith("yellow") && weakAllowReason(r)) continue;
     bad.push(r);
   }

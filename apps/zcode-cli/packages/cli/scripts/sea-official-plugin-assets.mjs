@@ -17,87 +17,44 @@ const browserUseRequiredRuntimePaths = [
   "skills/web-gui-tester/SKILL.md",
 ];
 
-// 四个内容型插件（office 三件 + pdf）：只有 skills/agents/scripts（check_office.py 之类），
-// 没有 MCP server、没有构建产物。requiresRuntime: false 让 collectSeaOfficialPluginAssets()
-// 跳过 assertPluginRuntime() 的 dist/mcp/server.js 校验 —— 那个校验对内容型插件必然失败。
-// office 三件此前完全没进这份清单，SEA 单文件可执行里因此不含 office 插件，用 SEA 发行
-// 的用户拿不到 Office 能力；pdf 是同一批补齐的（C33）。
-// version 取 official-plugin-definitions.ts 的 definition.value（权威归属）：
-// 不一致会导致运行时按版本精确匹配失败、seed 不生效。个别插件（computer-use）
-// 的 plugin.json manifest 版本与之有意不同，见该定义处的版本追踪注释。
-//
-// pdf 的 Node 载荷（scripts/pdf-node/*.cjs）不在源码树里（由 esbuild 现场产出），
-// 所以 pdf 的 requiredSeedPaths 只有在载荷 staging 之后才可满足：build-sea 会先用
-// prepareSeaPluginNodePayloads() 把四个内容插件连同 office-node/pdf-node 载荷一起 stage
-// 到暂存副本，再通过 pluginRoots 让本收集器读那份副本。若直接用源码树收集 pdf，
-// assertPluginRequiredSeedAssets() 会抛 missing —— 这条硬校验就是"载荷没 stage 就发包"
-// 的构建期护栏（远端 prepare-prebuilds.mjs 是同款的两段式，见 remotePdfNodePayloadPaths
-// 的注释）。
-// office 三件：源码树里只有正文（skills/agents/scripts/check_office.py），
-// requiredSeedPaths 与 official-plugin-definitions.ts 的同名条目一致。
-const officeContentSeaPlugins = [
-  { name: "documents", skill: "docx" },
-  { name: "presentations", skill: "pptx" },
-  { name: "spreadsheets", skill: "xlsx" },
-].map(({ name, skill }) => ({
-  marketplace: "zcode-plugins-official",
-  name,
-  packageName: `@zcode/${name}-plugin`,
-  requiresRuntime: false,
-  requiredSeedPaths: ["agents/visual-judge.md", `skills/${skill}/SKILL.md`],
-  rootPath: join("packages", `${name}-plugin`),
-  version: "0.1.8",
-}));
-
-// pdf 的 Node 载荷（pdfkit/fontkit 自包含 bundle）不在源码树（esbuild 现场产出），
-// 由 prepareSeaPluginNodePayloads() stage 进暂存副本后经 pluginRoots 收集。
-// requiredSeedPaths 与 official-plugin-definitions.ts 的 pdf 条目（含
-// OFFICIAL_PDF_EXTRA_REQUIRED_SEED_PATHS）完全一致 —— 载荷没 stage 进副本时构建期
-// 就会抛 missing，不会把"插件在、能力不在"的残缺资产嵌进二进制（task-6 实测过的失效形态）。
-const pdfNodePayloadRequiredPaths = ["scripts/pdf-node/pdfkit.cjs", "scripts/pdf-node/fontkit.cjs"];
-const pdfSeaPlugin = {
-  marketplace: "zcode-plugins-official",
-  name: "pdf",
-  packageName: "@zcode/pdf-plugin",
-  requiresRuntime: false,
-  requiredSeedPaths: [
-    "agents/visual-judge.md",
-    "skills/pdf/SKILL.md",
-    ...pdfNodePayloadRequiredPaths,
-    "scripts/pdf-build.mjs",
-    "scripts/check_pdf.mjs",
-    "scripts/pdf-fonts.mjs",
-  ],
-  rootPath: join("packages", "pdf-plugin"),
-  version: "0.1.8",
-};
-
-// Computer Use（对外插件名 computer-use，包目录 zcode-cua-plugin）：内容型条目 ——
-// docs/scripts/skills 都在源码树，requiresRuntime: false（node_repl 宿主由独立的
-// node-repl-host 条目嵌入，cua 自己不带 MCP server）。
-// 原生驱动不随 SEA 嵌入：桌面链由 cua-driver-package-assets.mjs 把平台原生包
-// stage 进 glm/packages/node-repl-host/node_modules，SEA 链没有等价步骤；SEA 用户启用
-// 电脑控制时会走到 node-repl-host 的既有降级（captureComputerUseRuntimeFromEnvironment
-// 返回 undefined + CUA_UNAVAILABLE_IN_SESSION_MESSAGE），是显式降级而非静默。
-// version 取 official-plugin-definitions.ts 的 definition.version（computer-use = 0.6.4），
-// 与 plugin.json 的 manifest 版本（0.6.1）有意不同 —— 版本追踪口径见该定义处注释。
-const cuaSeaPlugin = {
-  marketplace: "zcode-plugins-official",
-  name: "computer-use",
-  // 该插件包没有 package.json（按 F3-1 §9.1 的决策不补）；packageName 只用于
-  // assertPluginRuntime 的错误文案，cua 走 requiresRuntime:false 永不触发。
-  packageName: "@zcode/zcode-cua-plugin",
-  requiresRuntime: false,
-  requiredSeedPaths: [
-    "docs/computer-use.md",
-    "scripts/computer-use-client.mjs",
-    "skills/computer-use/SKILL.md",
-  ],
-  rootPath: join("packages", "zcode-cua-plugin"),
-  version: "0.6.4",
-};
+// 文档插件查看面板的构建产物（office-runtime 输出到各插件 dist/）。
+const officeViewerRuntimePaths = ["dist/server.mjs", "dist/ui/assets.json", "dist/ui/panel.html"];
 
 export const officialSeaPlugins = [
+  {
+    marketplace: "zcode-plugins-official",
+    name: "visualize",
+    packageName: "@zcode/visualize-plugin",
+    requiresRuntime: false,
+    requiredSeedPaths: [
+      "skills/visualize/SKILL.md",
+      "skills/visualize/references/api.md",
+      "skills/visualize/references/styles.md",
+      "skills/visualize/tweak.md",
+      "skills/visualize/LICENSE.md",
+      "skills/visualize/scripts/render.py",
+      "skills/visualize/assets/visualize.css",
+      "skills/visualize/assets/visualize.html",
+      "skills/visualize/assets/calendar.js",
+      "skills/visualize/assets/runtime-manifest.json",
+      "skills/visualize/scripts/vendor.py",
+      "skills/visualize/assets/vendor/manifest.json",
+      "skills/visualize/assets/vendor/floating-ui-core-1.7.3.min.js",
+      "skills/visualize/assets/vendor/floating-ui-core-1.7.3.min.js.LICENSE",
+      "skills/visualize/assets/vendor/floating-ui-dom-1.7.4.min.js",
+      "skills/visualize/assets/vendor/floating-ui-dom-1.7.4.min.js.LICENSE",
+      "skills/visualize/assets/vendor/lucide-1.17.0.js",
+      "skills/visualize/assets/vendor/lucide-1.17.0.js.LICENSE",
+      "skills/visualize/assets/vendor/d3-7.9.0.min.js",
+      "skills/visualize/assets/vendor/d3-7.9.0.min.js.LICENSE",
+      "skills/visualize/widgets/calendar.md",
+      "skills/visualize/examples/calendar.html",
+      "skills/visualize/assets/standalone-host-bridge.js",
+      "skills/visualize/assets/standalone-shell.js",
+    ],
+    rootPath: join("packages", "visualize-plugin"),
+    version: "0.1.1",
+  },
   {
     // node_repl 宿主：Browser Use 与 Computer Use 共用的运行时产物，自己不是面向用户的插件
     // （无 skill、无市场 listing）。它必须始终随发布物嵌入，否则任一能力启用时都没有宿主可跑。
@@ -107,9 +64,93 @@ export const officialSeaPlugins = [
     requiresRuntime: true,
     requiredRuntimePaths: ["dist/mcp/server.js"],
     rootPath: join("packages", "node-repl-host"),
-    version: "0.6.1",
+    version: "0.7.0",
   },
   {
+    marketplace: "zcode-plugins-official",
+    name: "android-emulator",
+    packageName: "@zcode/android-emulator-plugin",
+    requiresRuntime: true,
+    requiredRuntimePaths: ["dist/mcp/server.js"],
+    rootPath: join("packages", "android-emulator-plugin"),
+    version: "0.1.0",
+  },
+  {
+    marketplace: "zcode-plugins-official",
+    name: "documents",
+    packageName: "@zcode/documents-plugin",
+    // 0.2.0 起带查看面板：SEA 必须在嵌入前校验 office-runtime 构建出的 server 与面板资源。
+    requiresRuntime: true,
+    requiredRuntimePaths: officeViewerRuntimePaths,
+    requiredSeedPaths: [
+      "agents/visual-judge.md",
+      "skills/docx/SKILL.md",
+      "skills/docx-viewer/SKILL.md",
+    ],
+    rootPath: join("packages", "documents-plugin"),
+    // 修复原因：SEA manifest 必须与 package、plugin manifest 和官方 definition 同步，避免发布产物嵌入旧版本。
+    version: "0.2.1",
+  },
+  {
+    marketplace: "zcode-plugins-official",
+    name: "image-search",
+    packageName: "@zcode/image-search-plugin",
+    requiresRuntime: false,
+    requiredSeedPaths: [".mcp.json"],
+    rootPath: join("packages", "image-search-plugin"),
+    // 修复原因：SEA manifest 必须与 package、plugin manifest 和官方 definition 同步，避免发布产物嵌入旧版本。
+    version: "0.1.1",
+  },
+  {
+    marketplace: "zcode-plugins-official",
+    name: "pdf",
+    packageName: "@zcode/pdf-plugin",
+    // 0.2.0 起带查看面板：SEA 必须在嵌入前校验 office-runtime 构建出的 server 与面板资源。
+    requiresRuntime: true,
+    requiredRuntimePaths: officeViewerRuntimePaths,
+    requiredSeedPaths: [
+      "agents/visual-judge.md",
+      "skills/pdf/SKILL.md",
+      "skills/pdf-viewer/SKILL.md",
+    ],
+    rootPath: join("packages", "pdf-plugin"),
+    // 修复原因：SEA manifest 必须与 package、plugin manifest 和官方 definition 同步，避免发布产物嵌入旧版本。
+    version: "0.2.2",
+  },
+  {
+    marketplace: "zcode-plugins-official",
+    name: "presentations",
+    packageName: "@zcode/presentations-plugin",
+    // 0.2.0 起带查看面板：SEA 必须在嵌入前校验 office-runtime 构建出的 server 与面板资源。
+    requiresRuntime: true,
+    requiredRuntimePaths: officeViewerRuntimePaths,
+    requiredSeedPaths: [
+      "agents/visual-judge.md",
+      "skills/pptx/SKILL.md",
+      "skills/pptx-viewer/SKILL.md",
+    ],
+    rootPath: join("packages", "presentations-plugin"),
+    // 修复原因：SEA manifest 必须与 package、plugin manifest 和官方 definition 同步，避免发布产物嵌入旧版本。
+    version: "0.2.1",
+  },
+  {
+    marketplace: "zcode-plugins-official",
+    name: "spreadsheets",
+    packageName: "@zcode/spreadsheets-plugin",
+    // 0.2.0 起带查看面板：SEA 必须在嵌入前校验 office-runtime 构建出的 server 与面板资源。
+    requiresRuntime: true,
+    requiredRuntimePaths: officeViewerRuntimePaths,
+    requiredSeedPaths: [
+      "agents/visual-judge.md",
+      "skills/xlsx/SKILL.md",
+      "skills/xlsx-viewer/SKILL.md",
+    ],
+    rootPath: join("packages", "spreadsheets-plugin"),
+    // 修复原因：SEA manifest 必须与 package、plugin manifest 和官方 definition 同步，避免发布产物嵌入旧版本。
+    version: "0.2.1",
+  },
+  {
+    // browser-use 使用真实 node_repl MCP runtime，SEA 必须校验并嵌入 server.js。
     marketplace: "zcode-plugins-official",
     name: "browser-use",
     packageName: "@zcode/browser-use-plugin",
@@ -122,23 +163,76 @@ export const officialSeaPlugins = [
     // 导致发布产物不 seed browser-use，进而无法装配宿主 node_repl MCP。
     version: "0.5.1",
   },
-
-  cuaSeaPlugin,
-
-  ...officeContentSeaPlugins,
-
-  pdfSeaPlugin,
+  {
+    marketplace: "zcode-plugins-official",
+    name: "ios-simulator",
+    packageName: "@zcode/ios-simulator-plugin",
+    requiresRuntime: true,
+    requiredRuntimePaths: ["dist/mcp/server.js"],
+    rootPath: join("packages", "ios-simulator-plugin"),
+    version: "0.1.0",
+  },
+  {
+    marketplace: "zcode-plugins-official",
+    name: "restore-legacy-sessions",
+    packageName: "@zcode/restore-legacy-sessions-plugin",
+    requiresRuntime: false,
+    rootPath: join("packages", "restore-legacy-sessions-plugin"),
+    version: "0.1.0",
+  },
+  {
+    marketplace: "zcode-plugins-official",
+    name: "skill-creator",
+    packageName: "@zcode/skill-creator-plugin",
+    requiresRuntime: false,
+    rootPath: join("packages", "skill-creator-plugin"),
+    version: "0.1.0",
+  },
+  {
+    marketplace: "zcode-plugins-official",
+    name: "plugin-creator",
+    packageName: "@zcode/plugin-creator-plugin",
+    requiresRuntime: false,
+    rootPath: join("packages", "plugin-creator-plugin"),
+    version: "0.1.1",
+  },
+  {
+    // 纯内容型（只提供 skills）：requiresRuntime:false，SEA 构建不校验 dist/mcp/server.js。
+    // 版本必须与 package.json / plugin.json / official-plugin-definitions.ts 同步 bump——
+    // runtime 按 (name, version) 精确匹配 SEA 资产，这里落后会让整个插件在 SEA 下不 seed
+    // （browser-use 0.3.1 的既有教训，build-sea.test.mjs:564 钉住四处对齐）。
+    // 0.3.0：`/workflow` 与 dynamic-workflows 技能移出本插件（见 sea-bundled-skill-assets.mjs）。
+    marketplace: "zcode-plugins-official",
+    name: "zcode-guide",
+    packageName: "@zcode/zcode-guide-plugin",
+    requiresRuntime: false,
+    requiredSeedPaths: ["skills/zcode-configuration-guide/SKILL.md"],
+    rootPath: join("packages", "zcode-guide-plugin"),
+    version: "0.3.0",
+  },
+  {
+    // skill + start.sh 模板 + 零依赖的 zcode-site CLI，加上 Sites 面板（dist/ 下的 MCP server 与页面，
+    // 由插件自己的 build 脚本构建）。版本与 package.json / plugin.json / official-plugin-definitions.ts 同步 bump。
+    marketplace: "zcode-plugins-official",
+    name: "zcode-site",
+    packageName: "@zcode/zcode-site-plugin",
+    requiresRuntime: true,
+    requiredRuntimePaths: ["dist/server.mjs", "dist/ui/panel.html"],
+    requiredSeedPaths: [
+      "scripts/zcode-site.mjs",
+      "scripts/stage.mjs",
+      "skills/site-deploy/SKILL.md",
+    ],
+    rootPath: join("packages", "zcode-site-plugin"),
+    version: "0.4.2",
+  },
+  // superpowers 已从内置插件下线，改走 UI 推荐区按需安装；这里不再打入 SEA 资源清单。
 ];
 
 export const collectSeaOfficialPluginAssets = async ({
   requireRuntime = false,
   root,
   stagingDirectory,
-  // 插件名 → 暂存副本绝对路径：内容插件的 Node 载荷不在源码树，由 build-sea 先用
-  // prepareSeaPluginNodePayloads() 把插件 stage 到副本（载荷写进副本的 scripts/*-node/），
-  // 再经此参数让收集器读副本而非源码树。缺省时全程读源码树（pdf 除外 —— 它的
-  // requiredSeedPaths 含载荷路径，在纯源码树上必然抛 missing，见 pdfSeaPlugin 注释）。
-  pluginRoots = {},
 } = {}) => {
   const files = [];
   const assets = {};
@@ -150,7 +244,7 @@ export const collectSeaOfficialPluginAssets = async ({
   });
 
   for (const plugin of officialSeaPlugins) {
-    const pluginRoot = pluginRoots[plugin.name] ?? resolve(root, plugin.rootPath);
+    const pluginRoot = resolve(root, plugin.rootPath);
     assertPluginRoot(pluginRoot, plugin);
     assertPluginRequiredSeedAssets(pluginRoot, plugin);
     // 只提供 skills 的内容型插件没有 MCP server，用 requiresRuntime:false 跳过校验；

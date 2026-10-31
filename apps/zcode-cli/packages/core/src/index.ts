@@ -25,6 +25,12 @@ export type { ToolRegistry } from "./tool/registry.js";
 export { ToolExecutorImpl, createToolExecutor } from "./tool/executor.js";
 export type { ToolExecutor, ToolExecutorOptions } from "./tool/executor.js";
 export { builtInTools, registerBuiltInTools } from "./tool/handlers/index.js";
+export {
+  supportsBackgroundTaskWaiter,
+  supportsBashBackgroundLifecycle,
+  type BackgroundTaskWaiterExecutionPort,
+  type BashBackgroundLifecycleExecutionPort,
+} from "./tool/handlers/bash-background-lifecycle.js";
 // dwf driver 的 submit profile 运行时守卫要把 typed 声明换回通用声明。
 export {
   createSubmitResultToolEntry,
@@ -152,6 +158,20 @@ export { repairPersistedRemoteSessionPaths } from "./runtime/helpers/persisted-r
 // parentID / part 内嵌锚点随之重映射。导出而不是让它再写一份，是因为漏掉任何一处重映射的症状
 // （悬空 parentID、指向父会话的锚点）离成因都很远。
 export { cloneMessageForFork, clonePartForFork } from "./runtime/helpers/steering.js";
+// 手机远控输入预测：bootstrap 的 v4 inputPrediction 处理器直接消费这些纯函数。
+export {
+  decideInputPrediction,
+  generateInputPredictionCandidates,
+  normalizeInputPredictionDraft,
+  inputPredictionMinTurns,
+  INPUT_PREDICTION_QUERY_SOURCE,
+} from "./runtime/methods/input-prediction-sidecar.js";
+export type {
+  InputPredictionCandidate,
+  InputPredictionModelCall,
+  InputPredictionOutcome,
+  InputPredictionTurnContext,
+} from "./runtime/methods/input-prediction-sidecar.js";
 export type {
   ChildClientPortsContext,
   ClientFacingPorts,
@@ -201,3 +221,5 @@ export type {
 export { LogLevel, SessionEventType } from "@zcode/contracts";
 // CE 线增量：队列重置的切模型复位判据（queue-held-reset 消费）。
 export { sameModelSelection } from "./runtime/methods/turn-model.js";
+
+export { normalizeGenUiInput } from "./agent/message-history.js";

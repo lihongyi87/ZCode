@@ -1,4 +1,6 @@
 import {
+  Archive,
+  Folders,
   Monitor,
   Moon,
   Settings,
@@ -21,6 +23,8 @@ import {
   LifeBuoy,
   ShieldAlert,
   CloudDownload,
+  RefreshCw,
+  User,
 } from "lucide-react";
 import { isSettingsSectionEnabled, type SettingsSectionId } from "@/lib/settingsNavigation.js";
 import type { Theme } from "@/useTheme.js";
@@ -75,6 +79,14 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     icon: Package,
     titleId: "settings.modelProviderTitle",
     groupId: "basics",
+  },
+  // 个性化（用户自定义指令）是 Agent 能力组的第一项：编辑 ~/.zcode/AGENTS.md，
+  // 对所有会话生效（spec：docs/ui/settings-personalization.md）。
+  {
+    id: "personalization",
+    icon: User,
+    titleId: "settings.personalization.title",
+    groupId: "agentCapabilities",
   },
   {
     id: "memory",
@@ -172,6 +184,14 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     titleId: "settings.remoteAssets.title",
     groupId: "basics",
   },
+  // 数据同步是「数据与统计」的第一项（docs/remote/data-sync.md），仅桌面端显示。
+  {
+    id: "dataSync",
+    icon: RefreshCw,
+    titleId: "remoteSync.title",
+    contentTitleId: "remoteSync.title",
+    groupId: "dataAndStats",
+  },
   {
     id: "usage",
     icon: BarChart3,
@@ -180,6 +200,13 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
   },
   // 「反馈与诊断」跟随「使用统计」：两者都是关于「这次运行本身怎么样」的信息面
   // （用量 / 报障材料），放在一起符合用户的心智分组。
+  // 项目管理排在归档管理之前（docs/superpowers/specs/2026-10-24-project-management.md）。
+  {
+    id: "projects",
+    icon: Folders,
+    titleId: "projectManagement.nav",
+    groupId: "dataAndStats",
+  },
   {
     id: "feedback",
     icon: LifeBuoy,
@@ -241,9 +268,12 @@ export const SETTINGS_SECTION_GROUPS = BASE_SETTINGS_SECTION_GROUPS.map((group) 
   sections: SETTINGS_SECTIONS.filter((section) => section.groupId === group.id),
 })).filter((group) => group.sections.length > 0);
 
+/** 依赖本机 Source Server 管理与设备连接的设置页，Web 与手机远控不显示。 */
+const DESKTOP_ONLY_SETTINGS_SECTIONS = new Set<SettingsSectionId>(["remoteDevices", "dataSync"]);
+
 export function isSettingsSectionAvailable(
   section: SettingsSectionId,
   isDesktop: boolean,
 ): boolean {
-  return isDesktop || section !== "remoteDevices";
+  return isDesktop || !DESKTOP_ONLY_SETTINGS_SECTIONS.has(section);
 }

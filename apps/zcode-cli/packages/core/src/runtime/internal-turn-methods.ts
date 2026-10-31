@@ -393,6 +393,7 @@ export interface AgentRuntimeTurnMethods {
     options?: {
       model?: Model;
       operationId?: string;
+      leadingReminderEntries?: readonly RuntimeMessageEntry[];
       postCompactReminderEntries?: readonly RuntimeMessageEntry[];
     },
   ): Promise<void>;
@@ -428,7 +429,7 @@ export interface AgentRuntimeTurnMethods {
     messageID: MessageId;
     sessionId: SessionId;
     source: SyntheticUserMessageSource;
-    text: string;
+    text: string | readonly string[];
     traceContext: TraceContext;
     metadata?: Record<string, unknown>;
     visibility?: MessageVisibility;

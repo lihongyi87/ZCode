@@ -150,13 +150,13 @@
 
 ### 4.11 Planning Handoff
 
-| Item             | Destination                                                                | Status     |
-| ---------------- | -------------------------------------------------------------------------- | ---------- |
-| Spec update      | 本文档                                                                     | complete   |
-| Case catalog     | 不需要 Conversation E2E case catalog                                       | not-needed |
-| Coverage matrix  | `docs/testing/browser-use-codex-parity-coverage-matrix.md` BCP-218/219/223 | complete   |
-| Decision backlog | 无未决产品语义                                                             | not-needed |
-| E2E handoff      | guidance 契约测试足够；真实模型 smoke 非门禁                               | not-needed |
+| Item             | Destination                                                   | Status     |
+| ---------------- | ------------------------------------------------------------- | ---------- |
+| Spec update      | 本文档                                                        | complete   |
+| Case catalog     | 不需要 Conversation E2E case catalog                          | not-needed |
+| Coverage matrix  | `docs/testing/browser-use-coverage-matrix.md` BCP-218/219/223 | complete   |
+| Decision backlog | 无未决产品语义                                                | not-needed |
+| E2E handoff      | guidance 契约测试足够；真实模型 smoke 非门禁                  | not-needed |
 
 ## 5. 行为规范
 

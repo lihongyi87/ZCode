@@ -1,4 +1,6 @@
-import { createConfig } from "@zcode/adapters/config";
+import { createMcpTransportFetch } from "@zcode/adapters";
+import { createConfig, resolvePath } from "@zcode/adapters/config";
+import type { McpElicitationPort, McpNotificationPort } from "@zcode/contracts";
 import { createNodeModelSelectionFacade } from "@zcode/provider-node";
 import { createNodeLoggerFactory } from "@zcode/adapters/logging";
 import {
@@ -12,7 +14,7 @@ import {
   type ZCodeMcpResourceSample,
   type ZCodeMcpTelemetryEvent,
 } from "@zcode/shared";
-import type { SqliteSessionStore } from "@zcode/adapters/storage";
+import { createNodeSessionDataFiles, type SqliteSessionStore } from "@zcode/adapters/storage";
 import { traceContextToLogContext, createRootTraceContext } from "@zcode/contracts";
 import type { McpPort, ModelSelection } from "@zcode/contracts";
 import type { PresentationSurface } from "@zcode/core";
@@ -27,14 +29,22 @@ import {
   prepareProtocolStartupStorage,
 } from "./zcode-protocol/storage-startup.js";
 import { closeSessionStore, getSessionDbPath } from "./app/session-store.js";
+import { resolveMcpNodeFallbackProvider } from "./app/mcp-node-fallback.js";
+import { getCliStorageRoot, getProjectMemoryRoot } from "./app/paths.js";
 import { startProcessProviderRegistryRuntime } from "./app/process-provider-registry-runtime.js";
 import { scheduleStartupLogRetentionCleanup } from "./log-retention.js";
+import { resolveProcessProviderEndpointRoutingPort } from "./provider-endpoint-routing.js";
 import { StartupTimer, startupNow } from "./startup-logging.js";
 import { installZCodeProtocolAiSdkWarningLogger } from "./zcode-protocol/ai-sdk-warning-logger.js";
 import {
+  createOfficialCommandAuthHeadersPort,
   createOfficialMcpAuthHeadersPort,
   type OfficialMcpAuthRequestContext,
 } from "./zcode-protocol/official-mcp-auth-port.js";
+import {
+  createOfficialCommandEndpoint,
+  type OfficialCommandEndpoint,
+} from "./official-command-endpoint/index.js";
 import {
   createOfficialMcpTrustedOriginRegistry,
   OFFICIAL_MCP_DEV_TRUSTED_ORIGINS_ENV,
@@ -46,9 +56,10 @@ import { ZCodeProtocolNdjsonConnection } from "./zcode-protocol/transport.js";
 import { cleanupProtocolRuntime } from "./zcode-protocol/runtime-cleanup.js";
 import { startProtocolResourceSampler } from "./zcode-protocol/resource-sampler.js";
 import { acquireProtocolStartupResource } from "./zcode-protocol/startup-resource.js";
+import { prepareZCodeTelemetryEnv, shutdownZCodeTelemetry } from "./telemetry-bootstrap.js";
 import type { ZCodeProcessResourceSampler } from "./process-resource-sampler.js";
 
-function applyProtocolPresentationSurface(
+export function applyProtocolPresentationSurface(
   options: Omit<ZCodeAppOptions, "providerRegistry">,
   presentationSurface: PresentationSurface,
 ): Omit<ZCodeAppOptions, "providerRegistry"> {
@@ -66,7 +77,7 @@ function applyProtocolPresentationSurface(
  *
  * 旧 workspace snapshot 不再参与 Provider 和 Model 执行。
  */
-function applyProtocolProviderRegistry(
+export function applyProtocolProviderRegistry(
   options: Omit<ZCodeAppOptions, "providerRegistry">,
   providerRegistry: ZCodeAppOptions["providerRegistry"],
   configuredDefaultModelSelection?: ModelSelection,
@@ -123,6 +134,7 @@ export async function runZCodeProtocolAgent(
   let sessionStore: SqliteSessionStore | undefined;
   let serverForCleanup: ZCodeProtocolAgentServer | undefined;
   let nodeReplBrowserBroker: NodeReplBrowserBroker | undefined;
+  let officialCommandEndpoint: OfficialCommandEndpoint | undefined;
   let mcpConnectionPool: McpConnectionPool | undefined;
   let mcpPort: McpPort | undefined;
   let mcpTelemetryTracker: McpTelemetryTracker | undefined;
@@ -166,19 +178,37 @@ export async function runZCodeProtocolAgent(
       module: "bootstrap.zcode_protocol",
       providerCount: providerRegistryRuntime.snapshot.registry.providers.length,
     });
-    // 曾经在这里 prepareZCodeTelemetryEnv：它建进程级 OTLP Owner 并把 deviceMid 写回 env。
-    // 遥测删除后两者都不再需要 —— deviceMid 是设备身份，CLI 侧由 adapters 的
-    // ensureCliDeviceMid 从 ~/.zcode/v2/telemetry-state.json 独立派生（同文件同字段），
-    // 不依赖这里的写回；runtimeEnv 原样下传，宿主若已注入该键也不会被剥掉。
+    const runtimeSurface = resolveProtocolRuntimeSurface(runtimeEnv);
+    const telemetryEnv = await acquireProtocolStartupResource({
+      signal: options.lifecycle?.signal,
+      logger,
+      disposeLate: () => shutdownZCodeTelemetry(),
+      create: () =>
+        prepareZCodeTelemetryEnv(runtimeEnv, {
+          cliVersion: options.version,
+          productVersion: options.env?.ZCODE_APP_VERSION,
+          runtimeSurface,
+        }),
+    });
+    const telemetryDeviceMid = telemetryEnv.ZCODE_TELEMETRY_DEVICE_MID;
     mcpTelemetryTracker =
       configResult.config.features.mcp === false
         ? undefined
         : createMcpTelemetryTracker({
-            idSalt: traceContext.traceId,
+            idSalt: telemetryDeviceMid ?? traceContext.traceId,
             onEvent: (event) => mcpTelemetrySink?.(event),
             onResourceSamples: (samples) => mcpResourceSink?.(samples),
           });
-    // 官方 MCP 身份头端口：连接池构造早于 server，故用惰性 holder 回填。
+    const providerEndpointRoutingPort =
+      options.providerEndpointRoutingPort ??
+      resolveProcessProviderEndpointRoutingPort({
+        appVersion: options.version,
+        env: options.env,
+        logger,
+        network: configResult.config.network,
+        sourceTitle: "electron",
+      });
+    // 官方 MCP 身份头端口（spec §7.1/§7.2）：连接池构造早于 server，故用惰性 holder 回填。
     // server 就绪前该端口返回 official_auth_unavailable；HTTP tools/call 会匿名交给服务端
     // 返回结构化权限错误，stdio 则把 reason 下发给插件。连接与工具发现都不受影响。
     let officialMcpAuthContext: OfficialMcpAuthRequestContext | undefined;
@@ -214,10 +244,40 @@ export async function runZCodeProtocolAgent(
         resolveZCodeApiOrigin,
       }),
     };
+    // 官方插件命令进程的代理端点（技术方案 5.8）：CLI 不持有凭证，端点每个请求向 host 现取
+    // 身份头后转发给 zcode-server。和官方 MCP 用同一个 origin 表达式与网络配置。
+    const endpointEnv = options.env ?? process.env;
+    officialCommandEndpoint = createOfficialCommandEndpoint({
+      resolveHeaders: createOfficialCommandAuthHeadersPort({
+        resolveContext: () => officialMcpAuthContext,
+        logger,
+      }).resolveHeaders,
+      resolveZCodeApiOrigin,
+      appVersion: endpointEnv.ZCODE_APP_VERSION?.trim() || options.version,
+      fetch: createMcpTransportFetch({ env: endpointEnv, network: configResult.config.network }),
+      logger,
+    });
+    const activeOfficialCommandEndpoint = officialCommandEndpoint;
+    // MCP elicitation 归属到协议 server 的会话；pool 先于 server 创建，端口延迟绑定。
+    let elicitationServer: {
+      requestMcpElicitation: McpElicitationPort["requestElicitation"];
+      handleMcpNotification: McpNotificationPort["onNotification"];
+    } | null = null;
     mcpConnectionPool =
       configResult.config.features.mcp === false
         ? undefined
         : createMcpAdapterConnectionPool({
+            elicitation: {
+              requestElicitation: (request, elicitationOptions) =>
+                elicitationServer
+                  ? elicitationServer.requestMcpElicitation(request, elicitationOptions)
+                  : Promise.resolve({ action: "decline" as const }),
+            },
+            // server 通知同样延迟绑定到协议 server。
+            notifications: {
+              onNotification: (notification) =>
+                elicitationServer?.handleMcpNotification(notification),
+            },
             clientVersion: options.version ?? "0.0.0",
             env: options.env,
             logger,
@@ -226,12 +286,17 @@ export async function runZCodeProtocolAgent(
               noProxy: configResult.config.network.noProxy,
               caCertFile: configResult.config.network.caCertFile,
             },
+            nodeFallback: resolveMcpNodeFallbackProvider({
+              cliStorageRoot: getCliStorageRoot(resolvePath(configResult.config.storage.dir)),
+              logger,
+            }),
             officialMcpAuth,
             telemetry: mcpTelemetryTracker,
             workingDirectory: options.cwd,
           });
     mcpPort = mcpConnectionPool?.acquireLease({ leaseId: "protocol-settings" });
     const activeProviderRegistryRuntime = providerRegistryRuntime;
+    const protocolCliStorageRoot = getCliStorageRoot(resolvePath(configResult.config.storage.dir));
     const modelSelectionFacade = createNodeModelSelectionFacade(
       activeProviderRegistryRuntime.runtime.registryService,
     );
@@ -253,8 +318,9 @@ export async function runZCodeProtocolAgent(
             };
           },
           env: {
-            ...runtimeEnv,
+            ...telemetryEnv,
             ...appOptions.env,
+            ...(telemetryDeviceMid ? { ZCODE_TELEMETRY_DEVICE_MID: telemetryDeviceMid } : {}),
           },
           ...(nodeReplBrowserBroker ? { nodeReplBrowserBroker } : {}),
           ...(mcpConnectionPool
@@ -266,6 +332,9 @@ export async function runZCodeProtocolAgent(
                   }),
               }
             : {}),
+          providerEndpointRoutingPort,
+          officialCommandEnv: (sessionId, workspace) =>
+            activeOfficialCommandEndpoint.envForSession(sessionId, workspace),
           sourceTitle: "electron",
           onToolExecResource: (params) =>
             connection.send({ method: zcodeProtocolNotifications.toolExecResource, params }),
@@ -276,6 +345,12 @@ export async function runZCodeProtocolAgent(
       mcpPort,
       mcpTelemetry: mcpTelemetryTracker,
       sessionStore,
+      sessionDataFiles: createNodeSessionDataFiles({
+        cliStorageRoot: protocolCliStorageRoot,
+        // 与会话运行时的记忆解析同一函数，删除的正是 CLI 读写的那个目录。
+        memoryRoot: ({ workspacePath, workspaceIdentity }) =>
+          getProjectMemoryRoot(protocolCliStorageRoot, workspacePath, workspaceIdentity),
+      }),
       syncAccountProviderConfig: activeProviderRegistryRuntime.syncAccountProviderConfig,
       refreshProviderRegistry: async (reason) => {
         await activeProviderRegistryRuntime.runtime.registryService.refresh(reason);
@@ -283,6 +358,7 @@ export async function runZCodeProtocolAgent(
       version: options.version,
     }));
     officialMcpAuthContext = server.officialMcpAuthRequestContext;
+    elicitationServer = server;
     if (configResult.config.features.mcp !== false) {
       nodeReplBrowserBroker = createNodeReplBrowserBroker({
         browserControlPort: server.browserControlPort,
@@ -344,6 +420,12 @@ export async function runZCodeProtocolAgent(
     throw error;
   } finally {
     options.lifecycle?.requestShutdown();
+    await officialCommandEndpoint?.close().catch((error: unknown) => {
+      logger.warn("Official command endpoint close failed", {
+        error: error instanceof Error ? error.message : String(error),
+        event: "zcode_protocol.official_command_endpoint.close_failed",
+      });
+    });
     await cleanupProtocolRuntime({
       logger,
       deadlineAt: options.lifecycle?.deadlineAt,
@@ -365,3 +447,11 @@ export async function runZCodeProtocolAgent(
   }
 }
 
+function resolveProtocolRuntimeSurface(
+  env: NodeJS.ProcessEnv,
+): "desktop_local_host" | "remote_workspace_host" {
+  // Bug 根因：入口曾无条件覆盖 Host 注入值，远程 SSH/WSL/容器 Trace 被归入本地 Desktop。
+  return env.ZCODE_TELEMETRY_RUNTIME_SURFACE?.trim() === "remote_workspace_host"
+    ? "remote_workspace_host"
+    : "desktop_local_host";
+}

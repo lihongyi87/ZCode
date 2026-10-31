@@ -31,15 +31,7 @@ export type {
 } from "./git-graph/layout.js";
 export { SSHDialog, RemoteConnectionDialog } from "./SSHDialog.js";
 export { useTheme } from "./useTheme.js";
-export type { Theme, ResolvedTheme } from "./useTheme.js";
-export {
-  DEFAULT_THEME,
-  THEME_STORAGE_KEY,
-  applyTheme,
-  readPersistedTheme,
-  resolveTheme,
-  sanitizeTheme,
-} from "./useTheme.js";
+export type { Theme } from "./useTheme.js";
 export { useTestActions } from "./test-actions.js";
 export type { TestActions } from "./test-actions.js";
 export { StoreProvider, useZCodeStore } from "./store/StoreProvider.js";
@@ -107,9 +99,7 @@ export {
   loadUiFontSizePx,
   subscribeToUiFontSizeStorageChanges,
 } from "./lib/uiFontSize.js";
-// 上报已停用：RendererUserActionTelemetry 类与 setUserActionTelemetry 已删除，
-// 只保留业务侧使用的三个透传包装器（见 lib/userActionTelemetry.ts 的说明）。
-// ---- 官方面恢复（3.15.1 对齐）：Renderer 用户操作 Trace 全量导出（userActionTraceBootstrap 消费类与注入器）----
+export { reportUiLaunchToInput } from "./lib/uiPerfArmsTelemetry.js";
 export {
   RendererUserActionTelemetry,
   runUserAction,
@@ -117,17 +107,16 @@ export {
   setUserActionTelemetry,
   startUserAction,
 } from "./lib/userActionTelemetry.js";
-// ---- 官方面恢复（3.15.1 对齐）：E2E ARMS 自定义事件落点，desktopPlatform 消费 ----
-export { recordArmsCustomEventForE2E } from "./lib/armsCustomEventObservability.js";
 export {
   CORE_USER_ACTION_FEATURES,
   SETTINGS_USER_ACTION_FEATURES,
   USER_ACTION_CATALOG,
 } from "./lib/userActionTraceCatalog.js";
+export { setReactErrorArmsReporter } from "./lib/reactErrorArmsTelemetry.js";
+export { recordArmsCustomEventForE2E } from "./lib/armsCustomEventObservability.js";
 export { generateMobileDeviceFingerprint, setStreamClientId } from "./lib/streamClientId.js";
 export { GlobalDatabaseStartupLoading } from "./root/GlobalDatabaseStartupLoading.js";
 
-// localTtftObserver 保留：P0 已把实现降级为 no-op，但 SessionPane / ConversationComposer /
-// agentConversationTransport 仍在调用其接口，删除会破坏协议契约。
-export { LocalTtftObserver, setLocalTtftObserver } from "@/v4/telemetry/localTtftObserver.js";
+export { LocalTtftObserver, setLocalTtftObserver } from "@/v4/telemetry/local-ttft/contract.js";
 export { ensurePendingTaskDraft } from "@/v4/composer/composerDraftStore.js";
+export { readPersistedTheme } from "./useTheme.js";
