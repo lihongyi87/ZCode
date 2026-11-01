@@ -231,7 +231,15 @@ export function createPluginSandboxProtocolHandler(options: {
           }
           const marker = "<!--__ZCODE_GEN_UI_INNER_KIT__-->";
           const index = html.lastIndexOf(marker);
-          if (index < 0) throw new Error("Gen UI document is missing its runtime slot");
+          // 修复：标记缺失时不抛出——该 handler 由 zcode-sandbox 协议调用，抛出会沿
+          // 未捕获路径弹出主进程错误对话框（启动早期 sandbox 恢复时即触发）。
+          // 资源缺失按既有 catch 语义处理：返回 500 + warn，页面显式失败而非 app 崩溃。
+          if (index < 0) {
+            options.logger?.warn(
+              "[plugin-sandbox] Gen UI document is missing its runtime slot; returning 500",
+            );
+            return new Response(null, { status: 500 });
+          }
           html =
             html.slice(0, index) +
             decode(kit).replace("<!--__INLINE_VISUALIZATION_FRAGMENT__-->", "") +

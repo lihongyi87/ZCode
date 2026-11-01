@@ -4,6 +4,7 @@ import { createLocalTtftExporter } from "./localTtftExporter.js";
 /* eslint-disable max-lines */
 import "./desktopEarlyDataBaseDirBootstrap.js";
 import "./desktopEarlyChromiumHardwareAccelerationBootstrap.js";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { powerMonitor, powerSaveBlocker } from "electron";
 import { crashCapturePaths } from "./appCrashCaptureBootstrap.js";
 import { armsInitPromise, readTelemetryEnabledFromSettings } from "./appARMSBootstrap.js";
@@ -317,6 +318,24 @@ process.title = runtimeApplicationName;
 
 process.on("unhandledRejection", (reason) => {
   logger.error("unhandledRejection:", reason);
+});
+// 主进程未捕获异常落盘（2026-11-01）：默认行为是弹对话框，用户只能看到截图级信息，
+// 无法定位。落盘后每次启动异常都有完整堆栈可查。放行给默认对话框前先写文件。
+process.on("uncaughtException", (error) => {
+  try {
+    const crashDir = app.getPath("userData");
+    mkdirSync(crashDir, { recursive: true });
+    appendFileSync(
+      join(crashDir, "main-crash.log"),
+      `[${new Date().toISOString()}] ${error.name}: ${error.message}
+${error.stack ?? "(no stack)"}
+
+`,
+    );
+  } catch {
+    // 日志写失败时保持默认行为（弹窗+退出），不二次抛
+  }
+  throw error;
 });
 
 const iconPath =
