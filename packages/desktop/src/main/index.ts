@@ -2606,8 +2606,16 @@ app.whenReady().then(async () => {
   // 是面向打包发布客户端的安全门，对未打包 dev 运行时无意义。打包版 app.isPackaged === true，
   // gate 照常生效，对真实用户零影响。
   const skipForceUpdateForLocalDevRuntime = !app.isPackaged;
+  // CE 构建跳过官方强制升级门：CE 版本号（3.x-ce.N）永远低于官方 minimalVersion，
+  // 不跳过则每次启动被判「需强制升级」——弹窗阻断启动，或自动更新拉**官方安装包**
+  // 覆盖 CE 安装（官方文件集与 CE 不同 → 安装目录被改名/清空）。这是「覆盖安装要么
+  // 删除要么启动报错」的根因。CE 无官方升级渠道（更新器已构建期关闭），该门对 CE
+  // 只有破坏没有保护。
+  const skipForceUpdateForCeBuild = ZCODE_VERSION.includes("-ce");
   const forceUpdateGuardResult =
-    ZCODE_PRODUCT_FLAVOR === "production" && !skipForceUpdateForLocalDevRuntime
+    ZCODE_PRODUCT_FLAVOR === "production" &&
+    !skipForceUpdateForLocalDevRuntime &&
+    !skipForceUpdateForCeBuild
       ? await maybeBlockStartupForForceUpdate({
           locale: currentApplicationLocale,
           logger,
@@ -2621,6 +2629,8 @@ app.whenReady().then(async () => {
     logger.info("[force-update] Preview 跳过远端强制升级检查");
   } else if (skipForceUpdateForLocalDevRuntime) {
     logger.info("[force-update] 本地 dev 构建（未打包）跳过远端强制升级检查");
+  } else if (skipForceUpdateForCeBuild) {
+    logger.info("[force-update] CE 构建跳过官方强制升级门（无官方升级渠道）");
   }
   if (forceUpdateGuardResult.blocked) {
     return;
