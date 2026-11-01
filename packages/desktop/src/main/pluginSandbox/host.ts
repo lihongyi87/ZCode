@@ -4,7 +4,6 @@ import type { PluginSandboxHandle, PluginSandboxRegisterInput } from "@zcode/sha
 import {
   BrowserWindow,
   clipboard,
-  ClipboardItem,
   MessageChannelMain,
   app,
   dialog,
@@ -341,8 +340,15 @@ export function installPluginSandboxHost(input: {
     // Electron 44 移除同步 writeImage；以 PNG 保留图像编码，等待原生写入后才确认复制成功。
     // （合并时曾误判本仓仍为 Electron 41 而钉 writeImage——实际依赖已随 v3.17.1 升至 44，
     // 该调用在 44 的类型与运行时均不存在，按上游实现恢复。）
+    // ClipboardItem 不走 ESM named import:electron 的 ESM named 校验面缺该导出
+    // (v3.17.1 合并实测加载期即崩),走运行时命名空间取用。
+    const electronApi = (await import("electron")).default;
+    const ClipboardItemClass = electronApi.ClipboardItem;
+    if (typeof ClipboardItemClass !== "function") {
+      throw new Error("electron.ClipboardItem unavailable in this runtime");
+    }
     await clipboard.write([
-      new ClipboardItem({
+      new ClipboardItemClass({
         "image/png": new Blob([Uint8Array.from(cropped.toPNG())], { type: "image/png" }),
       }),
     ]);
